@@ -22,8 +22,11 @@ def execute_lane(lane):
         env=os.environ.copy()
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
-            'PAL_STAGE3_CONCURRENCY':'1',
-            'PAL_STAGE3_MAX_ROWS':'1',
+            # Render free instance is the off-host browser lane. Two Chromium
+            # routes in parallel stay bounded while removing the hard 1-row/tick
+            # ceiling that limited Stage3 to roughly one route per minute.
+            'PAL_STAGE3_CONCURRENCY':'2',
+            'PAL_STAGE3_MAX_ROWS':'2',
             'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':'55',
             'PAL_STAGE3_RETRY_TIMEOUT_SECONDS':'55',
             'PAL_STAGE3_RETRY_LIMIT':'0',
