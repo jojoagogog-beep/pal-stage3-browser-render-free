@@ -7,16 +7,58 @@ HERE=Path(__file__).resolve().parent
 WORKER=HERE/'stage3_send_ready_worker_v1.py'
 TOKEN=os.environ.get('PAL_RENDER_TOKEN','')
 LANES=itertools.cycle(('DYNAMIC_JS','IFRAME_DEEP','DEEP','FAST_DOM'))
-LOCK=threading.Lock()
+RUN_LOCK=threading.Lock()
 STATE_LOCK=threading.Lock()
-STATE={'status':'IDLE','lane':None,'at':0,'duration_seconds':0,'returncode':None}
-LAST_CRON_WAKE=0.0
-CRON_WAKE_LOCK=threading.Lock()
+LEASE_LOCK=threading.Lock()
+STATE={
+    'status':'IDLE','lane':None,'at':0,'duration_seconds':0,'returncode':None,
+    'pump_alive':False,'last_trigger':'BOOT','last_cron_wake_epoch':0,
+    'run_count':0,'failure_streak':0,
+}
+LEASE_UNTIL=0.0
+PUMP_THREAD=None
+LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180') or 180)))
+IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
 app=Flask(__name__)
 
 def allowed():
     got=request.headers.get('x-pal-token','')
     return bool(TOKEN and got==TOKEN)
+
+def _worker_summary(stdout):
+    for raw in reversed((stdout or '').splitlines()):
+        raw=raw.strip()
+        if not raw.startswith('{'):
+            continue
+        try:
+            obj=json.loads(raw)
+        except Exception:
+            continue
+        if isinstance(obj,dict) and 'status' in obj:
+            return obj
+    return {}
+
+def _lease_remaining():
+    with LEASE_LOCK:
+        return max(0,round(LEASE_UNTIL-time.time(),1))
+
+def _snapshot():
+    with STATE_LOCK:
+        out=dict(STATE)
+    out['lease_seconds_remaining']=_lease_remaining()
+    t=PUMP_THREAD
+    out['pump_alive']=bool(t and t.is_alive())
+    return out
+
+def _extend_lease(source):
+    global LEASE_UNTIL
+    now=time.time()
+    with LEASE_LOCK:
+        LEASE_UNTIL=max(LEASE_UNTIL,now+LEASE_SECONDS)
+    with STATE_LOCK:
+        STATE['last_trigger']=source
+        if source=='EXTERNAL_CRON':
+            STATE['last_cron_wake_epoch']=int(now)
 
 def execute_lane(lane):
     started=time.time()
@@ -24,9 +66,6 @@ def execute_lane(lane):
         env=os.environ.copy()
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
-            # Render free instance is the off-host browser lane. Two Chromium
-            # routes in parallel stay bounded while removing the hard 1-row/tick
-            # ceiling that limited Stage3 to roughly one route per minute.
             'PAL_STAGE3_CONCURRENCY':'2',
             'PAL_STAGE3_MAX_ROWS':'2',
             'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':'55',
@@ -42,96 +81,149 @@ def execute_lane(lane):
             [sys.executable,str(WORKER)],env=env,text=True,
             capture_output=True,timeout=190,
         )
-        out=(cp.stdout or '')[-5000:]
-        err=(cp.stderr or '')[-1500:]
+        out=(cp.stdout or '')[-7000:]
+        err=(cp.stderr or '')[-2000:]
+        summary=_worker_summary(out)
         body={
             'status':'PASS' if cp.returncode==0 else 'ERROR',
             'lane':lane,'returncode':cp.returncode,
             'duration_seconds':round(time.time()-started,2),
-            'stdout_tail':out[-1800:],'stderr_tail':err[-600:],
+            'worker_summary':summary,
+            'stdout_tail':out[-1800:],'stderr_tail':err[-700:],
         }
         code=200 if cp.returncode==0 else 500
     except subprocess.TimeoutExpired:
         body={'status':'TIMEOUT','lane':lane,
-              'duration_seconds':round(time.time()-started,2)}
+              'duration_seconds':round(time.time()-started,2),'worker_summary':{}}
         code=504
     except Exception as e:
         body={'status':'ERROR','lane':lane,'error':type(e).__name__,
-              'duration_seconds':round(time.time()-started,2)}
+              'detail':str(e)[:240],
+              'duration_seconds':round(time.time()-started,2),'worker_summary':{}}
         code=500
     with STATE_LOCK:
+        runs=int(STATE.get('run_count') or 0)+1
+        failures=(int(STATE.get('failure_streak') or 0)+1) if code>=500 else 0
+        keep={
+            'last_trigger':STATE.get('last_trigger'),
+            'last_cron_wake_epoch':STATE.get('last_cron_wake_epoch',0),
+        }
         STATE.clear()
         STATE.update({k:v for k,v in body.items() if k not in ('stdout_tail','stderr_tail')})
-        STATE['at']=int(time.time())
+        STATE.update(keep)
+        STATE.update(at=int(time.time()),pump_alive=bool(PUMP_THREAD and PUMP_THREAD.is_alive()),
+                     run_count=runs,failure_streak=failures)
+    print(json.dumps({
+        'event':'LANE_FINISHED','lane':lane,'code':code,
+        'duration_seconds':body.get('duration_seconds'),
+        'worker_summary':body.get('worker_summary') or {},
+    },separators=(',',':')),flush=True)
     return body,code
 
-def background_lane(lane):
+def background_pump():
+    global PUMP_THREAD
+    idle_rounds=0
     try:
-        execute_lane(lane)
+        while _lease_remaining()>0:
+            lane=next(LANES)
+            with STATE_LOCK:
+                keep_runs=int(STATE.get('run_count') or 0)
+                keep_failures=int(STATE.get('failure_streak') or 0)
+                keep_cron=int(STATE.get('last_cron_wake_epoch') or 0)
+                keep_trigger=STATE.get('last_trigger')
+                STATE.clear()
+                STATE.update(
+                    status='RUNNING',lane=lane,at=int(time.time()),
+                    duration_seconds=0,returncode=None,pump_alive=True,
+                    run_count=keep_runs,failure_streak=keep_failures,
+                    last_cron_wake_epoch=keep_cron,last_trigger=keep_trigger,
+                )
+            body,code=execute_lane(lane)
+            summary=body.get('worker_summary') or {}
+            tasks=int(summary.get('tasks') or 0)
+            routes=int(summary.get('routes') or 0)
+            if code>=500:
+                time.sleep(min(30,5*max(1,int(_snapshot().get('failure_streak') or 1))))
+                continue
+            if tasks<=0 and routes<=0:
+                idle_rounds+=1
+                time.sleep(IDLE_SLEEP_SECONDS if idle_rounds>=2 else 2)
+            else:
+                idle_rounds=0
     finally:
-        LOCK.release()
+        with STATE_LOCK:
+            STATE['pump_alive']=False
+            if STATE.get('status')=='RUNNING':
+                STATE['status']='IDLE'
+            STATE['at']=int(time.time())
+        PUMP_THREAD=None
+        try:
+            RUN_LOCK.release()
+        except RuntimeError:
+            pass
+        print(json.dumps({'event':'PUMP_STOPPED','reason':'LEASE_EXPIRED'},separators=(',',':')),flush=True)
+
+def start_or_extend(source):
+    global PUMP_THREAD
+    _extend_lease(source)
+    if not RUN_LOCK.acquire(blocking=False):
+        return {'status':'BUSY','source':source,'state':_snapshot()},202
+    try:
+        with STATE_LOCK:
+            STATE['last_trigger']=source
+            STATE['pump_alive']=True
+        PUMP_THREAD=threading.Thread(target=background_pump,name='pal-render-pump',daemon=True)
+        PUMP_THREAD.start()
+        print(json.dumps({'event':'PUMP_STARTED','source':source,'lease_seconds':LEASE_SECONDS},
+                         separators=(',',':')),flush=True)
+        return {'status':'STARTED','source':source,'lease_seconds':LEASE_SECONDS,
+                'state':_snapshot()},202
+    except Exception:
+        try:
+            RUN_LOCK.release()
+        except RuntimeError:
+            pass
+        raise
 
 @app.get('/health')
 def health():
-    with STATE_LOCK:
-        state=dict(STATE)
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
-                   worker_state=state)
+                   worker_state=_snapshot())
 
 @app.get('/state')
 def state():
     if not allowed():
         return ('unauthorized',401)
-    with STATE_LOCK:
-        return jsonify(dict(STATE))
+    return jsonify(_snapshot())
 
 @app.post('/cron-wake-v1')
 def cron_wake():
-    global LAST_CRON_WAKE
-    now=time.time()
-    with CRON_WAKE_LOCK:
-        if now-LAST_CRON_WAKE<50:
-            return jsonify(status='RATE_LIMIT',retry_after_seconds=round(50-(now-LAST_CRON_WAKE),1)),202
-        LAST_CRON_WAKE=now
-    if not LOCK.acquire(blocking=False):
-        return jsonify(status='BUSY'),202
-    lane=next(LANES)
-    with STATE_LOCK:
-        STATE.clear()
-        STATE.update(status='RUNNING',lane=lane,at=int(time.time()),
-                     duration_seconds=0,returncode=None)
-    threading.Thread(target=background_lane,args=(lane,),daemon=True).start()
-    return jsonify(status='STARTED',lane=lane,source='EXTERNAL_CRON'),202
+    body,code=start_or_extend('EXTERNAL_CRON')
+    return jsonify(body),code
 
 @app.post('/wake')
 def wake():
     if not allowed():
         return ('unauthorized',401)
-    if not LOCK.acquire(blocking=False):
-        with STATE_LOCK:
-            state=dict(STATE)
-        return jsonify(status='BUSY',state=state),202
-    lane=next(LANES)
-    with STATE_LOCK:
-        STATE.clear()
-        STATE.update(status='RUNNING',lane=lane,at=int(time.time()),
-                     duration_seconds=0,returncode=None)
-    threading.Thread(target=background_lane,args=(lane,),daemon=True).start()
-    return jsonify(status='STARTED',lane=lane),202
+    body,code=start_or_extend('MAC_WAKE')
+    return jsonify(body),code
 
 @app.post('/tick')
 def tick():
     if not allowed():
         return ('unauthorized',401)
-    if not LOCK.acquire(blocking=False):
-        return jsonify(status='BUSY'),202
+    _extend_lease('SYNC_TICK')
+    if not RUN_LOCK.acquire(blocking=False):
+        return jsonify(status='BUSY',state=_snapshot()),202
     lane=next(LANES)
     with STATE_LOCK:
-        STATE.clear()
-        STATE.update(status='RUNNING',lane=lane,at=int(time.time()),
-                     duration_seconds=0,returncode=None)
+        STATE['last_trigger']='SYNC_TICK'
+        STATE['pump_alive']=False
+        STATE['status']='RUNNING'
+        STATE['lane']=lane
+        STATE['at']=int(time.time())
     try:
         body,code=execute_lane(lane)
         return jsonify(body),code
     finally:
-        LOCK.release()
+        RUN_LOCK.release()
