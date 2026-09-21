@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: pal-stage3-browser-free-v1
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PAL_ROUTE_TASK_BLOB_URL
+        sync: false
+      - key: PAL_BROWSER_RESULT_BLOB_URL
+        sync: false
+      - key: PAL_RENDER_TOKEN
+        sync: false
