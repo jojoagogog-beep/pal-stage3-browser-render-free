@@ -10,6 +10,8 @@ LANES=itertools.cycle(('DYNAMIC_JS','IFRAME_DEEP','DEEP','FAST_DOM'))
 LOCK=threading.Lock()
 STATE_LOCK=threading.Lock()
 STATE={'status':'IDLE','lane':None,'at':0,'duration_seconds':0,'returncode':None}
+LAST_CRON_WAKE=0.0
+CRON_WAKE_LOCK=threading.Lock()
 app=Flask(__name__)
 
 def allowed():
@@ -82,6 +84,24 @@ def state():
         return ('unauthorized',401)
     with STATE_LOCK:
         return jsonify(dict(STATE))
+
+@app.post('/cron-wake-v1')
+def cron_wake():
+    global LAST_CRON_WAKE
+    now=time.time()
+    with CRON_WAKE_LOCK:
+        if now-LAST_CRON_WAKE<50:
+            return jsonify(status='RATE_LIMIT',retry_after_seconds=round(50-(now-LAST_CRON_WAKE),1)),202
+        LAST_CRON_WAKE=now
+    if not LOCK.acquire(blocking=False):
+        return jsonify(status='BUSY'),202
+    lane=next(LANES)
+    with STATE_LOCK:
+        STATE.clear()
+        STATE.update(status='RUNNING',lane=lane,at=int(time.time()),
+                     duration_seconds=0,returncode=None)
+    threading.Thread(target=background_lane,args=(lane,),daemon=True).start()
+    return jsonify(status='STARTED',lane=lane,source='EXTERNAL_CRON'),202
 
 @app.post('/wake')
 def wake():
