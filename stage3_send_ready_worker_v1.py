@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio, hashlib, json, os, re, ssl, time, urllib.request
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 TASK_BLOB=os.environ.get('PAL_ROUTE_TASK_BLOB_URL','')
@@ -89,6 +89,24 @@ def lane_accept(rec):
 def host(u):
     try:return (urlsplit(str(u or '')).hostname or '').lower().removeprefix('www.')
     except Exception:return ''
+
+def www_fallback_url(u,official_domain):
+    """Retry only the www alias of the same official apex host.
+
+    Some official sites publish only www DNS/TLS while discovery normalizes the
+    company domain by removing www. This preserves scheme/path/query and never
+    crosses the official-domain boundary or disables TLS verification.
+    """
+    try:
+        p=urlsplit(str(u or ''))
+        raw=(p.hostname or '').lower()
+        official=str(official_domain or '').lower().removeprefix('www.')
+        if not raw or raw.startswith('www.') or raw!=official:
+            return ''
+        port=(':'+str(p.port)) if p.port else ''
+        return urlunsplit((p.scheme,'www.'+raw+port,p.path,p.query,p.fragment))
+    except Exception:
+        return ''
 
 def load_state():
     try:return json.loads(STATE.read_text())
@@ -242,7 +260,22 @@ async def inspect(browser,rec,sem,slow=False):
             await ctx.route('**/*',lambda route: asyncio.create_task(route.abort()) if route.request.resource_type in {'image','media','font'} else asyncio.create_task(route.continue_()))
             deep_lane=LANE_MODE in {'DYNAMIC_JS','IFRAME_DEEP','DEEP'}
             page=await ctx.new_page(); page.set_default_timeout(9000 if (slow or deep_lane) else 5500)
-            await page.goto(url,wait_until='domcontentloaded',timeout=30000 if (slow or deep_lane) else 20000)
+            nav_timeout=30000 if (slow or deep_lane) else 20000
+            try:
+                await page.goto(url,wait_until='domcontentloaded',timeout=nav_timeout)
+            except Exception as nav_exc:
+                # Discovery stores company domains normalized without www.
+                # Some official sites have no apex DNS or an apex certificate
+                # mismatch but serve the identical route correctly on www.
+                # Retry only that same-domain alias; never disable TLS checks.
+                nav_error=str(nav_exc)
+                fallback=www_fallback_url(url,domain)
+                if (fallback and re.search(
+                        r'net::ERR_(?:NAME_NOT_RESOLVED|CERT_COMMON_NAME_INVALID)',
+                        nav_error,re.I)):
+                    await page.goto(fallback,wait_until='domcontentloaded',timeout=nav_timeout)
+                else:
+                    raise
             # Four lane modes share the same safety gates but inspect different
             # render depths so one DOM assumption cannot dominate all results.
             try:
