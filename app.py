@@ -17,7 +17,7 @@ RUN_LOCK=threading.Lock()
 STAGE2_LOCK=threading.Lock()
 STAGE2_STATE_LOCK=threading.Lock()
 STAGE2_THREAD=None
-STAGE2_STATE={'status':'IDLE','at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{}}
+STAGE2_STATE={'status':'IDLE','at':0,'started_at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None,'workers':0,'batch':0,'priority_markets':[]}
 STATE_LOCK=threading.Lock()
 LEASE_LOCK=threading.Lock()
 STATE={
@@ -96,19 +96,31 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
         })
         cp=subprocess.run([sys.executable,str(STAGE2_WORKER)],env=env,text=True,capture_output=True,timeout=220)
         summary=_worker_summary(cp.stdout or '')
+        completed={
+            'status':'PASS' if cp.returncode==0 else 'ERROR',
+            'at':int(time.time()),'duration_seconds':round(time.time()-started,2),
+            'returncode':cp.returncode,'summary':summary,
+            'workers':int(workers),'batch':int(batch),
+            'priority_markets':list(priority_markets),
+        }
         with STAGE2_STATE_LOCK:
             STAGE2_STATE.update(
-                status='PASS' if cp.returncode==0 else 'ERROR',
-                at=int(time.time()),duration_seconds=round(time.time()-started,2),
+                status=completed['status'],at=completed['at'],
+                duration_seconds=completed['duration_seconds'],
                 returncode=cp.returncode,
                 run_count=int(STAGE2_STATE.get('run_count') or 0)+1,
-                last_summary=summary,
+                last_summary=summary,last_completed=completed,
             )
     except subprocess.TimeoutExpired:
+        completed={'status':'TIMEOUT','at':int(time.time()),
+                   'duration_seconds':round(time.time()-started,2),'returncode':None,
+                   'summary':{},'workers':int(workers),'batch':int(batch),
+                   'priority_markets':list(priority_markets)}
         with STAGE2_STATE_LOCK:
-            STAGE2_STATE.update(status='TIMEOUT',at=int(time.time()),
-                duration_seconds=round(time.time()-started,2),returncode=None,
-                run_count=int(STAGE2_STATE.get('run_count') or 0)+1,last_summary={})
+            STAGE2_STATE.update(status='TIMEOUT',at=completed['at'],
+                duration_seconds=completed['duration_seconds'],returncode=None,
+                run_count=int(STAGE2_STATE.get('run_count') or 0)+1,
+                last_summary={},last_completed=completed)
     except Exception as e:
         with STAGE2_STATE_LOCK:
             STAGE2_STATE.update(status='ERROR',at=int(time.time()),
@@ -306,8 +318,9 @@ def stage2_wake():
     if not STAGE2_LOCK.acquire(blocking=False):
         return jsonify(status='BUSY',state=_stage2_snapshot()),202
     with STAGE2_STATE_LOCK:
-        STAGE2_STATE.update(status='RUNNING',at=int(time.time()),duration_seconds=0,
-                            returncode=None,last_summary={})
+        STAGE2_STATE.update(status='RUNNING',at=int(time.time()),started_at=int(time.time()),
+                            duration_seconds=0,returncode=None,
+                            workers=workers,batch=batch,priority_markets=list(markets))
     STAGE2_THREAD=threading.Thread(
         target=_stage2_runner,
         args=(task_url,result_url,markets,workers,batch),
