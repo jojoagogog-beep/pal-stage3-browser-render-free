@@ -35,7 +35,8 @@ LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
 # Keep the high-yield dynamic lane wide, but bound slow/low-yield deep lanes so
 # one batch cannot monopolize the free Render browser for several minutes.
-LANE_MAX_ROWS={'DYNAMIC_JS':4,'IFRAME_DEEP':4,'DEEP':2,'FAST_DOM':4}
+LANE_MAX_ROWS={'DYNAMIC_JS':2,'IFRAME_DEEP':2,'DEEP':1,'FAST_DOM':4}
+LANE_CONCURRENCY={'DYNAMIC_JS':2,'IFRAME_DEEP':2,'DEEP':1,'FAST_DOM':4}
 # The per-route budget must exceed the internal navigation + render budget.
 # Previously 16-18s wrapped a page.goto() that could itself wait 30s, making
 # OVERALL_ROUTE_TIMEOUT_OR_ERROR inevitable on otherwise valid slower sites.
@@ -203,13 +204,14 @@ def execute_lane(lane):
         env=os.environ.copy()
         configured_max=max(1,min(240,int(os.environ.get('PAL_STAGE3_MAX_ROWS','12') or 12)))
         lane_max=min(configured_max,int(LANE_MAX_ROWS.get(lane,6)))
+        lane_concurrency=max(1,min(4,int(LANE_CONCURRENCY.get(lane,2))))
         lane_deadline=int(LANE_DEADLINE_SECONDS.get(lane,90))
         lane_route_timeout=int(LANE_ROUTE_TIMEOUT_SECONDS.get(lane,24))
         lane_retry_timeout=int(LANE_RETRY_TIMEOUT_SECONDS.get(lane,lane_route_timeout))
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
-            'PAL_STAGE3_CONCURRENCY':os.environ.get('PAL_STAGE3_CONCURRENCY','4'),
-            'PAL_STAGE3_RENDERER_PROCESS_LIMIT':os.environ.get('PAL_STAGE3_RENDERER_PROCESS_LIMIT','4'),
+            'PAL_STAGE3_CONCURRENCY':str(lane_concurrency),
+            'PAL_STAGE3_RENDERER_PROCESS_LIMIT':str(max(2,lane_concurrency)),
             'PAL_STAGE3_PRIORITY_MARKETS':','.join(ACTIVE_PRIORITY_MARKETS),
             'PAL_STAGE3_MAX_ROWS':str(lane_max),
             'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':str(lane_route_timeout),
@@ -395,6 +397,7 @@ def stage2_state():
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    lane_max_rows=LANE_MAX_ROWS,
+                   lane_concurrency=LANE_CONCURRENCY,
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
                    lane_empty_streak=LANE_EMPTY_STREAK,
                    lane_skip_until=LANE_SKIP_UNTIL,
