@@ -258,6 +258,7 @@ def execute_lane(lane):
 def background_pump():
     global PUMP_THREAD
     idle_rounds=0
+    crash=None
     try:
         while _lease_remaining()>0:
             lane=_next_lane()
@@ -288,6 +289,14 @@ def background_pump():
                 time.sleep(IDLE_SLEEP_SECONDS if idle_rounds>=2 else 2)
             else:
                 idle_rounds=0
+    except Exception as e:
+        crash={'type':type(e).__name__,'detail':str(e)[:240]}
+        with STATE_LOCK:
+            STATE['status']='ERROR'
+            STATE['pump_error']=dict(crash)
+            STATE['failure_streak']=int(STATE.get('failure_streak') or 0)+1
+            STATE['at']=int(time.time())
+        print(json.dumps({'event':'PUMP_CRASHED','error':crash},separators=(',',':')),flush=True)
     finally:
         with STATE_LOCK:
             STATE['pump_alive']=False
@@ -299,7 +308,7 @@ def background_pump():
             RUN_LOCK.release()
         except RuntimeError:
             pass
-        print(json.dumps({'event':'PUMP_STOPPED','reason':'LEASE_EXPIRED'},separators=(',',':')),flush=True)
+        print(json.dumps({'event':'PUMP_STOPPED','reason':'CRASH' if crash else 'LEASE_EXPIRED'},separators=(',',':')),flush=True)
 
 def start_or_extend(source,priority_markets=None):
     global PUMP_THREAD,ACTIVE_PRIORITY_MARKETS
