@@ -98,6 +98,14 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertIn("browser_wait=_browser_demand_remaining()",src)
         self.assertIn("try: RUN_LOCK.release()",src)
 
+    def test_browser_routes_are_deterministically_sharded(self):
+        from pathlib import Path
+        src=(Path(__file__).resolve().parent/'stage3_send_ready_worker_v1.py').read_text()
+        self.assertIn("PAL_STAGE3_SHARD_COUNT','2'",src)
+        self.assertIn("PAL_STAGE3_SHARD_INDEX','0'",src)
+        self.assertIn("(rid % SHARD_COUNT)==SHARD_INDEX",src)
+        self.assertIn("not shard_accept(rec) or not lane_accept(rec)",src)
+
     def test_network_route_handler_is_awaited_not_fire_and_forget(self):
         # Fire-and-forget Playwright route tasks kept asyncio.run() alive long
         # after proof publication. Keep network interception structured so a

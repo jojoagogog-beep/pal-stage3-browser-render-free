@@ -19,12 +19,23 @@ RETRY_TIMEOUT_SECONDS=max(8,min(75,int(os.environ.get('PAL_STAGE3_RETRY_TIMEOUT_
 RETRY_LIMIT=max(0,min(48,int(os.environ.get('PAL_STAGE3_RETRY_LIMIT','48') or 48)))
 UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/153 Safari/537.36'
 PRIORITY_MARKETS=[x.strip() for x in os.environ.get('PAL_STAGE3_PRIORITY_MARKETS','').split(',') if x.strip()]
+# Deterministic multi-service sharding. The default is two shards so the
+# original Render Free service becomes shard 0 immediately after deploy; a
+# cloned free service sets PAL_STAGE3_SHARD_INDEX=1. Route-id modulo makes the
+# workers disjoint without a distributed lock or duplicate Browser visits.
+SHARD_COUNT=max(1,min(16,int(os.environ.get('PAL_STAGE3_SHARD_COUNT','2') or 2)))
+SHARD_INDEX=max(0,min(SHARD_COUNT-1,int(os.environ.get('PAL_STAGE3_SHARD_INDEX','0') or 0)))
 LOCAL_FALLBACK=os.environ.get('PAL_STAGE3_LOCAL_FALLBACK','').lower() in {'1','true','yes'}
 LOCAL_RESULT_DIR=Path(os.environ['PAL_STAGE3_LOCAL_RESULT_DIR']) if LOCAL_FALLBACK and os.environ.get('PAL_STAGE3_LOCAL_RESULT_DIR') else None
 _PRIORITY_RANK={m:i for i,m in enumerate(PRIORITY_MARKETS)}
 
 def market_rank(rec):
     return _PRIORITY_RANK.get(str(rec.get('market') or ''),1000)
+
+def shard_accept(rec):
+    try: rid=int(rec.get('route_id') or 0)
+    except Exception: return False
+    return rid>0 and (rid % SHARD_COUNT)==SHARD_INDEX
 
 def task_lane_quality(task):
     vals=[]
@@ -763,7 +774,8 @@ async def amain():
         pset=set(PRIORITY_MARKETS)
         pending=[m for m in pending if (set(str(r.get('market') or '') for r in (m.get('routes') or [])) or {''}).issubset(pset)]
     print(json.dumps({'stage3_pending_diag':{'raw_browser_tasks':len(raw_tasks),'done_ids':len(done),'pending_browser_tasks':len(pending),
-      'priority_markets':PRIORITY_MARKETS,'max_rows':MAX_ROWS,'route_timeout_seconds':ROUTE_TIMEOUT_SECONDS,'retry_timeout_seconds':RETRY_TIMEOUT_SECONDS,'retry_limit':RETRY_LIMIT}}))
+      'priority_markets':PRIORITY_MARKETS,'max_rows':MAX_ROWS,'route_timeout_seconds':ROUTE_TIMEOUT_SECONDS,'retry_timeout_seconds':RETRY_TIMEOUT_SECONDS,'retry_limit':RETRY_LIMIT,
+      'shard_index':SHARD_INDEX,'shard_count':SHARD_COUNT}}))
     # Dispatcher already ranks currently open markets first. Preserve shared-queue
     # order so closed-market quality scores cannot starve sendable live-market work.
     # Four logical lanes run concurrently on one free runner. Route each
@@ -779,7 +791,7 @@ async def amain():
         for rec in ranked:
             try: rid=int(rec.get('route_id') or 0)
             except Exception: rid=0
-            if rid<=0 or rid in seen_routes or rid in part_ids or not lane_accept(rec):continue
+            if rid<=0 or rid in seen_routes or rid in part_ids or not shard_accept(rec) or not lane_accept(rec):continue
             if recent_route_blocked(rec,recent_routes):
                 recent_skipped+=1
                 continue
