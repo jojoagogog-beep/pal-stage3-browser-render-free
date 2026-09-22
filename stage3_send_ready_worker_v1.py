@@ -681,6 +681,8 @@ def _count_results(results):
     return counts
 
 async def amain():
+    perf_start=time.monotonic()
+    perf={}
     # A caller (e.g. the local Mac fallback, which runs this worker with
     # LANE_CONCURRENCY=1 against a hard external wall-clock cap) may set this
     # to force the worker to stop starting new work and exit cleanly -- with
@@ -693,7 +695,10 @@ async def amain():
 
     state=load_state();done=set(state.get('processed_task_ids') or [])
     recent_routes=dict(state.get('recent_route_results') or {})
+    perf['load_state_ms']=round((time.monotonic()-perf_start)*1000,1)
+    perf_fetch=time.monotonic()
     raw_tasks=task_messages()
+    perf['task_fetch_ms']=round((time.monotonic()-perf_fetch)*1000,1)
     pending=[m for m in raw_tasks if str(m.get('task_id') or '') not in done]
     pending=[m for _,m in sorted(enumerate(pending),key=lambda im:(task_market_rank(im[1]),-int(im[1].get('stage3_quality') or 0),im[0]))]
     # Local fallback owns one expensive Browser process. With market-pure tasks,
@@ -744,14 +749,17 @@ async def amain():
             task_boundaries.append((tid,len(rows)))
         if len(selected)<len(part) or len(rows)>=MAX_ROWS:
             break
+    perf['selection_ms']=round((time.monotonic()-perf_start)*1000-perf.get('load_state_ms',0)-perf.get('task_fetch_ms',0),1)
+    perf['pre_browser_total_ms']=round((time.monotonic()-perf_start)*1000,1)
     if not rows:
         # Tasks with no lane-eligible routes must still be checkpointed as done,
         # or they are re-fetched and re-scanned on every future run forever.
         if immediate_done:
             done.update(immediate_done)
             save_state(done,{'_note':'no_eligible_routes_this_lane'},recent_routes)
+        perf['total_ms']=round((time.monotonic()-perf_start)*1000,1)
         print(json.dumps({'status':'PASS','tasks':0,'routes':0,'status_counts':{},
-                          'recent_routes_skipped':recent_skipped}));return
+                          'recent_routes_skipped':recent_skipped,'timings':perf}));return
     done.update(immediate_done)
     sem=asyncio.Semaphore(LANE_CONCURRENCY);results=[]
     bnd_ptr=0
@@ -878,8 +886,10 @@ async def amain():
     for rec,result in zip(rows,results):
         remember_route(rec,result,recent_routes)
     save_state(done,{**counts,'_result_transport':transport},recent_routes)
+    perf['total_ms']=round((time.monotonic()-perf_start)*1000,1)
+    perf['browser_and_publish_ms']=round(perf['total_ms']-perf.get('pre_browser_total_ms',0),1)
     print(json.dumps({'status':'PASS','tasks':len(chosen),'routes':len(rows),
       'status_counts':counts,'code_counts':codes,'code_samples':samples,
-      'recent_routes_skipped':recent_skipped,'result_transport':transport}))
+      'recent_routes_skipped':recent_skipped,'result_transport':transport,'timings':perf}))
 
 if __name__=='__main__':asyncio.run(amain())
