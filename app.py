@@ -22,6 +22,7 @@ STATE={
 }
 LEASE_UNTIL=0.0
 PUMP_THREAD=None
+ACTIVE_PRIORITY_MARKETS=[]
 LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180') or 180)))
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
 # Keep the high-yield dynamic lane wide, but bound slow/low-yield deep lanes so
@@ -57,6 +58,7 @@ def _snapshot():
     out['lease_seconds_remaining']=_lease_remaining()
     t=PUMP_THREAD
     out['pump_alive']=bool(t and t.is_alive())
+    out['priority_markets']=list(ACTIVE_PRIORITY_MARKETS)
     return out
 
 def _extend_lease(source):
@@ -79,6 +81,7 @@ def execute_lane(lane):
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
             'PAL_STAGE3_CONCURRENCY':os.environ.get('PAL_STAGE3_CONCURRENCY','3'),
+            'PAL_STAGE3_PRIORITY_MARKETS':','.join(ACTIVE_PRIORITY_MARKETS),
             'PAL_STAGE3_MAX_ROWS':str(lane_max),
             'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':os.environ.get('PAL_STAGE3_ROUTE_TIMEOUT_SECONDS','45'),
             'PAL_STAGE3_RETRY_TIMEOUT_SECONDS':os.environ.get('PAL_STAGE3_RETRY_TIMEOUT_SECONDS','45'),
@@ -175,8 +178,14 @@ def background_pump():
             pass
         print(json.dumps({'event':'PUMP_STOPPED','reason':'LEASE_EXPIRED'},separators=(',',':')),flush=True)
 
-def start_or_extend(source):
-    global PUMP_THREAD
+def start_or_extend(source,priority_markets=None):
+    global PUMP_THREAD,ACTIVE_PRIORITY_MARKETS
+    if priority_markets is not None:
+        clean=[]
+        for x in priority_markets:
+            x=str(x or '').strip()
+            if x and x not in clean: clean.append(x)
+        ACTIVE_PRIORITY_MARKETS=clean[:8]
     _extend_lease(source)
     if not RUN_LOCK.acquire(blocking=False):
         return {'status':'BUSY','source':source,'state':_snapshot()},202
@@ -219,7 +228,9 @@ def cron_wake():
 def wake():
     if not allowed():
         return ('unauthorized',401)
-    body,code=start_or_extend('MAC_WAKE')
+    payload=request.get_json(silent=True) or {}
+    pm=payload.get('priority_markets') if isinstance(payload,dict) else None
+    body,code=start_or_extend('MAC_WAKE',pm)
     return jsonify(body),code
 
 @app.post('/tick')
