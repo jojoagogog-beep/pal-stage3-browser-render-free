@@ -28,6 +28,9 @@ STATE={
 LEASE_UNTIL=0.0
 PUMP_THREAD=None
 ACTIVE_PRIORITY_MARKETS=[]
+LANE_EMPTY_STREAK={lane:0 for lane in ('FAST_DOM','DYNAMIC_JS','IFRAME_DEEP','DEEP')}
+LANE_SKIP_UNTIL={lane:0.0 for lane in LANE_EMPTY_STREAK}
+LANE_EMPTY_BASE_COOLDOWN_SECONDS=max(10,min(120,int(os.environ.get('PAL_RENDER_EMPTY_LANE_COOLDOWN_SECONDS','30') or 30)))
 LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180') or 180)))
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
 # Keep the high-yield dynamic lane wide, but bound slow/low-yield deep lanes so
@@ -151,6 +154,33 @@ def _extend_lease(source):
         if source=='EXTERNAL_CRON':
             STATE['last_cron_wake_epoch']=int(now)
 
+def _next_lane():
+    now=time.time()
+    fallback=None
+    fallback_until=None
+    for _ in range(12):
+        lane=_next_lane()
+        until=float(LANE_SKIP_UNTIL.get(lane) or 0)
+        if fallback is None or until < fallback_until:
+            fallback,lane_until=lane,until
+            fallback_until=lane_until
+        if until<=now:
+            return lane
+    return fallback or next(LANES)
+
+def _record_lane_result(lane,summary,code):
+    routes=int((summary or {}).get('routes') or 0)
+    if code>=500:
+        return
+    if routes<=0:
+        streak=int(LANE_EMPTY_STREAK.get(lane) or 0)+1
+        LANE_EMPTY_STREAK[lane]=streak
+        cooldown=min(180,LANE_EMPTY_BASE_COOLDOWN_SECONDS*(2**min(streak-1,2)))
+        LANE_SKIP_UNTIL[lane]=time.time()+cooldown
+    else:
+        LANE_EMPTY_STREAK[lane]=0
+        LANE_SKIP_UNTIL[lane]=0.0
+
 def execute_lane(lane):
     started=time.time()
     try:
@@ -230,7 +260,7 @@ def background_pump():
     idle_rounds=0
     try:
         while _lease_remaining()>0:
-            lane=next(LANES)
+            lane=_next_lane()
             with STATE_LOCK:
                 keep_runs=int(STATE.get('run_count') or 0)
                 keep_failures=int(STATE.get('failure_streak') or 0)
@@ -247,6 +277,7 @@ def background_pump():
                 )
             body,code=execute_lane(lane)
             summary=body.get('worker_summary') or {}
+            _record_lane_result(lane,summary,code)
             tasks=int(summary.get('tasks') or 0)
             routes=int(summary.get('routes') or 0)
             if code>=500:
@@ -340,6 +371,8 @@ def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    lane_max_rows=LANE_MAX_ROWS,
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
+                   lane_empty_streak=LANE_EMPTY_STREAK,
+                   lane_skip_until=LANE_SKIP_UNTIL,
                    worker_state=_snapshot())
 
 @app.get('/state')
@@ -378,6 +411,7 @@ def tick():
         STATE['at']=int(time.time())
     try:
         body,code=execute_lane(lane)
+        _record_lane_result(lane,body.get('worker_summary') or {},code)
         return jsonify(body),code
     finally:
         RUN_LOCK.release()
