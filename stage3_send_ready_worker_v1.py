@@ -288,10 +288,10 @@ async def inspect(browser,rec,sem,slow=False):
             route_budget_ms=max(8000,int(ROUTE_TIMEOUT_SECONDS*1000))
             nav_timeout=max(7000,min(18000,int(route_budget_ms*0.38)))
             async def navigate_ready(target):
-                # Do not make DOMContentLoaded itself the navigation success
-                # condition. Some valid sites keep third-party scripts pending
-                # long after the main document is committed. We still require an
-                # attached body and run the same rendered safety/form checks.
+                # A committed main document is enough to enter the bounded render
+                # wait below. Requiring <body> immediately after commit caused
+                # valid JS-heavy pages to burn 5s and return BROWSER_TIMEOUT before
+                # their normal lane wait had a chance to hydrate the DOM.
                 await page.goto(target,wait_until='commit',timeout=nav_timeout)
                 try:
                     await page.wait_for_load_state(
@@ -300,10 +300,6 @@ async def inspect(browser,rec,sem,slow=False):
                     )
                 except PlaywrightTimeoutError:
                     pass
-                await page.locator('body').wait_for(
-                    state='attached',
-                    timeout=max(2500,min(5000,nav_timeout//3)),
-                )
             try:
                 timeout_phase='navigate'
                 await navigate_ready(url)
@@ -335,7 +331,14 @@ async def inspect(browser,rec,sem,slow=False):
             if host(final_url)!=domain:
                 return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED','final_url':final_url,'stage3_send_ready':False}
             timeout_phase='body_text'
-            text=(await page.locator('body').inner_text())[:180000]
+            text=str(await page.evaluate(
+                "() => ((document.body && document.body.innerText) || "
+                "(document.documentElement && document.documentElement.innerText) || '')"
+            ))[:180000]
+            if not text.strip():
+                return {**base,'status':'TECH_DEFER','code':'DOM_TEXT_EMPTY',
+                        'final_url':final_url,'stage3_send_ready':False,
+                        'timeout_phase':'body_text','lane_mode':LANE_MODE}
             if PROHIBIT.search(text):
                 return {**base,'status':'SALES_PROHIBITED','code':'SALES_PROHIBITED','final_url':final_url,'stage3_send_ready':False}
             if await visible_captcha(page):
