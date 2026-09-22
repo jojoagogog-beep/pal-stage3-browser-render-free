@@ -66,15 +66,15 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertEqual(m._next_lane(),'B')
         self.assertEqual(m._next_lane(),'C')
 
-    def test_high_yield_lanes_keep_parallel_capacity(self):
-        # DYNAMIC_JS and IFRAME_DEEP have materially higher measured SAFE yield
-        # than DEEP, so they must not silently regress to the same low-capacity
-        # setting. This changes scheduling capacity only; proof/safety gates are
-        # still owned by the worker and executor contracts.
-        self.assertGreaterEqual(m.LANE_CONCURRENCY['DYNAMIC_JS'], 4)
-        self.assertGreaterEqual(m.LANE_CONCURRENCY['IFRAME_DEEP'], 3)
-        self.assertGreater(m.LANE_CONCURRENCY['DYNAMIC_JS'], m.LANE_CONCURRENCY['DEEP'])
-        self.assertGreater(m.LANE_CONCURRENCY['IFRAME_DEEP'], m.LANE_CONCURRENCY['DEEP'])
+    def test_free_plan_browser_parallelism_is_memory_safe(self):
+        # Render Free repeatedly OOM-killed the service at 4/3-way browser
+        # parallelism. Keep the live browser fan-out capped at two so effective
+        # throughput is not destroyed by worker restarts. DEEP stays single-lane.
+        self.assertLessEqual(max(m.LANE_CONCURRENCY.values()), 2)
+        self.assertEqual(m.LANE_CONCURRENCY['DEEP'], 1)
+        self.assertEqual(m.LANE_CONCURRENCY['DYNAMIC_JS'], 2)
+        self.assertEqual(m.LANE_CONCURRENCY['IFRAME_DEEP'], 2)
+        self.assertEqual(m.LANE_CONCURRENCY['FAST_DOM'], 2)
         for lane, concurrency in m.LANE_CONCURRENCY.items():
             self.assertGreaterEqual(m.LANE_MAX_ROWS[lane], concurrency)
 

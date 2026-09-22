@@ -33,10 +33,13 @@ LANE_SKIP_UNTIL={lane:0.0 for lane in LANE_EMPTY_STREAK}
 LANE_EMPTY_BASE_COOLDOWN_SECONDS=max(10,min(120,int(os.environ.get('PAL_RENDER_EMPTY_LANE_COOLDOWN_SECONDS','30') or 30)))
 LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180') or 180)))
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
-# Keep the high-yield dynamic lane wide, but bound slow/low-yield deep lanes so
-# one batch cannot monopolize the free Render browser for several minutes.
-LANE_MAX_ROWS={'DYNAMIC_JS':4,'IFRAME_DEEP':3,'DEEP':2,'FAST_DOM':4}
-LANE_CONCURRENCY={'DYNAMIC_JS':4,'IFRAME_DEEP':3,'DEEP':2,'FAST_DOM':4}
+# Render Free is memory-bound: concurrency 4/3 repeatedly OOM-killed the
+# gunicorn worker and erased all effective throughput. Keep at most two live
+# browser inspections per service process (one for DEEP), which is materially
+# faster in practice because the service stays alive and releases each lane.
+# This is a capacity/resource policy only; proof and safety gates are unchanged.
+LANE_MAX_ROWS={'DYNAMIC_JS':2,'IFRAME_DEEP':2,'DEEP':1,'FAST_DOM':2}
+LANE_CONCURRENCY={'DYNAMIC_JS':2,'IFRAME_DEEP':2,'DEEP':1,'FAST_DOM':2}
 # The per-route budget must exceed the internal navigation + render budget.
 # Previously 16-18s wrapped a page.goto() that could itself wait 30s, making
 # OVERALL_ROUTE_TIMEOUT_OR_ERROR inevitable on otherwise valid slower sites.
@@ -397,6 +400,7 @@ def stage2_state():
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    worker_protocol='AWAITED_ROUTE_HANDLER_V1',
+                   resource_profile='RENDER_FREE_MEMORY_SAFE_V2',
                    lane_max_rows=LANE_MAX_ROWS,
                    lane_concurrency=LANE_CONCURRENCY,
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
