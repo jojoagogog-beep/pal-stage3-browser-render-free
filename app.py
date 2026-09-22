@@ -71,20 +71,20 @@ def execute_lane(lane):
         env=os.environ.copy()
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
-            'PAL_STAGE3_CONCURRENCY':'2',
-            'PAL_STAGE3_MAX_ROWS':'4',
-            'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':'55',
-            'PAL_STAGE3_RETRY_TIMEOUT_SECONDS':'55',
+            'PAL_STAGE3_CONCURRENCY':os.environ.get('PAL_STAGE3_CONCURRENCY','3'),
+            'PAL_STAGE3_MAX_ROWS':os.environ.get('PAL_STAGE3_MAX_ROWS','12'),
+            'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':os.environ.get('PAL_STAGE3_ROUTE_TIMEOUT_SECONDS','45'),
+            'PAL_STAGE3_RETRY_TIMEOUT_SECONDS':os.environ.get('PAL_STAGE3_RETRY_TIMEOUT_SECONDS','45'),
             'PAL_STAGE3_RETRY_LIMIT':'0',
             'PAL_STAGE3_RECENT_ROUTE_SECONDS':'900',
             'PAL_STAGE3_RECENT_TECH_SECONDS':'600',
             'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'.json',
-            'PAL_STAGE3_DEADLINE_EPOCH':str(int(time.time())+180),
+            'PAL_STAGE3_DEADLINE_EPOCH':str(int(time.time())+210),
             'PAL_STAGE3_PRODUCER':'PAL_RENDER_STAGE3_BROWSER_V1',
         })
         cp=subprocess.run(
             [sys.executable,str(WORKER)],env=env,text=True,
-            capture_output=True,timeout=190,
+            capture_output=True,timeout=220,
         )
         out=(cp.stdout or '')[-7000:]
         err=(cp.stderr or '')[-2000:]
