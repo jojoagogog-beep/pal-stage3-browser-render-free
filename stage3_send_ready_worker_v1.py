@@ -669,7 +669,7 @@ async def amain():
     recent_routes=dict(state.get('recent_route_results') or {})
     raw_tasks=task_messages()
     pending=[m for m in raw_tasks if str(m.get('task_id') or '') not in done]
-    pending=[m for _,m in sorted(enumerate(pending),key=lambda im:(task_market_rank(im[1]),im[0]))]
+    pending=[m for _,m in sorted(enumerate(pending),key=lambda im:(task_market_rank(im[1]),-int(im[1].get('stage3_quality') or 0),im[0]))]
     # Local fallback owns one expensive Browser process. With market-pure tasks,
     # hard-filter it to the controller's short-lived proof markets so one quantum
     # ends as soon as the currently-sendable markets are done. Remote/default
