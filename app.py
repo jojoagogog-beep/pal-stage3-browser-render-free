@@ -18,7 +18,7 @@ LEASE_LOCK=threading.Lock()
 STATE={
     'status':'IDLE','lane':None,'at':0,'duration_seconds':0,'returncode':None,
     'pump_alive':False,'last_trigger':'BOOT','last_cron_wake_epoch':0,
-    'run_count':0,'failure_streak':0,
+    'run_count':0,'failure_streak':0,'last_completed':None,
 }
 LEASE_UNTIL=0.0
 PUMP_THREAD=None
@@ -85,7 +85,7 @@ def execute_lane(lane):
             'PAL_STAGE3_MAX_ROWS':str(lane_max),
             'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':os.environ.get('PAL_STAGE3_ROUTE_TIMEOUT_SECONDS','45'),
             'PAL_STAGE3_RETRY_TIMEOUT_SECONDS':os.environ.get('PAL_STAGE3_RETRY_TIMEOUT_SECONDS','45'),
-            'PAL_STAGE3_RETRY_LIMIT':'0',
+            'PAL_STAGE3_RETRY_LIMIT':'2',
             'PAL_STAGE3_RECENT_ROUTE_SECONDS':'900',
             'PAL_STAGE3_RECENT_TECH_SECONDS':'600',
             'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'.json',
@@ -119,6 +119,13 @@ def execute_lane(lane):
     with STATE_LOCK:
         runs=int(STATE.get('run_count') or 0)+1
         failures=(int(STATE.get('failure_streak') or 0)+1) if code>=500 else 0
+        completed={
+            'lane':lane,
+            'status':body.get('status'),
+            'at':int(time.time()),
+            'duration_seconds':body.get('duration_seconds'),
+            'worker_summary':body.get('worker_summary') or {},
+        }
         keep={
             'last_trigger':STATE.get('last_trigger'),
             'last_cron_wake_epoch':STATE.get('last_cron_wake_epoch',0),
@@ -127,7 +134,7 @@ def execute_lane(lane):
         STATE.update({k:v for k,v in body.items() if k not in ('stdout_tail','stderr_tail')})
         STATE.update(keep)
         STATE.update(at=int(time.time()),pump_alive=bool(PUMP_THREAD and PUMP_THREAD.is_alive()),
-                     run_count=runs,failure_streak=failures)
+                     run_count=runs,failure_streak=failures,last_completed=completed)
     print(json.dumps({
         'event':'LANE_FINISHED','lane':lane,'code':code,
         'duration_seconds':body.get('duration_seconds'),
@@ -146,12 +153,14 @@ def background_pump():
                 keep_failures=int(STATE.get('failure_streak') or 0)
                 keep_cron=int(STATE.get('last_cron_wake_epoch') or 0)
                 keep_trigger=STATE.get('last_trigger')
+                keep_completed=STATE.get('last_completed')
                 STATE.clear()
                 STATE.update(
                     status='RUNNING',lane=lane,at=int(time.time()),
                     duration_seconds=0,returncode=None,pump_alive=True,
                     run_count=keep_runs,failure_streak=keep_failures,
                     last_cron_wake_epoch=keep_cron,last_trigger=keep_trigger,
+                    last_completed=keep_completed,
                 )
             body,code=execute_lane(lane)
             summary=body.get('worker_summary') or {}
