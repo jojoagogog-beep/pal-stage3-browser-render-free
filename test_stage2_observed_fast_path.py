@@ -60,3 +60,16 @@ bad={
 out=w.inspect(bad)
 assert not out.get('route_hint'), out
 print('PASS sales_prohibition_still_blocks')
+
+# One broken company must fail closed without aborting a wide batch.
+orig_inspect=w.inspect
+def boom(_rec):
+    raise RuntimeError('fixture-broken-site')
+w.inspect=boom
+isolated=w.safe_inspect({'candidate_id':3,'domain':'broken.example','country':'GB','market':'GB-EN'})
+w.inspect=orig_inspect
+assert isolated['verified'] is False, isolated
+assert isolated['errors']==1, isolated
+assert isolated['worker_error']=='RuntimeError', isolated
+assert 'route_hint' not in isolated, isolated
+print('PASS candidate_exception_fail_isolated')
