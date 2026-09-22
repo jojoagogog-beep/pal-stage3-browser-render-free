@@ -11,8 +11,8 @@ TOKEN=os.environ.get('PAL_RENDER_TOKEN','')
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
 # every route still passes the exact same proof/safety contract.
-LANES=itertools.cycle(('DYNAMIC_JS','DYNAMIC_JS','DEEP',
-                       'DYNAMIC_JS','IFRAME_DEEP','DYNAMIC_JS'))
+LANES=itertools.cycle(('FAST_DOM','DYNAMIC_JS','IFRAME_DEEP',
+                       'FAST_DOM','DEEP','DYNAMIC_JS'))
 RUN_LOCK=threading.Lock()
 STAGE2_LOCK=threading.Lock()
 STAGE2_STATE_LOCK=threading.Lock()
@@ -32,7 +32,7 @@ LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
 # Keep the high-yield dynamic lane wide, but bound slow/low-yield deep lanes so
 # one batch cannot monopolize the free Render browser for several minutes.
-LANE_MAX_ROWS={'DYNAMIC_JS':12,'IFRAME_DEEP':6,'DEEP':3,'FAST_DOM':6}
+LANE_MAX_ROWS={'DYNAMIC_JS':6,'IFRAME_DEEP':6,'DEEP':3,'FAST_DOM':8}
 LANE_DEADLINE_SECONDS={'DYNAMIC_JS':110,'IFRAME_DEEP':70,'DEEP':50,'FAST_DOM':70}
 LANE_ROUTE_TIMEOUT_SECONDS={'DYNAMIC_JS':24,'IFRAME_DEEP':24,'DEEP':20,'FAST_DOM':24}
 LANE_RETRY_TIMEOUT_SECONDS={'DYNAMIC_JS':24,'IFRAME_DEEP':24,'DEEP':20,'FAST_DOM':24}
