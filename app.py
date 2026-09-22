@@ -86,8 +86,9 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
             'PAL_ROUTE_RESULT_BLOB_URL':result_url,
             'PAL_CANDIDATE_ROUTE_LANE_COUNT':'1',
             'PAL_CANDIDATE_ROUTE_LANE_INDEX':'0',
-            'PAL_CANDIDATE_ROUTE_WORKERS':str(max(4,min(16,int(workers)))),
+            'PAL_CANDIDATE_ROUTE_WORKERS':str(max(4,min(24,int(workers)))),
             'PAL_CANDIDATE_ROUTE_BATCH':str(max(16,min(128,int(batch)))),
+            'PAL_CANDIDATE_ROUTE_STATE_FILE':'/tmp/pal_candidate_route_state_v1.json',
             # Render is the high-throughput read-only verifier. Bound fallback
             # sitemap breadth so one bad site cannot consume the whole 220s run.
             # Acceptance/safety checks are unchanged.
@@ -360,7 +361,7 @@ def stage2_wake():
     for x in body.get('priority_markets') or []:
         x=str(x or '').strip()
         if x and x not in markets: markets.append(x)
-    workers=max(4,min(16,int(body.get('workers') or 8)))
+    workers=max(4,min(24,int(body.get('workers') or 8)))
     batch=max(16,min(128,int(body.get('batch') or 64)))
     if not STAGE2_LOCK.acquire(blocking=False):
         return jsonify(status='BUSY',state=_stage2_snapshot()),202

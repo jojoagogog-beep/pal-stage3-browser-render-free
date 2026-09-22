@@ -14,6 +14,10 @@ RESULT_TOPIC=os.environ.get('PAL_RESULT_TOPIC','')
 TASK_BLOB=os.environ.get('PAL_ROUTE_TASK_BLOB_URL','')
 RESULT_BLOB=os.environ.get('PAL_ROUTE_RESULT_BLOB_URL','')
 STATE=Path(os.environ.get('PAL_CANDIDATE_ROUTE_STATE_FILE','pal_offload/candidate_route_state_v1.json'))
+try:
+    STATE.parent.mkdir(parents=True,exist_ok=True)
+except Exception:
+    pass
 LANE_COUNT=max(1,int(os.environ.get('PAL_CANDIDATE_ROUTE_LANE_COUNT','1') or 1))
 LANE_INDEX=max(0,min(LANE_COUNT-1,int(os.environ.get('PAL_CANDIDATE_ROUTE_LANE_INDEX','0') or 0)))
 LANE_WORKERS=max(4,min(48,int(os.environ.get('PAL_CANDIDATE_ROUTE_WORKERS','8') or 8)))
