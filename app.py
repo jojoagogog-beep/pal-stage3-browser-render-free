@@ -67,7 +67,7 @@ def execute_lane(lane):
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
             'PAL_STAGE3_CONCURRENCY':'2',
-            'PAL_STAGE3_MAX_ROWS':'2',
+            'PAL_STAGE3_MAX_ROWS':'4',
             'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':'55',
             'PAL_STAGE3_RETRY_TIMEOUT_SECONDS':'55',
             'PAL_STAGE3_RETRY_LIMIT':'0',
