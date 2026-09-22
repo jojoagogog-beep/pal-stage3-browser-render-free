@@ -255,6 +255,7 @@ async def inspect(browser,rec,sem,slow=False):
         if not rid or not url or not domain or host(url)!=domain:
             return {**base,'status':'TECH_DEFER','code':'INVALID_TASK','stage3_send_ready':False}
         ctx=None
+        timeout_phase='context_init'
         try:
             ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False)
             await ctx.route('**/*',lambda route: asyncio.create_task(route.abort()) if route.request.resource_type in {'image','media','font'} else asyncio.create_task(route.continue_()))
@@ -266,6 +267,7 @@ async def inspect(browser,rec,sem,slow=False):
             route_budget_ms=max(8000,int(ROUTE_TIMEOUT_SECONDS*1000))
             nav_timeout=max(7000,min(18000,int(route_budget_ms*0.38)))
             try:
+                timeout_phase='navigate'
                 await page.goto(url,wait_until='domcontentloaded',timeout=nav_timeout)
             except Exception as nav_exc:
                 # Discovery stores company domains normalized without www.
@@ -294,6 +296,7 @@ async def inspect(browser,rec,sem,slow=False):
             final_url=page.url
             if host(final_url)!=domain:
                 return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED','final_url':final_url,'stage3_send_ready':False}
+            timeout_phase='body_text'
             text=(await page.locator('body').inner_text())[:180000]
             if PROHIBIT.search(text):
                 return {**base,'status':'SALES_PROHIBITED','code':'SALES_PROHIBITED','final_url':final_url,'stage3_send_ready':False}
@@ -400,6 +403,7 @@ async def inspect(browser,rec,sem,slow=False):
                 return best_local
 
             frame_cap=20 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else (12 if LANE_MODE=='DYNAMIC_JS' else 8)
+            timeout_phase='form_scan'
             roots=list(page.frames)[:frame_cap]
             best=None
             for frame_index,root in enumerate(roots):
@@ -641,8 +645,9 @@ async def inspect(browser,rec,sem,slow=False):
                     'frame_index':int(best.get('frame_index') or 0),
                     'form_index':int(best.get('index') or 0),
                     'submit_text':str(control.get('text') or '')[:300]}
-        except PlaywrightTimeoutError:
-            return {**base,'status':'TECH_DEFER','code':'BROWSER_TIMEOUT','stage3_send_ready':False}
+        except PlaywrightTimeoutError as e:
+            return {**base,'status':'TECH_DEFER','code':'BROWSER_TIMEOUT','stage3_send_ready':False,
+                    'timeout_phase':timeout_phase,'error_detail':str(e)[:300],'lane_mode':LANE_MODE}
         except Exception as e:
             return {**base,'status':'TECH_DEFER','code':'BROWSER_ERROR_'+type(e).__name__,
                     'error_detail':str(e)[:300],'lane_mode':LANE_MODE,'stage3_send_ready':False}
