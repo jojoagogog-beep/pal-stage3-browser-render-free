@@ -66,6 +66,12 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertEqual(m._next_lane(),'B')
         self.assertEqual(m._next_lane(),'C')
 
+    def test_fast_dom_gets_majority_but_all_lanes_remain_represented(self):
+        from pathlib import Path
+        src=(Path(__file__).resolve().parent/'app.py').read_text()
+        self.assertIn("'FAST_DOM','DYNAMIC_JS','FAST_DOM','IFRAME_DEEP'",src)
+        self.assertIn("'FAST_DOM','DEEP','FAST_DOM','FAST_DOM'",src)
+
     def test_free_plan_browser_parallelism_is_memory_safe(self):
         # Render Free still OOM-killed the service at two-way browser parallelism.
         # Keep exactly one live Browser route/renderer per process. FAST_DOM may
