@@ -513,24 +513,38 @@ async def inspect(browser,rec,sem,slow=False):
                 post=await scan_root(active_root,int(best.get('frame_index') or 0))
             except Exception:
                 post=None
-            if post and int(post.get('index') or -1)==int(best.get('index') or -2):
-                post_sensitive=[]
-                for row in list(post.get('fields') or []):
-                    if not bool(row.get('required')):
-                        continue
-                    typ=str(row.get('type') or '')
-                    identity=(str(row.get('name') or '')+' '+str(row.get('id') or '')+' '+
-                              str(row.get('self_desc') or '')+' '+str(row.get('row_label') or '')).strip()
-                    if typ=='tel' or SENSITIVE.search(identity):
-                        post_sensitive.append(identity[:120] or str(row.get('desc') or '')[:120])
-                if post_sensitive:
-                    return {**base,'status':'REQUIRED_SENSITIVE','code':'REQUIRED_SENSITIVE_POST_FILL',
-                            'final_url':final_url,'required_sensitive':True,'required_unfillable':False,
-                            'stage3_send_ready':False,'blocked_fields':post_sensitive[:6]}
+            post_same=(isinstance(post,dict)
+                       and int(post.get('index') or -1)==int(best.get('index') or -2))
+            if not post_same:
+                # The pre-fill form/control observation is not sufficient for a
+                # FULL proof. Dynamic frameworks can disable/remove/replace the
+                # submit control after guarded input events. If the selected form
+                # is no longer independently discoverable with an enabled
+                # submit/confirm control, fail closed instead of reusing stale
+                # pre-fill metadata.
+                return {**base,'status':'TECH_DEFER','code':'POST_FILL_CONTROL_NOT_READY',
+                        'final_url':final_url,'stage3_send_ready':False,
+                        'send_ready_proof_v2':False}
+            post_sensitive=[]
+            for row in list(post.get('fields') or []):
+                if not bool(row.get('required')):
+                    continue
+                typ=str(row.get('type') or '')
+                identity=(str(row.get('name') or '')+' '+str(row.get('id') or '')+' '+
+                          str(row.get('self_desc') or '')+' '+str(row.get('row_label') or '')).strip()
+                if typ=='tel' or SENSITIVE.search(identity):
+                    post_sensitive.append(identity[:120] or str(row.get('desc') or '')[:120])
+            if post_sensitive:
+                return {**base,'status':'REQUIRED_SENSITIVE','code':'REQUIRED_SENSITIVE_POST_FILL',
+                        'final_url':final_url,'required_sensitive':True,'required_unfillable':False,
+                        'stage3_send_ready':False,'blocked_fields':post_sensitive[:6]}
             if await visible_captcha(active_root) or await visible_captcha(page):
                 return {**base,'status':'CAPTCHA','code':'VISIBLE_CAPTCHA_AFTER_FILL','final_url':final_url,'stage3_send_ready':False}
-            control=best['control']
-            control_kind=str(best.get('control_kind') or 'DIRECT_SUBMIT')
+            # Use the post-fill control, never the pre-fill snapshot. This keeps
+            # Stage3's FULL proof aligned with the exact DOM state Stage5 sees
+            # after filling the same required fields.
+            control=post['control']
+            control_kind=str(post.get('control_kind') or 'DIRECT_SUBMIT')
             if control_kind=='CONFIRM_STEP':
                 target=str(control.get('text') or '')
                 clicked=False
