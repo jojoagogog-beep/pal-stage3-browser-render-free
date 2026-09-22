@@ -52,6 +52,7 @@ def task_market_rank(task):
 
 RECENT_ROUTE_SECONDS=max(60,min(3600,int(os.environ.get('PAL_STAGE3_RECENT_ROUTE_SECONDS','600') or 600)))
 RECENT_TECH_SECONDS=max(60,min(1800,int(os.environ.get('PAL_STAGE3_RECENT_TECH_SECONDS','600') or 600)))
+RECENT_SAFE_SECONDS=max(60,min(540,int(os.environ.get('PAL_STAGE3_RECENT_SAFE_SECONDS','420') or 420)))
 
 def route_cache_key(rec):
     raw='|'.join((
@@ -66,7 +67,16 @@ def recent_route_blocked(rec,recent,now_epoch=None):
     if not isinstance(entry,dict):return False
     now_epoch=int(now_epoch or time.time())
     status=str(entry.get('status') or '')
-    ttl=RECENT_TECH_SECONDS if status=='TECH_DEFER' else RECENT_ROUTE_SECONDS
+    code=str(entry.get('code') or '')
+    if status=='TECH_DEFER':
+        ttl=RECENT_TECH_SECONDS
+    elif status=='SAFE_RENDERED_STATIC' and code in {'REMOTE_FULL_SEND_READY_V3','REMOTE_FULL_STATIC_READY_V3'}:
+        # Browser proof expires after ~10m and dispatcher refreshes at ~8m.
+        # Let a proven route be revalidated before TTL expiry instead of
+        # suppressing the refresh until the proof is already stale.
+        ttl=RECENT_SAFE_SECONDS
+    else:
+        ttl=RECENT_ROUTE_SECONDS
     return int(entry.get('at') or 0)>=now_epoch-ttl
 
 def remember_route(rec,result,recent,now_epoch=None):
