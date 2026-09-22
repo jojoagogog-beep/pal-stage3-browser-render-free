@@ -159,7 +159,7 @@ def _next_lane():
     fallback=None
     fallback_until=None
     for _ in range(12):
-        lane=_next_lane()
+        lane=next(LANES)
         until=float(LANE_SKIP_UNTIL.get(lane) or 0)
         if fallback is None or until < fallback_until:
             fallback,lane_until=lane,until
