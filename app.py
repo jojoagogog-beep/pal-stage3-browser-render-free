@@ -24,6 +24,10 @@ LEASE_UNTIL=0.0
 PUMP_THREAD=None
 LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180') or 180)))
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
+# Keep the high-yield dynamic lane wide, but bound slow/low-yield deep lanes so
+# one batch cannot monopolize the free Render browser for several minutes.
+LANE_MAX_ROWS={'DYNAMIC_JS':12,'IFRAME_DEEP':6,'DEEP':3,'FAST_DOM':6}
+LANE_DEADLINE_SECONDS={'DYNAMIC_JS':210,'IFRAME_DEEP':120,'DEEP':70,'FAST_DOM':90}
 app=Flask(__name__)
 
 def allowed():
@@ -69,17 +73,20 @@ def execute_lane(lane):
     started=time.time()
     try:
         env=os.environ.copy()
+        configured_max=max(1,min(240,int(os.environ.get('PAL_STAGE3_MAX_ROWS','12') or 12)))
+        lane_max=min(configured_max,int(LANE_MAX_ROWS.get(lane,6)))
+        lane_deadline=int(LANE_DEADLINE_SECONDS.get(lane,120))
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
             'PAL_STAGE3_CONCURRENCY':os.environ.get('PAL_STAGE3_CONCURRENCY','3'),
-            'PAL_STAGE3_MAX_ROWS':os.environ.get('PAL_STAGE3_MAX_ROWS','12'),
+            'PAL_STAGE3_MAX_ROWS':str(lane_max),
             'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':os.environ.get('PAL_STAGE3_ROUTE_TIMEOUT_SECONDS','45'),
             'PAL_STAGE3_RETRY_TIMEOUT_SECONDS':os.environ.get('PAL_STAGE3_RETRY_TIMEOUT_SECONDS','45'),
             'PAL_STAGE3_RETRY_LIMIT':'0',
             'PAL_STAGE3_RECENT_ROUTE_SECONDS':'900',
             'PAL_STAGE3_RECENT_TECH_SECONDS':'600',
             'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'.json',
-            'PAL_STAGE3_DEADLINE_EPOCH':str(int(time.time())+210),
+            'PAL_STAGE3_DEADLINE_EPOCH':str(int(time.time())+lane_deadline),
             'PAL_STAGE3_PRODUCER':'PAL_RENDER_STAGE3_BROWSER_V1',
         })
         cp=subprocess.run(
@@ -193,6 +200,8 @@ def start_or_extend(source):
 @app.get('/health')
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
+                   lane_max_rows=LANE_MAX_ROWS,
+                   lane_deadline_seconds=LANE_DEADLINE_SECONDS,
                    worker_state=_snapshot())
 
 @app.get('/state')
