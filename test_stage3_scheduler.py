@@ -77,6 +77,15 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertEqual(m.LANE_MAX_ROWS['FAST_DOM'],3)
         self.assertGreaterEqual(m.LANE_DEADLINE_SECONDS['FAST_DOM'],100)
 
+    def test_secret_file_fallbacks_keep_clone_credentials_out_of_repo(self):
+        from pathlib import Path
+        app=(Path(__file__).resolve().parent/'app.py').read_text()
+        worker=(Path(__file__).resolve().parent/'stage3_send_ready_worker_v1.py').read_text()
+        self.assertIn('/etc/secrets/stage3_token',app)
+        self.assertIn('/etc/secrets/stage3_transport',worker)
+        self.assertIn("browser_task_blob_url",worker)
+        self.assertIn("browser_result_blob_url",worker)
+
     def test_browser_demand_lease_is_bounded_and_refreshable(self):
         old=m.BROWSER_DEMAND_UNTIL
         try:

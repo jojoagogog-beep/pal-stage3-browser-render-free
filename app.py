@@ -6,7 +6,11 @@ from flask import Flask, jsonify, request
 HERE=Path(__file__).resolve().parent
 WORKER=HERE/'stage3_send_ready_worker_v1.py'
 STAGE2_WORKER=HERE/'candidate_route_worker_v1.py'
-TOKEN=os.environ.get('PAL_RENDER_TOKEN','')
+def _secret_text(path):
+    try:return Path(path).read_text().strip()
+    except Exception:return ''
+
+TOKEN=(os.environ.get('PAL_RENDER_TOKEN','') or _secret_text('/etc/secrets/stage3_token'))
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;

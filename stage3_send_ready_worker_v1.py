@@ -4,8 +4,19 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
-TASK_BLOB=os.environ.get('PAL_ROUTE_TASK_BLOB_URL','')
-RESULT_BLOB=os.environ.get('PAL_BROWSER_RESULT_BLOB_URL','')
+def _transport_secret_config():
+    path=Path(os.environ.get('PAL_STAGE3_TRANSPORT_CONFIG_FILE','/etc/secrets/stage3_transport'))
+    try:
+        obj=json.loads(path.read_text())
+        return obj if isinstance(obj,dict) else {}
+    except Exception:
+        return {}
+
+_TRANSPORT_SECRET=_transport_secret_config()
+TASK_BLOB=(os.environ.get('PAL_ROUTE_TASK_BLOB_URL','')
+           or str(_TRANSPORT_SECRET.get('browser_task_blob_url') or ''))
+RESULT_BLOB=(os.environ.get('PAL_BROWSER_RESULT_BLOB_URL','')
+             or str(_TRANSPORT_SECRET.get('browser_result_blob_url') or ''))
 STATE=Path(os.environ.get('PAL_STAGE3_STATE_FILE','pal_offload/stage3_send_ready_state_v1.json'))
 LANE_MODE=str(os.environ.get('PAL_STAGE3_LANE_MODE','FAST_DOM') or 'FAST_DOM').upper()
 PRODUCER=str(os.environ.get('PAL_STAGE3_PRODUCER','PAL_STAGE3_BROWSER_WORKER_V1') or 'PAL_STAGE3_BROWSER_WORKER_V1')
