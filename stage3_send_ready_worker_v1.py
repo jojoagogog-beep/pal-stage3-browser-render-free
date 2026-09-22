@@ -793,6 +793,8 @@ async def amain():
     done.update(immediate_done)
     sem=asyncio.Semaphore(LANE_CONCURRENCY);results=[]
     bnd_ptr=0
+    transport='NO_RESULT_TRANSPORT'
+    publish_ms=0.0
     async with async_playwright() as pw:
         exe=''
         for p in ('/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium','/usr/bin/chromium-browser',
@@ -848,9 +850,12 @@ async def amain():
                     remember_route(rec,value,recent_routes)
                 # Stream every completed batch immediately. A later runner
                 # timeout must never discard Browser proofs already completed.
-                transport=publish(results[-len(batch):])
-                if transport not in {'SUPERJSONBLOB_V1','LOCAL_DURABLE_SPOOL_V1'}:
+                publish_started=time.monotonic()
+                batch_transport=publish(results[-len(batch):])
+                publish_ms+=(time.monotonic()-publish_started)*1000
+                if batch_transport not in {'SUPERJSONBLOB_V1','LOCAL_DURABLE_SPOOL_V1'}:
                     raise RuntimeError('BROWSER_RESULT_NOT_DURABLE')
+                transport=batch_transport
                 # Checkpoint every task whose full route set just completed, so
                 # an external kill after this point cannot lose this progress:
                 # the next run's `pending` naturally excludes it via `done`.
@@ -896,15 +901,29 @@ async def amain():
                             results[idx]=out
                             changed.append(out)
                     if changed:
-                        publish(changed)
-        finally:await browser.close()
+                        publish_started=time.monotonic()
+                        changed_transport=publish(changed)
+                        publish_ms+=(time.monotonic()-publish_started)*1000
+                        if changed_transport in {'SUPERJSONBLOB_V1','LOCAL_DURABLE_SPOOL_V1'}:
+                            transport=changed_transport
+        finally:
+            close_started=time.monotonic()
+            try:
+                await asyncio.wait_for(browser.close(),timeout=5)
+            except Exception:
+                pass
+            perf['browser_close_ms']=round((time.monotonic()-close_started)*1000,1)
     counts={};codes={};samples={}
     for x in results:
         st=str(x.get('status') or 'UNKNOWN'); cd=str(x.get('code') or 'UNKNOWN')
         counts[st]=counts.get(st,0)+1; codes[cd]=codes.get(cd,0)+1
         samples.setdefault(cd,[])
         if len(samples[cd])<5:samples[cd].append(int(x.get('route_id') or 0))
-    transport=publish(results)
+    # Primary results were already durably streamed batch-by-batch above.
+    # Do not GET+merge+PUT the entire result set a second time here: that duplicate
+    # network round trip doubled tail latency and could keep the Render subprocess
+    # alive long after the Browser work had finished.
+    perf['publish_ms']=round(publish_ms,1)
     # Only tasks whose full route set actually got a result belong in `chosen`
     # for the done-marking below; a deadline-triggered early break can leave a
     # tail of `chosen` tasks with no results at all -- those must remain
