@@ -1,5 +1,5 @@
 from __future__ import annotations
-import asyncio, hashlib, json, os, re, ssl, time, urllib.request
+import asyncio, hashlib, json, os, re, ssl, sys, time, traceback, urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
@@ -961,4 +961,33 @@ async def amain():
       'status_counts':counts,'code_counts':codes,'code_samples':samples,
       'recent_routes_skipped':recent_skipped,'result_transport':transport,'timings':perf}))
 
-if __name__=='__main__':asyncio.run(amain())
+def _run_main():
+    # asyncio.run() waits for every residual task to finish cancellation. With
+    # Playwright, response/transport bookkeeping can survive after browser.close()
+    # and durable result/state publication, keeping a free Render slot occupied
+    # for another ~100s. amain() has already closed the browser and saved all
+    # authoritative output before it returns, so cancel residual bookkeeping
+    # tasks without waiting indefinitely for their teardown.
+    loop=asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    code=0
+    try:
+        loop.run_until_complete(amain())
+    except BaseException:
+        traceback.print_exc()
+        code=1
+    finally:
+        pending=[t for t in asyncio.all_tasks(loop) if not t.done()]
+        for t in pending:
+            t.cancel()
+        try:
+            loop.run_until_complete(asyncio.sleep(0))
+        except BaseException:
+            pass
+        loop.close()
+        try: sys.stdout.flush(); sys.stderr.flush()
+        except Exception: pass
+    return code
+
+if __name__=='__main__':
+    raise SystemExit(_run_main())

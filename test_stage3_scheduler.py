@@ -88,6 +88,8 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertIn("await ctx.route('**/*', route_request)",src)
         self.assertNotIn('asyncio.create_task(route.abort())',src)
         self.assertNotIn('asyncio.create_task(route.continue_())',src)
+        self.assertIn('def _run_main():',src)
+        self.assertNotIn("if __name__=='__main__':asyncio.run(amain())",src)
 
 if __name__=='__main__':
     unittest.main(verbosity=2)

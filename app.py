@@ -228,7 +228,10 @@ def execute_lane(lane):
         })
         cp=subprocess.run(
             [sys.executable,str(WORKER)],env=env,text=True,
-            capture_output=True,timeout=220,
+            # A lane must release the single free Render service promptly even
+            # if Chromium/Playwright teardown misbehaves. Worker-level route
+            # budgets are already <=42s and results stream durably per batch.
+            capture_output=True,timeout=140,
         )
         out=(cp.stdout or '')[-7000:]
         err=(cp.stderr or '')[-2000:]
@@ -401,6 +404,7 @@ def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    worker_protocol='AWAITED_ROUTE_HANDLER_V1',
                    resource_profile='RENDER_FREE_MEMORY_SAFE_V2',
+                   exit_policy='BOUNDED_EVENT_LOOP_V1',
                    lane_max_rows=LANE_MAX_ROWS,
                    lane_concurrency=LANE_CONCURRENCY,
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
