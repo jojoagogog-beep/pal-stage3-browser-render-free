@@ -179,11 +179,19 @@ def _record_lane_result(lane,summary,code):
     code_counts=summary.get('code_counts') or {}
     if code>=500:
         return
-    no_productive_output=(routes<=0 or transport=='NO_MESSAGES' or (not status_counts and not code_counts))
+    tech_defer_only=bool(status_counts) and set(map(str,status_counts.keys())) <= {'TECH_DEFER'}
+    no_productive_output=(routes<=0 or transport=='NO_MESSAGES' or
+                          (not status_counts and not code_counts) or tech_defer_only)
     if no_productive_output:
         streak=int(LANE_EMPTY_STREAK.get(lane) or 0)+1
         LANE_EMPTY_STREAK[lane]=streak
-        cooldown=min(180,LANE_EMPTY_BASE_COOLDOWN_SECONDS*(2**min(streak-1,2)))
+        base=LANE_EMPTY_BASE_COOLDOWN_SECONDS*(2**min(streak-1,2))
+        if transport=='NO_MESSAGES':
+            cooldown=max(180,min(600,base*4))
+        elif tech_defer_only:
+            cooldown=max(120,min(480,base*3))
+        else:
+            cooldown=max(90,min(360,base*2))
         LANE_SKIP_UNTIL[lane]=time.time()+cooldown
     else:
         LANE_EMPTY_STREAK[lane]=0
