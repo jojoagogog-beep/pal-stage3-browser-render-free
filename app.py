@@ -5,6 +5,7 @@ from flask import Flask, jsonify, request
 
 HERE=Path(__file__).resolve().parent
 WORKER=HERE/'stage3_send_ready_worker_v1.py'
+STAGE2_WORKER=HERE/'candidate_route_worker_v1.py'
 TOKEN=os.environ.get('PAL_RENDER_TOKEN','')
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
@@ -13,6 +14,10 @@ TOKEN=os.environ.get('PAL_RENDER_TOKEN','')
 LANES=itertools.cycle(('DYNAMIC_JS','DYNAMIC_JS','DEEP',
                        'DYNAMIC_JS','IFRAME_DEEP','DYNAMIC_JS'))
 RUN_LOCK=threading.Lock()
+STAGE2_LOCK=threading.Lock()
+STAGE2_STATE_LOCK=threading.Lock()
+STAGE2_THREAD=None
+STAGE2_STATE={'status':'IDLE','at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{}}
 STATE_LOCK=threading.Lock()
 LEASE_LOCK=threading.Lock()
 STATE={
@@ -53,6 +58,58 @@ def _worker_summary(stdout):
 def _lease_remaining():
     with LEASE_LOCK:
         return max(0,round(LEASE_UNTIL-time.time(),1))
+
+def _stage2_snapshot():
+    with STAGE2_STATE_LOCK:
+        out=dict(STAGE2_STATE)
+    t=STAGE2_THREAD
+    out['thread_alive']=bool(t and t.is_alive())
+    return out
+
+def _valid_blob_url(raw):
+    u=str(raw or '').strip()
+    return u.startswith('https://superjsonblob.com/api/jsonBlob/') and len(u)<300
+
+def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
+    global STAGE2_THREAD
+    started=time.time()
+    try:
+        env=os.environ.copy()
+        env.update({
+            'PAL_ROUTE_TASK_BLOB_URL':task_url,
+            'PAL_ROUTE_RESULT_BLOB_URL':result_url,
+            'PAL_CANDIDATE_ROUTE_LANE_COUNT':'1',
+            'PAL_CANDIDATE_ROUTE_LANE_INDEX':'0',
+            'PAL_CANDIDATE_ROUTE_WORKERS':str(max(4,min(16,int(workers)))),
+            'PAL_CANDIDATE_ROUTE_BATCH':str(max(16,min(128,int(batch)))),
+            'PAL_ROUTE_PRIORITY_MARKETS':','.join(priority_markets[:8]),
+            'PAL_ROUTE_PRIORITY_STRICT':'1',
+        })
+        cp=subprocess.run([sys.executable,str(STAGE2_WORKER)],env=env,text=True,capture_output=True,timeout=220)
+        summary=_worker_summary(cp.stdout or '')
+        with STAGE2_STATE_LOCK:
+            STAGE2_STATE.update(
+                status='PASS' if cp.returncode==0 else 'ERROR',
+                at=int(time.time()),duration_seconds=round(time.time()-started,2),
+                returncode=cp.returncode,
+                run_count=int(STAGE2_STATE.get('run_count') or 0)+1,
+                last_summary=summary,
+            )
+    except subprocess.TimeoutExpired:
+        with STAGE2_STATE_LOCK:
+            STAGE2_STATE.update(status='TIMEOUT',at=int(time.time()),
+                duration_seconds=round(time.time()-started,2),returncode=None,
+                run_count=int(STAGE2_STATE.get('run_count') or 0)+1,last_summary={})
+    except Exception as e:
+        with STAGE2_STATE_LOCK:
+            STAGE2_STATE.update(status='ERROR',at=int(time.time()),
+                duration_seconds=round(time.time()-started,2),returncode=None,
+                run_count=int(STAGE2_STATE.get('run_count') or 0)+1,
+                last_summary={'error':type(e).__name__})
+    finally:
+        STAGE2_THREAD=None
+        try: STAGE2_LOCK.release()
+        except RuntimeError: pass
 
 def _snapshot():
     with STATE_LOCK:
@@ -218,6 +275,42 @@ def start_or_extend(source,priority_markets=None):
         except RuntimeError:
             pass
         raise
+
+
+@app.post('/stage2-wake')
+def stage2_wake():
+    global STAGE2_THREAD
+    if not allowed():
+        return ('unauthorized',401)
+    body=request.get_json(silent=True) or {}
+    task_url=str(body.get('task_url') or '')
+    result_url=str(body.get('result_url') or '')
+    if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
+        return jsonify(status='BAD_BLOB_URL'),400
+    markets=[]
+    for x in body.get('priority_markets') or []:
+        x=str(x or '').strip()
+        if x and x not in markets: markets.append(x)
+    workers=max(4,min(16,int(body.get('workers') or 8)))
+    batch=max(16,min(128,int(body.get('batch') or 64)))
+    if not STAGE2_LOCK.acquire(blocking=False):
+        return jsonify(status='BUSY',state=_stage2_snapshot()),202
+    with STAGE2_STATE_LOCK:
+        STAGE2_STATE.update(status='RUNNING',at=int(time.time()),duration_seconds=0,
+                            returncode=None,last_summary={})
+    STAGE2_THREAD=threading.Thread(
+        target=_stage2_runner,
+        args=(task_url,result_url,markets,workers,batch),
+        daemon=True,
+    )
+    STAGE2_THREAD.start()
+    return jsonify(status='STARTED',state=_stage2_snapshot()),202
+
+@app.get('/stage2-state')
+def stage2_state():
+    if not allowed():
+        return ('unauthorized',401)
+    return jsonify(_stage2_snapshot())
 
 @app.get('/health')
 def health():
