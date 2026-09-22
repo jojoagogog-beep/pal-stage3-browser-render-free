@@ -67,16 +67,11 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertEqual(m._next_lane(),'C')
 
     def test_free_plan_browser_parallelism_is_memory_safe(self):
-        # Render Free repeatedly OOM-killed the service at 4/3-way browser
-        # parallelism. Keep the live browser fan-out capped at two so effective
-        # throughput is not destroyed by worker restarts. DEEP stays single-lane.
-        self.assertLessEqual(max(m.LANE_CONCURRENCY.values()), 2)
-        self.assertEqual(m.LANE_CONCURRENCY['DEEP'], 1)
-        self.assertEqual(m.LANE_CONCURRENCY['DYNAMIC_JS'], 2)
-        self.assertEqual(m.LANE_CONCURRENCY['IFRAME_DEEP'], 2)
-        self.assertEqual(m.LANE_CONCURRENCY['FAST_DOM'], 2)
-        for lane, concurrency in m.LANE_CONCURRENCY.items():
-            self.assertGreaterEqual(m.LANE_MAX_ROWS[lane], concurrency)
+        # Render Free still OOM-killed the service at two-way browser parallelism.
+        # Keep exactly one live Browser route/renderer per process; otherwise the
+        # apparent parallelism collapses into 220s timeout/restart cycles.
+        self.assertEqual(set(m.LANE_CONCURRENCY.values()), {1})
+        self.assertEqual(set(m.LANE_MAX_ROWS.values()), {1})
 
     def test_network_route_handler_is_awaited_not_fire_and_forget(self):
         # Fire-and-forget Playwright route tasks kept asyncio.run() alive long

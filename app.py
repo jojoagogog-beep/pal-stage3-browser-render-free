@@ -33,13 +33,12 @@ LANE_SKIP_UNTIL={lane:0.0 for lane in LANE_EMPTY_STREAK}
 LANE_EMPTY_BASE_COOLDOWN_SECONDS=max(10,min(120,int(os.environ.get('PAL_RENDER_EMPTY_LANE_COOLDOWN_SECONDS','30') or 30)))
 LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180') or 180)))
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
-# Render Free is memory-bound: concurrency 4/3 repeatedly OOM-killed the
-# gunicorn worker and erased all effective throughput. Keep at most two live
-# browser inspections per service process (one for DEEP), which is materially
-# faster in practice because the service stays alive and releases each lane.
-# This is a capacity/resource policy only; proof and safety gates are unchanged.
-LANE_MAX_ROWS={'DYNAMIC_JS':2,'IFRAME_DEEP':2,'DEEP':1,'FAST_DOM':2}
-LANE_CONCURRENCY={'DYNAMIC_JS':2,'IFRAME_DEEP':2,'DEEP':1,'FAST_DOM':2}
+# Render Free is memory-bound: even two concurrent Browser inspections still
+# OOM-killed the gunicorn worker. Run exactly one route at a time and one Chrome
+# renderer process. This maximizes *effective* free-tier throughput by avoiding
+# 220s timeout/restart cycles. Proof/safety gates are unchanged.
+LANE_MAX_ROWS={'DYNAMIC_JS':1,'IFRAME_DEEP':1,'DEEP':1,'FAST_DOM':1}
+LANE_CONCURRENCY={'DYNAMIC_JS':1,'IFRAME_DEEP':1,'DEEP':1,'FAST_DOM':1}
 # The per-route budget must exceed the internal navigation + render budget.
 # Previously 16-18s wrapped a page.goto() that could itself wait 30s, making
 # OVERALL_ROUTE_TIMEOUT_OR_ERROR inevitable on otherwise valid slower sites.
@@ -214,7 +213,7 @@ def execute_lane(lane):
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
             'PAL_STAGE3_CONCURRENCY':str(lane_concurrency),
-            'PAL_STAGE3_RENDERER_PROCESS_LIMIT':str(max(2,lane_concurrency)),
+            'PAL_STAGE3_RENDERER_PROCESS_LIMIT':'1',
             'PAL_STAGE3_PRIORITY_MARKETS':','.join(ACTIVE_PRIORITY_MARKETS),
             'PAL_STAGE3_MAX_ROWS':str(lane_max),
             'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':str(lane_route_timeout),
@@ -403,7 +402,7 @@ def stage2_state():
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    worker_protocol='AWAITED_ROUTE_HANDLER_V1',
-                   resource_profile='RENDER_FREE_MEMORY_SAFE_V2',
+                   resource_profile='RENDER_FREE_SINGLE_BROWSER_V3',
                    exit_policy='BOUNDED_EVENT_LOOP_V1',
                    lane_max_rows=LANE_MAX_ROWS,
                    lane_concurrency=LANE_CONCURRENCY,
