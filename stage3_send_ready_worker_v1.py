@@ -266,9 +266,26 @@ async def inspect(browser,rec,sem,slow=False):
             # from expiring before Playwright can return a meaningful verdict.
             route_budget_ms=max(8000,int(ROUTE_TIMEOUT_SECONDS*1000))
             nav_timeout=max(7000,min(18000,int(route_budget_ms*0.38)))
+            async def navigate_ready(target):
+                # Do not make DOMContentLoaded itself the navigation success
+                # condition. Some valid sites keep third-party scripts pending
+                # long after the main document is committed. We still require an
+                # attached body and run the same rendered safety/form checks.
+                await page.goto(target,wait_until='commit',timeout=nav_timeout)
+                try:
+                    await page.wait_for_load_state(
+                        'domcontentloaded',
+                        timeout=max(2500,min(6000,nav_timeout//3)),
+                    )
+                except PlaywrightTimeoutError:
+                    pass
+                await page.locator('body').wait_for(
+                    state='attached',
+                    timeout=max(2500,min(5000,nav_timeout//3)),
+                )
             try:
                 timeout_phase='navigate'
-                await page.goto(url,wait_until='domcontentloaded',timeout=nav_timeout)
+                await navigate_ready(url)
             except Exception as nav_exc:
                 # Discovery stores company domains normalized without www.
                 # Some official sites have no apex DNS or an apex certificate
@@ -279,7 +296,7 @@ async def inspect(browser,rec,sem,slow=False):
                 if (fallback and re.search(
                         r'net::ERR_(?:NAME_NOT_RESOLVED|CERT_COMMON_NAME_INVALID)',
                         nav_error,re.I)):
-                    await page.goto(fallback,wait_until='domcontentloaded',timeout=nav_timeout)
+                    await navigate_ready(fallback)
                 else:
                     raise
             # Four lane modes share the same safety gates but inspect different
