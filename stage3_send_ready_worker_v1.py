@@ -19,12 +19,14 @@ RETRY_TIMEOUT_SECONDS=max(8,min(75,int(os.environ.get('PAL_STAGE3_RETRY_TIMEOUT_
 RETRY_LIMIT=max(0,min(48,int(os.environ.get('PAL_STAGE3_RETRY_LIMIT','48') or 48)))
 UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/153 Safari/537.36'
 PRIORITY_MARKETS=[x.strip() for x in os.environ.get('PAL_STAGE3_PRIORITY_MARKETS','').split(',') if x.strip()]
-# Deterministic multi-service sharding. The default is two shards so the
-# original Render Free service becomes shard 0 immediately after deploy; a
-# cloned free service sets PAL_STAGE3_SHARD_INDEX=1. Route-id modulo makes the
-# workers disjoint without a distributed lock or duplicate Browser visits.
+# Deterministic multi-service sharding. The default is two shards. Render clones
+# inherit the same secret/task-blob config, so derive shard 1 from the service
+# name when no explicit shard index is configured. This lets a service whose
+# name ends in -v2 become shard 1 without replacing inherited env vars/secrets.
+_RENDER_SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '').lower()
+_DEFAULT_SHARD_INDEX='1' if _RENDER_SERVICE_NAME.endswith('-v2') else '0'
 SHARD_COUNT=max(1,min(16,int(os.environ.get('PAL_STAGE3_SHARD_COUNT','2') or 2)))
-SHARD_INDEX=max(0,min(SHARD_COUNT-1,int(os.environ.get('PAL_STAGE3_SHARD_INDEX','0') or 0)))
+SHARD_INDEX=max(0,min(SHARD_COUNT-1,int(os.environ.get('PAL_STAGE3_SHARD_INDEX',_DEFAULT_SHARD_INDEX) or _DEFAULT_SHARD_INDEX)))
 LOCAL_FALLBACK=os.environ.get('PAL_STAGE3_LOCAL_FALLBACK','').lower() in {'1','true','yes'}
 LOCAL_RESULT_DIR=Path(os.environ['PAL_STAGE3_LOCAL_RESULT_DIR']) if LOCAL_FALLBACK and os.environ.get('PAL_STAGE3_LOCAL_RESULT_DIR') else None
 _PRIORITY_RANK={m:i for i,m in enumerate(PRIORITY_MARKETS)}

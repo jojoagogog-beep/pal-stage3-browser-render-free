@@ -102,7 +102,8 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         from pathlib import Path
         src=(Path(__file__).resolve().parent/'stage3_send_ready_worker_v1.py').read_text()
         self.assertIn("PAL_STAGE3_SHARD_COUNT','2'",src)
-        self.assertIn("PAL_STAGE3_SHARD_INDEX','0'",src)
+        self.assertIn("RENDER_SERVICE_NAME",src)
+        self.assertIn("endswith('-v2')",src)
         self.assertIn("(rid % SHARD_COUNT)==SHARD_INDEX",src)
         self.assertIn("not shard_accept(rec) or not lane_accept(rec)",src)
 
