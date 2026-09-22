@@ -18,7 +18,9 @@ LANE_COUNT=max(1,int(os.environ.get('PAL_CANDIDATE_ROUTE_LANE_COUNT','1') or 1))
 LANE_INDEX=max(0,min(LANE_COUNT-1,int(os.environ.get('PAL_CANDIDATE_ROUTE_LANE_INDEX','0') or 0)))
 LANE_WORKERS=max(4,min(48,int(os.environ.get('PAL_CANDIDATE_ROUTE_WORKERS','8') or 8)))
 LANE_BATCH=max(16,min(256,int(os.environ.get('PAL_CANDIDATE_ROUTE_BATCH','32') or 32)))
-LANE_DEPTH=max(3,min(8,int(os.environ.get('PAL_CANDIDATE_ROUTE_DEPTH','4') or 4)))
+LANE_DEPTH=max(2,min(8,int(os.environ.get('PAL_CANDIDATE_ROUTE_DEPTH','4') or 4)))
+SITEMAP_ROOT_LIMIT=max(1,min(5,int(os.environ.get('PAL_CANDIDATE_ROUTE_SITEMAP_ROOTS','5') or 5)))
+SITEMAP_CHILD_LIMIT=max(0,min(8,int(os.environ.get('PAL_CANDIDATE_ROUTE_SITEMAP_CHILDREN','8') or 8)))
 UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140 Safari/537.36'
 CONTACT=re.compile(r'(contact|inquir|enquir|get.{0,4}in.{0,4}touch|request.{0,8}(?:a.{0,3})?quote|quotation|sales|commercial|vendor|supplier|procurement|partnership|proposal|お問い合わせ|問合せ|相談)',re.I)
 ROUTE_CONTACT=re.compile(r'(?:^|[\s/_-])(contact(?:[\s/_-]*us)?|contactus|inquiry|enquiry|get[\s_-]*in[\s_-]*touch|request[\s_-]*(?:a[\s_-]*)?quote|rfq|business[\s_-]*contact|sales[\s_-]*contact|commercial[\s_-]*contact)(?:$|[\s/_-])',re.I)
@@ -239,7 +241,7 @@ def sitemap_contact_urls(root,domain):
     except Exception:
         pass
     sm_seen=set();page_urls=[];child=[]
-    for sm in sitemap_urls[:5]:
+    for sm in sitemap_urls[:SITEMAP_ROOT_LIMIT]:
         if sm in sm_seen:continue
         sm_seen.add(sm)
         fu,st,doc=fetch(sm,3,900000)
@@ -253,7 +255,7 @@ def sitemap_contact_urls(root,domain):
             else:
                 page_urls.append(u)
     # One bounded child level covers WordPress and common sitemap-index layouts.
-    for sm in child[:8]:
+    for sm in child[:SITEMAP_CHILD_LIMIT]:
         if sm in sm_seen:continue
         sm_seen.add(sm)
         fu,st,doc=fetch(sm,3,900000)
