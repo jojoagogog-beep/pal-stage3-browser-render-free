@@ -444,13 +444,22 @@ async def inspect(browser,rec,sem,slow=False):
             timeout_phase='form_scan'
             roots=list(page.frames)[:frame_cap]
             best=None
+            # A valid direct-submit contact form is already sufficient once the
+            # page/root safety gates above have passed. Do not keep scanning every
+            # iframe after finding one: slow third-party frames were consuming the
+            # entire route wall-clock budget and converting good routes into
+            # OVERALL_ROUTE_TIMEOUT_OR_ERROR. Per-root timeouts are fail-closed;
+            # a hung frame is skipped, never accepted.
+            per_root_timeout=6.0 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else 4.0
             for frame_index,root in enumerate(roots):
                 try:
-                    cand=await scan_root(root,frame_index)
+                    cand=await asyncio.wait_for(scan_root(root,frame_index),timeout=per_root_timeout)
                 except Exception:
                     cand=None
                 if cand and (best is None or cand['score']>best['score']):
                     best=cand
+                if best and str(best.get('control_kind') or '')=='DIRECT_SUBMIT' and int(best.get('score') or 0)>=13:
+                    break
             if not best:
                 return {**base,'status':'NO_SAFE_FORM','code':'NO_DIRECT_SEND_READY_FORM','final_url':final_url,'stage3_send_ready':False}
 
