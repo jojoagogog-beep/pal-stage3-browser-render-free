@@ -73,6 +73,27 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertEqual(set(m.LANE_CONCURRENCY.values()), {1})
         self.assertEqual(set(m.LANE_MAX_ROWS.values()), {1})
 
+    def test_browser_demand_lease_is_bounded_and_refreshable(self):
+        old=m.BROWSER_DEMAND_UNTIL
+        try:
+            m.BROWSER_DEMAND_UNTIL=0.0
+            remaining=m._note_browser_demand(now=1000.0)
+            self.assertEqual(remaining,float(m.BROWSER_PRIORITY_GRACE_SECONDS))
+            self.assertGreater(m._browser_demand_remaining(now=1001.0),0)
+            first=m.BROWSER_DEMAND_UNTIL
+            m._note_browser_demand(now=1010.0)
+            self.assertGreater(m.BROWSER_DEMAND_UNTIL,first)
+        finally:
+            m.BROWSER_DEMAND_UNTIL=old
+
+    def test_stage2_and_stage3_share_the_heavy_resource_lock(self):
+        from pathlib import Path
+        src=(Path(__file__).resolve().parent/'app.py').read_text()
+        self.assertIn("RUN_LOCK=threading.Lock()  # shared heavy-resource lock",src)
+        self.assertIn("status='BUSY_STAGE3_PRIORITY'",src)
+        self.assertIn("browser_wait=_browser_demand_remaining()",src)
+        self.assertIn("try: RUN_LOCK.release()",src)
+
     def test_network_route_handler_is_awaited_not_fire_and_forget(self):
         # Fire-and-forget Playwright route tasks kept asyncio.run() alive long
         # after proof publication. Keep network interception structured so a

@@ -13,9 +13,12 @@ TOKEN=os.environ.get('PAL_RENDER_TOKEN','')
 # every route still passes the exact same proof/safety contract.
 LANES=itertools.cycle(('DYNAMIC_JS','FAST_DOM','DYNAMIC_JS',
                        'IFRAME_DEEP','DYNAMIC_JS','DEEP'))
-RUN_LOCK=threading.Lock()
+RUN_LOCK=threading.Lock()  # shared heavy-resource lock: Stage3 Browser OR Stage2 route worker
 STAGE2_LOCK=threading.Lock()
 STAGE2_STATE_LOCK=threading.Lock()
+BROWSER_DEMAND_LOCK=threading.Lock()
+BROWSER_DEMAND_UNTIL=0.0
+BROWSER_PRIORITY_GRACE_SECONDS=max(30,min(300,int(os.environ.get('PAL_RENDER_BROWSER_PRIORITY_GRACE_SECONDS','120') or 120)))
 STAGE2_THREAD=None
 STAGE2_STATE={'status':'IDLE','at':0,'started_at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None,'workers':0,'batch':0,'priority_markets':[]}
 STATE_LOCK=threading.Lock()
@@ -67,6 +70,27 @@ def _worker_summary(stdout):
 def _lease_remaining():
     with LEASE_LOCK:
         return max(0,round(LEASE_UNTIL-time.time(),1))
+
+def _browser_demand_remaining(now=None):
+    now=time.time() if now is None else float(now)
+    with BROWSER_DEMAND_LOCK:
+        return max(0.0,float(BROWSER_DEMAND_UNTIL)-now)
+
+def _note_browser_demand(now=None):
+    global BROWSER_DEMAND_UNTIL
+    now=time.time() if now is None else float(now)
+    with BROWSER_DEMAND_LOCK:
+        BROWSER_DEMAND_UNTIL=max(float(BROWSER_DEMAND_UNTIL),now+BROWSER_PRIORITY_GRACE_SECONDS)
+        return max(0.0,BROWSER_DEMAND_UNTIL-now)
+
+def _resource_owner():
+    t=PUMP_THREAD
+    if t and t.is_alive():
+        return 'STAGE3_BROWSER'
+    st=STAGE2_THREAD
+    if st and st.is_alive():
+        return 'STAGE2_ROUTE'
+    return 'IDLE'
 
 def _stage2_snapshot():
     with STAGE2_STATE_LOCK:
@@ -139,6 +163,8 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
     finally:
         STAGE2_THREAD=None
         try: STAGE2_LOCK.release()
+        except RuntimeError: pass
+        try: RUN_LOCK.release()
         except RuntimeError: pass
 
 def _snapshot():
@@ -341,6 +367,7 @@ def start_or_extend(source,priority_markets=None):
             x=str(x or '').strip()
             if x and x not in clean: clean.append(x)
         ACTIVE_PRIORITY_MARKETS=clean[:8]
+    _note_browser_demand()
     _extend_lease(source)
     if not RUN_LOCK.acquire(blocking=False):
         return {'status':'BUSY','source':source,'state':_snapshot()},202
@@ -378,19 +405,43 @@ def stage2_wake():
         if x and x not in markets: markets.append(x)
     workers=max(4,min(24,int(body.get('workers') or 8)))
     batch=max(16,min(128,int(body.get('batch') or 64)))
+    # Stage3 Browser owns the scarce Render Free memory lane. Stage2 is useful
+    # external I/O work, but it must never overlap Chromium. Browser demand is
+    # renewed by every /wake call, so once an in-flight Stage2 run finishes the
+    # next cycle yields the shared lock to Stage3 instead of immediately
+    # starting another 24-worker Stage2 batch.
+    browser_wait=_browser_demand_remaining()
+    if browser_wait>0 or (PUMP_THREAD and PUMP_THREAD.is_alive()):
+        return jsonify(status='BUSY_STAGE3_PRIORITY',
+                       browser_demand_seconds=round(browser_wait,1),
+                       resource_owner=_resource_owner()),202
     if not STAGE2_LOCK.acquire(blocking=False):
         return jsonify(status='BUSY',state=_stage2_snapshot()),202
-    with STAGE2_STATE_LOCK:
-        STAGE2_STATE.update(status='RUNNING',at=int(time.time()),started_at=int(time.time()),
-                            duration_seconds=0,returncode=None,
-                            workers=workers,batch=batch,priority_markets=list(markets))
-    STAGE2_THREAD=threading.Thread(
-        target=_stage2_runner,
-        args=(task_url,result_url,markets,workers,batch),
-        daemon=True,
-    )
-    STAGE2_THREAD.start()
-    return jsonify(status='STARTED',state=_stage2_snapshot()),202
+    if not RUN_LOCK.acquire(blocking=False):
+        try: STAGE2_LOCK.release()
+        except RuntimeError: pass
+        return jsonify(status='BUSY_STAGE3_PRIORITY',
+                       browser_demand_seconds=round(_browser_demand_remaining(),1),
+                       resource_owner=_resource_owner()),202
+    try:
+        with STAGE2_STATE_LOCK:
+            STAGE2_STATE.update(status='RUNNING',at=int(time.time()),started_at=int(time.time()),
+                                duration_seconds=0,returncode=None,
+                                workers=workers,batch=batch,priority_markets=list(markets))
+        STAGE2_THREAD=threading.Thread(
+            target=_stage2_runner,
+            args=(task_url,result_url,markets,workers,batch),
+            daemon=True,
+        )
+        STAGE2_THREAD.start()
+        return jsonify(status='STARTED',state=_stage2_snapshot()),202
+    except Exception:
+        STAGE2_THREAD=None
+        try: STAGE2_LOCK.release()
+        except RuntimeError: pass
+        try: RUN_LOCK.release()
+        except RuntimeError: pass
+        raise
 
 @app.get('/stage2-state')
 def stage2_state():
@@ -402,8 +453,11 @@ def stage2_state():
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    worker_protocol='AWAITED_ROUTE_HANDLER_V1',
-                   resource_profile='RENDER_FREE_SINGLE_BROWSER_V3',
+                   resource_profile='RENDER_FREE_SHARED_LOCK_V4',
                    exit_policy='BOUNDED_EVENT_LOOP_V1',
+                   resource_owner=_resource_owner(),
+                   browser_demand_seconds=round(_browser_demand_remaining(),1),
+                   stage2_busy=bool(STAGE2_THREAD and STAGE2_THREAD.is_alive()),
                    lane_max_rows=LANE_MAX_ROWS,
                    lane_concurrency=LANE_CONCURRENCY,
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
@@ -435,6 +489,7 @@ def wake():
 def tick():
     if not allowed():
         return ('unauthorized',401)
+    _note_browser_demand()
     _extend_lease('SYNC_TICK')
     if not RUN_LOCK.acquire(blocking=False):
         return jsonify(status='BUSY',state=_snapshot()),202
