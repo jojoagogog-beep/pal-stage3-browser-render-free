@@ -169,10 +169,15 @@ def _next_lane():
     return fallback or next(LANES)
 
 def _record_lane_result(lane,summary,code):
-    routes=int((summary or {}).get('routes') or 0)
+    summary=summary or {}
+    routes=int(summary.get('routes') or 0)
+    transport=str(summary.get('result_transport') or '')
+    status_counts=summary.get('status_counts') or {}
+    code_counts=summary.get('code_counts') or {}
     if code>=500:
         return
-    if routes<=0:
+    no_productive_output=(routes<=0 or transport=='NO_MESSAGES' or (not status_counts and not code_counts))
+    if no_productive_output:
         streak=int(LANE_EMPTY_STREAK.get(lane) or 0)+1
         LANE_EMPTY_STREAK[lane]=streak
         cooldown=min(180,LANE_EMPTY_BASE_COOLDOWN_SECONDS*(2**min(streak-1,2)))
