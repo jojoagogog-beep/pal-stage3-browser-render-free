@@ -11,8 +11,8 @@ TOKEN=os.environ.get('PAL_RENDER_TOKEN','')
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
 # every route still passes the exact same proof/safety contract.
-LANES=itertools.cycle(('DYNAMIC_JS','FAST_DOM','DYNAMIC_JS',
-                       'IFRAME_DEEP','DYNAMIC_JS','DEEP'))
+LANES=itertools.cycle(('FAST_DOM','DYNAMIC_JS','FAST_DOM','IFRAME_DEEP',
+                       'FAST_DOM','DYNAMIC_JS','FAST_DOM','DEEP'))
 RUN_LOCK=threading.Lock()  # shared heavy-resource lock: Stage3 Browser OR Stage2 route worker
 STAGE2_LOCK=threading.Lock()
 STAGE2_STATE_LOCK=threading.Lock()
