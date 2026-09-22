@@ -148,6 +148,7 @@ def execute_lane(lane):
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
             'PAL_STAGE3_CONCURRENCY':os.environ.get('PAL_STAGE3_CONCURRENCY','4'),
+            'PAL_STAGE3_RENDERER_PROCESS_LIMIT':os.environ.get('PAL_STAGE3_RENDERER_PROCESS_LIMIT','4'),
             'PAL_STAGE3_PRIORITY_MARKETS':','.join(ACTIVE_PRIORITY_MARKETS),
             'PAL_STAGE3_MAX_ROWS':str(lane_max),
             'PAL_STAGE3_ROUTE_TIMEOUT_SECONDS':str(lane_route_timeout),

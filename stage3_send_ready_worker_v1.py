@@ -743,7 +743,7 @@ async def amain():
                 # Keep the single Playwright browser lane small on the 8GB host.
                 # None of these flags changes DOM/form semantics; they only suppress
                 # background browser services and cap renderer fan-out.
-                '--renderer-process-limit=1',
+                '--renderer-process-limit='+str(max(1,min(8,int(os.environ.get('PAL_STAGE3_RENDERER_PROCESS_LIMIT','1') or 1)))),
                 '--disable-background-networking',
                 '--disable-component-update',
                 '--disable-default-apps',
