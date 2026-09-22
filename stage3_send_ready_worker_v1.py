@@ -26,6 +26,27 @@ _PRIORITY_RANK={m:i for i,m in enumerate(PRIORITY_MARKETS)}
 def market_rank(rec):
     return _PRIORITY_RANK.get(str(rec.get('market') or ''),1000)
 
+def task_lane_quality(task):
+    vals=[]
+    for rec in (task.get('routes') or []):
+        if not lane_accept(rec):
+            continue
+        try:
+            vals.append(int(rec.get('stage3_quality') or 0))
+        except Exception:
+            vals.append(0)
+    return max(vals) if vals else -1
+
+def effective_work_deadline(deadline,route_timeout,now=None):
+    if deadline is None:
+        return None
+    base=time.time() if now is None else float(now)
+    # The caller's lease/deadline may be mostly consumed by a cold Chromium
+    # launch. Once a route batch has been selected, guarantee one bounded
+    # primary Browser pass so the run cannot return NO_MESSAGES solely because
+    # browser startup was slow. The parent process still owns the hard cap.
+    return max(float(deadline),base+max(8.0,float(route_timeout))+5.0)
+
 def task_market_rank(task):
     return min((market_rank(r) for r in (task.get('routes') or [])),default=1000)
 
@@ -700,7 +721,7 @@ async def amain():
     raw_tasks=task_messages()
     perf['task_fetch_ms']=round((time.monotonic()-perf_fetch)*1000,1)
     pending=[m for m in raw_tasks if str(m.get('task_id') or '') not in done]
-    pending=[m for _,m in sorted(enumerate(pending),key=lambda im:(task_market_rank(im[1]),-int(im[1].get('stage3_quality') or 0),im[0]))]
+    pending=[m for _,m in sorted(enumerate(pending),key=lambda im:(task_market_rank(im[1]),-task_lane_quality(im[1]),im[0]))]
     # Local fallback owns one expensive Browser process. With market-pure tasks,
     # hard-filter it to the controller's short-lived proof markets so one quantum
     # ends as soon as the currently-sendable markets are done. Remote/default
@@ -771,6 +792,7 @@ async def amain():
             if Path(p).exists():exe=p;break
         if not exe:
             print(json.dumps({'status':'NO_BROWSER','tasks':0,'routes':0}));return
+        browser_launch_started=time.monotonic()
         browser=await pw.chromium.launch(
             executable_path=exe,headless=True,args=[
                 '--no-sandbox','--disable-dev-shm-usage','--disable-gpu',
@@ -789,6 +811,11 @@ async def amain():
                 '--disable-domain-reliability',
                 '--disable-client-side-phishing-detection',
             ])
+        perf['browser_launch_ms']=round((time.monotonic()-browser_launch_started)*1000,1)
+        if deadline is not None:
+            old_deadline=float(deadline)
+            deadline=effective_work_deadline(deadline,ROUTE_TIMEOUT_SECONDS)
+            perf['deadline_extension_seconds']=round(max(0.0,deadline-old_deadline),1)
         deadline_hit=False
         try:
             for i in range(0,len(rows),LANE_CONCURRENCY):
