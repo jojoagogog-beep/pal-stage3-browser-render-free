@@ -271,8 +271,21 @@ def sitemap_contact_urls(root,domain):
     out.sort(key=lambda x:(x[0],len(x[1])))
     return out[:12]
 
-def candidate_urls(root,doc,domain,preferred=(),sitemap=()):
+def candidate_urls(root,doc,domain,preferred=(),sitemap=(),observed=()):
     found=[];seen=set()
+    # 0) Reuse exact same-domain URLs already observed upstream. These are not
+    # trusted blindly: inspect() still fetches the page and applies the unchanged
+    # CAPTCHA/prohibition/form/contact-intent checks before emitting evidence.
+    for raw in list(observed or []):
+        u=str(raw or '').strip()
+        if not u: continue
+        if not u.startswith('http'):
+            u=urljoin(root,u)
+        if host(u)!=domain or u in seen: continue
+        blob=urlsplit(u).path.replace('-',' ').replace('_',' ')
+        if BAD.search(blob) or not CONTACT.search(blob): continue
+        found.append((-8 if BUSINESS.search(blob) else -7,u,'OBSERVED_CONTACT'))
+        seen.add(u)
     # 1) Exact links explicitly published by the company are strongest evidence.
     for m in re.finditer(r"<a[^>]+href=['\"]([^'\"]+)['\"][^>]*>(.*?)</a>",doc,re.I|re.S):
         href=html.unescape(m.group(1));lab=clean(m.group(2));u=urljoin(root,href).split('#',1)[0]
@@ -372,46 +385,68 @@ def inspect(rec):
               'trusted_source_id':'PAL_CANDIDATE_ROUTE_OFFLOAD_V13_CONTACT_ROUTE'}
             item['pages']=pages;item['errors']=errors
             return item
+    observed=[]
+    for raw in list(rec.get('observed_contact_urls') or []):
+        u=str(raw or '').strip()
+        if u and host(u)==domain and url_key(u) not in rejected_keys:
+            if u not in observed: observed.append(u)
+
+    best_hint=None;best_score=-1;attempted=set()
+    def evaluate(candidates):
+        nonlocal pages,errors,best_hint,best_score
+        for _,u,label in candidates:
+            key=url_key(u)
+            if key in rejected_keys or key in attempted:
+                continue
+            attempted.add(key)
+            fu,st,fd=fetch(u,3,500000);pages+=1
+            if fu and url_key(fu) in rejected_keys:
+                continue
+            if not fu or host(fu)!=domain or st>=400:errors+=1;continue
+            plain=clean(fd)[:120000]
+            if CAPTCHA.search(fd) or PROHIBIT.search(plain):continue
+            static_hint=bool(re.search(r'<form\b',fd,re.I))
+            provider_hint=bool(FORM.search(fd))
+            route_blob=(str(label)+' '+urlsplit(fu).path.replace('-',' ').replace('_',' '))
+            strong_contact=bool(ROUTE_CONTACT.search(' '+route_blob+' '))
+            vendor_only=bool(VENDOR_ONLY.search(' '+route_blob+' ')) and not strong_contact
+            explicit_business=bool(BUSINESS.search(route_blob))
+            if not (static_hint or provider_hint or strong_contact):continue
+            sendability=static_sendability_score(fd) if static_hint else 0
+            qscore=route_quality_score(fu,label,static_hint,provider_hint,strong_contact,explicit_business,rec.get('preferred_contact_paths') or [])
+            qscore=min(100,max(qscore,sendability+(10 if explicit_business else 0), (85 if explicit_business else 75) if strong_contact else 0))
+            # Acceptance criteria are unchanged; this patch changes discovery order only.
+            rendered_required=bool(strong_contact and not static_hint and not provider_hint)
+            acceptable=(not vendor_only) and strong_contact and (not require_explicit_business or explicit_business) and ((sendability>=70) or (provider_hint and qscore>=60) or rendered_required)
+            if not acceptable:continue
+            hint={'contact_url':fu,'anchor':str(label)[:160],
+                  'static_form_hint':static_hint,'dynamic_hint':bool((provider_hint and sendability<70) or rendered_required),
+                  'contact_intent_hint':strong_contact,'explicit_business_hint':explicit_business,
+                  'route_quality_score':qscore,'static_sendability_score':sendability,
+                  'stage2_evidence_pass':True,
+                  'stage2_evidence':{'official_same_domain':True,'form_present':bool(static_hint or provider_hint),
+                                     'requires_rendered_stage3':rendered_required,
+                                     'contact_intent':strong_contact,'captcha_absent':True,'sales_prohibited_absent':True,
+                                     'sendability_score':sendability},
+                  'trusted_source_id':'PAL_CANDIDATE_ROUTE_OFFLOAD_V13_CONTACT_ROUTE'}
+            if qscore>best_score:
+                best_score=qscore;best_hint=hint
+            # candidate_urls() is priority-sorted. The first route that satisfies
+            # the unchanged evidence contract is sufficient for Stage2; probing
+            # lower-ranked alternatives only burns latency and network budget.
+            return True
+        return False
+    # Fast path: observed upstream URLs, live page links and learned paths first.
+    evaluate(candidate_urls(root,doc,domain,rec.get('preferred_contact_paths') or [],[],observed)[:LANE_DEPTH])
+    if best_hint:
+        item['route_hint']=best_hint
+        item['pages']=pages;item['errors']=errors
+        return item
+
+    # Slow fallback only when the direct evidence path found nothing.
     sitemap=sitemap_contact_urls(root,domain)
     if sitemap:pages+=1
-    best_hint=None;best_score=-1
-    for _,u,label in candidate_urls(root,doc,domain,rec.get('preferred_contact_paths') or [],sitemap)[:LANE_DEPTH]:
-        if url_key(u) in rejected_keys:
-            continue
-        fu,st,fd=fetch(u,3,500000);pages+=1
-        if fu and url_key(fu) in rejected_keys:
-            continue
-        if not fu or host(fu)!=domain or st>=400:errors+=1;continue
-        plain=clean(fd)[:120000]
-        if CAPTCHA.search(fd) or PROHIBIT.search(plain):continue
-        static_hint=bool(re.search(r'<form\b',fd,re.I))
-        provider_hint=bool(FORM.search(fd))
-        route_blob=(str(label)+' '+urlsplit(fu).path.replace('-',' ').replace('_',' '))
-        strong_contact=bool(ROUTE_CONTACT.search(' '+route_blob+' '))
-        vendor_only=bool(VENDOR_ONLY.search(' '+route_blob+' ')) and not strong_contact
-        explicit_business=bool(BUSINESS.search(route_blob))
-        if not (static_hint or provider_hint or strong_contact):continue
-        sendability=static_sendability_score(fd) if static_hint else 0
-        qscore=route_quality_score(fu,label,static_hint,provider_hint,strong_contact,explicit_business,rec.get('preferred_contact_paths') or [])
-        qscore=min(100,max(qscore,sendability+(10 if explicit_business else 0), (85 if explicit_business else 75) if strong_contact else 0))
-        # Stage 2 is intentionally high recall; Stage 3 will reject non-business
-        # or unsafe forms before anything can become SEND_READY.
-        rendered_required=bool(strong_contact and not static_hint and not provider_hint)
-        acceptable=(not vendor_only) and strong_contact and (not require_explicit_business or explicit_business) and ((sendability>=70) or (provider_hint and qscore>=60) or rendered_required)
-        if not acceptable:continue
-        hint={'contact_url':fu,'anchor':str(label)[:160],
-              'static_form_hint':static_hint,'dynamic_hint':bool((provider_hint and sendability<70) or rendered_required),
-              'contact_intent_hint':strong_contact,'explicit_business_hint':explicit_business,
-              'route_quality_score':qscore,'static_sendability_score':sendability,
-              'stage2_evidence_pass':True,
-              'stage2_evidence':{'official_same_domain':True,'form_present':bool(static_hint or provider_hint),
-                                 'requires_rendered_stage3':rendered_required,
-                                 'contact_intent':strong_contact,'captcha_absent':True,'sales_prohibited_absent':True,
-                                 'sendability_score':sendability},
-              'trusted_source_id':'PAL_CANDIDATE_ROUTE_OFFLOAD_V13_CONTACT_ROUTE'}
-        if qscore>best_score:
-            best_score=qscore;best_hint=hint
-        if qscore>=90:break
+    evaluate(candidate_urls(root,doc,domain,rec.get('preferred_contact_paths') or [],sitemap,observed)[:max(LANE_DEPTH,4)])
     if best_hint:item['route_hint']=best_hint
     item['pages']=pages;item['errors']=errors
     return item
