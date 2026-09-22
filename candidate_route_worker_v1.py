@@ -451,6 +451,23 @@ def inspect(rec):
     item['pages']=pages;item['errors']=errors
     return item
 
+def safe_inspect(rec):
+    """Fail-isolate one candidate so a 128-row batch cannot die on one bad site."""
+    try:
+        return inspect(rec)
+    except Exception as e:
+        return {
+            'candidate_id':rec.get('candidate_id'),
+            'domain':str(rec.get('domain') or '').lower().removeprefix('www.'),
+            'country_code':rec.get('country'),
+            'market':rec.get('market'),
+            'verified':False,
+            'pages':0,
+            'errors':1,
+            'worker_error':type(e).__name__,
+        }
+
+
 def main():
     started=time.monotonic()
     try:state=json.loads(STATE.read_text())
@@ -485,7 +502,7 @@ def main():
     pending=selected;results=[]
     if rows:
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(LANE_WORKERS,len(rows))) as ex:
-            for x in ex.map(inspect,rows):results.append(x)
+            for x in ex.map(safe_inspect,rows):results.append(x)
     task_ids=[str(t.get('task_id') or '') for t in pending if t.get('task_id')]
     run_id=str(int(time.time()))+'-'+str(os.getpid());out_msgs=[]
     for i in range(0,len(results),32):
@@ -500,11 +517,13 @@ def main():
            'last_routes':sum(bool(x.get('route_hint')) for x in results),
            'last_verified':sum(bool(x.get('verified')) for x in results),
            'last_errors':sum(int(x.get('errors') or 0) for x in results),
+           'last_inspect_exceptions':sum(bool(x.get('worker_error')) for x in results),
            'last_elapsed_seconds':round(time.monotonic()-started,3),'transport':transport}
     STATE.write_text(json.dumps(state,indent=2)+'\n')
     print(json.dumps({'status':'PASS','tasks':len(pending),'candidates':len(rows),
                       'pages_checked':state['last_pages_checked'],'routes':state['last_routes'],
                       'verified':state['last_verified'],'errors':state['last_errors'],
+                      'inspect_exceptions':state['last_inspect_exceptions'],
                       'elapsed_seconds':state['last_elapsed_seconds'],'transport':transport}))
 
 if __name__=='__main__':main()

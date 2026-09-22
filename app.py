@@ -103,6 +103,8 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
             'status':'PASS' if cp.returncode==0 else 'ERROR',
             'at':int(time.time()),'duration_seconds':round(time.time()-started,2),
             'returncode':cp.returncode,'summary':summary,
+            'stderr_tail':(cp.stderr or '')[-1600:],
+            'stdout_tail':(cp.stdout or '')[-1600:],
             'workers':int(workers),'batch':int(batch),
             'priority_markets':list(priority_markets),
         }
