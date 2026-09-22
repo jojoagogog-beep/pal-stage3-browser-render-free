@@ -279,7 +279,18 @@ async def inspect(browser,rec,sem,slow=False):
         timeout_phase='context_init'
         try:
             ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False)
-            await ctx.route('**/*',lambda route: asyncio.create_task(route.abort()) if route.request.resource_type in {'image','media','font'} else asyncio.create_task(route.continue_()))
+            # Await routing decisions directly instead of spawning an untracked
+            # asyncio task for every network request. The old create_task callback
+            # left Playwright response/routing tasks alive after Browser work had
+            # already been durably published; asyncio.run() then spent ~100s
+            # draining them before the worker process could exit. This changes
+            # resource handling only, never proof/safety semantics.
+            async def route_request(route):
+                if route.request.resource_type in {'image','media','font'}:
+                    await route.abort()
+                else:
+                    await route.continue_()
+            await ctx.route('**/*', route_request)
             deep_lane=LANE_MODE in {'DYNAMIC_JS','IFRAME_DEEP','DEEP'}
             page=await ctx.new_page(); page.set_default_timeout(9000 if (slow or deep_lane) else 5500)
             # Keep navigation inside the route-level wall-clock budget, including

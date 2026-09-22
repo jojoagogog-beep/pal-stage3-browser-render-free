@@ -78,5 +78,16 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         for lane, concurrency in m.LANE_CONCURRENCY.items():
             self.assertGreaterEqual(m.LANE_MAX_ROWS[lane], concurrency)
 
+    def test_network_route_handler_is_awaited_not_fire_and_forget(self):
+        # Fire-and-forget Playwright route tasks kept asyncio.run() alive long
+        # after proof publication. Keep network interception structured so a
+        # completed worker can actually release the free Render browser slot.
+        from pathlib import Path
+        src=(Path(__file__).resolve().parent/'stage3_send_ready_worker_v1.py').read_text()
+        self.assertIn('async def route_request(route):',src)
+        self.assertIn("await ctx.route('**/*', route_request)",src)
+        self.assertNotIn('asyncio.create_task(route.abort())',src)
+        self.assertNotIn('asyncio.create_task(route.continue_())',src)
+
 if __name__=='__main__':
     unittest.main(verbosity=2)

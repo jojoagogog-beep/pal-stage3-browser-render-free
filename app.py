@@ -396,6 +396,7 @@ def stage2_state():
 @app.get('/health')
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
+                   worker_protocol='AWAITED_ROUTE_HANDLER_V1',
                    lane_max_rows=LANE_MAX_ROWS,
                    lane_concurrency=LANE_CONCURRENCY,
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
