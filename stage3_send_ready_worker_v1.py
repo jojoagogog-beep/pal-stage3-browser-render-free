@@ -30,7 +30,7 @@ def task_market_rank(task):
     return min((market_rank(r) for r in (task.get('routes') or [])),default=1000)
 
 RECENT_ROUTE_SECONDS=max(60,min(3600,int(os.environ.get('PAL_STAGE3_RECENT_ROUTE_SECONDS','600') or 600)))
-RECENT_TECH_SECONDS=max(30,min(900,int(os.environ.get('PAL_STAGE3_RECENT_TECH_SECONDS','120') or 120)))
+RECENT_TECH_SECONDS=max(60,min(1800,int(os.environ.get('PAL_STAGE3_RECENT_TECH_SECONDS','600') or 600)))
 
 def route_cache_key(rec):
     raw='|'.join((

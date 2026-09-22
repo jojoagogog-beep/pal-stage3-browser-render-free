@@ -77,7 +77,7 @@ def execute_lane(lane):
             'PAL_STAGE3_RETRY_TIMEOUT_SECONDS':'55',
             'PAL_STAGE3_RETRY_LIMIT':'0',
             'PAL_STAGE3_RECENT_ROUTE_SECONDS':'900',
-            'PAL_STAGE3_RECENT_TECH_SECONDS':'180',
+            'PAL_STAGE3_RECENT_TECH_SECONDS':'600',
             'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'.json',
             'PAL_STAGE3_DEADLINE_EPOCH':str(int(time.time())+180),
             'PAL_STAGE3_PRODUCER':'PAL_RENDER_STAGE3_BROWSER_V1',
