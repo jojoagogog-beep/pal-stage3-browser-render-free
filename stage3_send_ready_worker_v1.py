@@ -260,7 +260,11 @@ async def inspect(browser,rec,sem,slow=False):
             await ctx.route('**/*',lambda route: asyncio.create_task(route.abort()) if route.request.resource_type in {'image','media','font'} else asyncio.create_task(route.continue_()))
             deep_lane=LANE_MODE in {'DYNAMIC_JS','IFRAME_DEEP','DEEP'}
             page=await ctx.new_page(); page.set_default_timeout(9000 if (slow or deep_lane) else 5500)
-            nav_timeout=30000 if (slow or deep_lane) else 20000
+            # Keep navigation inside the route-level wall-clock budget, including
+            # one bounded apex->www retry. This prevents the outer asyncio.wait_for
+            # from expiring before Playwright can return a meaningful verdict.
+            route_budget_ms=max(8000,int(ROUTE_TIMEOUT_SECONDS*1000))
+            nav_timeout=max(7000,min(18000,int(route_budget_ms*0.38)))
             try:
                 await page.goto(url,wait_until='domcontentloaded',timeout=nav_timeout)
             except Exception as nav_exc:
@@ -769,7 +773,9 @@ async def amain():
                 for rec,out in zip(batch,got):
                     if isinstance(out,BaseException):
                         b=base_result(rec)
-                        value={**b,'status':'TECH_DEFER','code':'OVERALL_ROUTE_TIMEOUT_OR_ERROR','stage3_send_ready':False}
+                        value={**b,'status':'TECH_DEFER','code':'OVERALL_ROUTE_TIMEOUT_OR_ERROR',
+                               'stage3_send_ready':False,'error_type':type(out).__name__,
+                               'error_detail':repr(out)[:240]}
                     else:
                         value=out
                     results.append(value)
