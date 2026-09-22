@@ -35,8 +35,8 @@ LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
 # Keep the high-yield dynamic lane wide, but bound slow/low-yield deep lanes so
 # one batch cannot monopolize the free Render browser for several minutes.
-LANE_MAX_ROWS={'DYNAMIC_JS':2,'IFRAME_DEEP':2,'DEEP':1,'FAST_DOM':4}
-LANE_CONCURRENCY={'DYNAMIC_JS':2,'IFRAME_DEEP':2,'DEEP':1,'FAST_DOM':4}
+LANE_MAX_ROWS={'DYNAMIC_JS':4,'IFRAME_DEEP':3,'DEEP':2,'FAST_DOM':4}
+LANE_CONCURRENCY={'DYNAMIC_JS':4,'IFRAME_DEEP':3,'DEEP':2,'FAST_DOM':4}
 # The per-route budget must exceed the internal navigation + render budget.
 # Previously 16-18s wrapped a page.goto() that could itself wait 30s, making
 # OVERALL_ROUTE_TIMEOUT_OR_ERROR inevitable on otherwise valid slower sites.

@@ -66,5 +66,17 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertEqual(m._next_lane(),'B')
         self.assertEqual(m._next_lane(),'C')
 
+    def test_high_yield_lanes_keep_parallel_capacity(self):
+        # DYNAMIC_JS and IFRAME_DEEP have materially higher measured SAFE yield
+        # than DEEP, so they must not silently regress to the same low-capacity
+        # setting. This changes scheduling capacity only; proof/safety gates are
+        # still owned by the worker and executor contracts.
+        self.assertGreaterEqual(m.LANE_CONCURRENCY['DYNAMIC_JS'], 4)
+        self.assertGreaterEqual(m.LANE_CONCURRENCY['IFRAME_DEEP'], 3)
+        self.assertGreater(m.LANE_CONCURRENCY['DYNAMIC_JS'], m.LANE_CONCURRENCY['DEEP'])
+        self.assertGreater(m.LANE_CONCURRENCY['IFRAME_DEEP'], m.LANE_CONCURRENCY['DEEP'])
+        for lane, concurrency in m.LANE_CONCURRENCY.items():
+            self.assertGreaterEqual(m.LANE_MAX_ROWS[lane], concurrency)
+
 if __name__=='__main__':
     unittest.main(verbosity=2)
