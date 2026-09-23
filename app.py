@@ -64,7 +64,7 @@ def process_job(jid,td,mode,profile,premastered,duration):
                 af=f"highpass=f=45,lowpass=f=16500,{tone},loudnorm=I={target}:TP={tp}:LRA={lra}"
                 run(["ffmpeg","-y","-loglevel","error","-i",str(src),"-af",af,"-ar","48000","-ac","2","-c:a","flac","-compression_level","8",str(master)])
             aac=td/"audio.m4a"
-            run(["ffmpeg","-y","-loglevel","error","-i",str(master),"-vn","-c:a","aac","-b:a","192k","-ar","48000","-ac","2",str(aac)])
+            run(["ffmpeg","-y","-loglevel","error","-i",str(master),"-t",str(duration),"-vn","-c:a","aac","-b:a","192k","-ar","48000","-ac","2",str(aac)])
             if mode=="short":
                 vf="scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,format=yuv420p"
                 run(["ffmpeg","-y","-loglevel","error","-loop","1","-framerate","1","-i",str(art),"-stream_loop","-1","-i",str(aac),"-t",str(duration),"-vf",vf,"-c:v","libx264","-threads","1","-preset","ultrafast","-crf","24","-tune","stillimage","-r","1","-c:a","copy","-shortest",str(video)])
