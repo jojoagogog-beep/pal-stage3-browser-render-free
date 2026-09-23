@@ -1,14 +1,22 @@
 from __future__ import annotations
-import hashlib, json, os, subprocess, tarfile, tempfile
+import base64, hashlib, json, os, subprocess, tarfile, tempfile, time
 from pathlib import Path
 from flask import Flask, jsonify, request, send_file
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 app=Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"]=700*1024*1024
-TOKEN=os.environ.get("MOONLIT_WORKER_TOKEN","").strip()
-if not TOKEN:
-    try: TOKEN=Path("/etc/secrets/moonlit_worker_token").read_text().strip()
-    except Exception: TOKEN=""
+PUBLIC_KEY_PEM='''-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA47Tk0F32vcp6TC3+aFqX
+jEMCHsLMbZY0Ooq3w9AkVK92Z6KA/xLi3LR38m84hnzwtjNLWsgbwDSwBaOde31v
+m51pOp8dzs9NbEO9BYkgMQ+bjvHYIwEtGdBErMZZl/qG3odDAqS13ojcCo1ri7tx
+dqcMAvxBGJqlko4Rkq0GOLO4FPgSbS4jlmW+4TSUCp7PjpKIIzCu28Ql7npTED9X
+BUM1tpqzrOfbQPPFnSxIEW/9RXrUrMjh0ZUax44H3zIZtKkaKrIA/947UMtvPokS
+vlVg2Adj9fcCJqYCLoBhPt+LOw3Ph+Ehp6Rc3/KdeC+Lo4Hdy33OUP0PQ5VY0+By
+JwIDAQAB
+-----END PUBLIC KEY-----'''
+PUBLIC_KEY=serialization.load_pem_public_key(PUBLIC_KEY_PEM.encode())
 PROFILES={
     "morning":(-18.0,-2.0,7,"anull"),
     "afternoon":(-19.0,-2.2,7,"anull"),
@@ -25,8 +33,13 @@ def sha256(path):
         for b in iter(lambda:f.read(1024*1024),b""):h.update(b)
     return h.hexdigest()
 def authorized():
-    if not TOKEN:return False
-    return request.headers.get("Authorization","")==f"Bearer {TOKEN}"
+    try:
+        ts=request.headers.get("X-Moonlit-Timestamp",""); nonce=request.headers.get("X-Moonlit-Nonce","")
+        if abs(time.time()-int(ts))>300 or len(nonce)<16:return False
+        sig=base64.b64decode(request.headers.get("X-Moonlit-Signature","").encode(),validate=True)
+        PUBLIC_KEY.verify(sig,f"{ts}\n{nonce}".encode(),padding.PKCS1v15(),hashes.SHA256())
+        return True
+    except Exception:return False
 
 @app.get("/health")
 def health():
