@@ -495,7 +495,10 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             # renderer cannot consume the entire route wall-clock budget here.
             try:
                 raw_text=await asyncio.wait_for(
-                    page.locator('body').text_content(timeout=3000),
+                    page.evaluate(
+                        "() => ((document.body && document.body.textContent) || "
+                        "(document.documentElement && document.documentElement.textContent) || '')"
+                    ),
                     timeout=4.0,
                 )
             except Exception:
