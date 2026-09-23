@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: moonlit-media-worker-free-v1
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: MOONLIT_WORKER_TOKEN
+        sync: false
