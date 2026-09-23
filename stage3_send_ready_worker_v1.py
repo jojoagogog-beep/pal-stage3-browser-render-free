@@ -344,22 +344,28 @@ async def sticky_fill(loc,value):
 
 async def visible_captcha(root):
     """Block only an actually rendered captcha/challenge, not a dormant script."""
+    # Locator count/is_visible/bounding_box + innerText caused repeated layout and
+    # protocol round-trips on JS-heavy pages. Evaluate the identical visibility
+    # and challenge-text contract in one DOM pass and bound it independently.
+    script=r"""() => {
+      const sel='iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey]';
+      const visible=e=>{
+        try{
+          const s=getComputedStyle(e),r=e.getBoundingClientRect();
+          return s.display!=='none'&&s.visibility!=='hidden'&&r.width>4&&r.height>4;
+        }catch(_){return false;}
+      };
+      if([...document.querySelectorAll(sel)].slice(0,12).some(visible)) return true;
+      const body=((document.body&&document.body.textContent)||'').slice(0,12000);
+      return /(verify you are human|prove you are human|human verification|current year.{0,50}(?:human|prove)|anti[- ]?spam.{0,40}(?:question|check|challenge)|checking your browser|complete the security check|captcha challenge|画像認証|画像内.{0,30}(?:文字列|文字|コード)|認証コード.{0,20}(?:画像|入力)|画像認証.{0,30}(?:正しくありません|必須))/i.test(body);
+    }"""
     try:
-        loc=root.locator(CAPTCHA_SELECTOR)
-        for i in range(min(await loc.count(),12)):
-            try:
-                if await loc.nth(i).is_visible():
-                    box=await loc.nth(i).bounding_box()
-                    if box and box.get('width',0)>4 and box.get('height',0)>4:
-                        return True
-            except Exception:
-                pass
-        body=(await root.locator('body').inner_text())[:12000]
-        if re.search(r'(verify you are human|prove you are human|human verification|current year.{0,50}(?:human|prove)|anti[- ]?spam.{0,40}(?:question|check|challenge)|checking your browser|complete the security check|captcha challenge|画像認証|画像内.{0,30}(?:文字列|文字|コード)|認証コード.{0,20}(?:画像|入力)|画像認証.{0,30}(?:正しくありません|必須))',body,re.I):
-            return True
+        return bool(await asyncio.wait_for(root.evaluate(script),timeout=2.0))
+    except asyncio.TimeoutError:
+        # Fail closed: an uninspectable challenge state must never be accepted.
+        return True
     except Exception:
-        pass
-    return False
+        return False
 
 def same_form_snapshot(before,after):
     """DOM form/frame indexes are zero-based; missing indexes are not zero."""
