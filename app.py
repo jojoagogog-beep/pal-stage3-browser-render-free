@@ -17,7 +17,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Stage3 Browser cron work. This prevents Browser cron leases on the primary
 # from starving Stage2 for minutes at a time.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
-SCHEDULER_REVISION='STAGE2_DURABILITY_ROLE_ISOLATION_V1'
+SCHEDULER_REVISION='STAGE3_SINGLE_OWNER_QUEUE_V2'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -299,6 +299,11 @@ def execute_lane(lane):
         lane_route_timeout=int(LANE_ROUTE_TIMEOUT_SECONDS.get(lane,24))
         lane_retry_timeout=int(LANE_RETRY_TIMEOUT_SECONDS.get(lane,lane_route_timeout))
         if _valid_blob_url(ACTIVE_TASK_BLOB_URL):
+            # Stage3 worker intentionally prefers the Browser-specific variable
+            # over the legacy generic route queue. Keep both aligned so a
+            # controller-supplied queue can never be shadowed by stale Render
+            # environment/default values.
+            env['PAL_BROWSER_TASK_BLOB_URL']=ACTIVE_TASK_BLOB_URL
             env['PAL_ROUTE_TASK_BLOB_URL']=ACTIVE_TASK_BLOB_URL
         if _valid_blob_url(ACTIVE_RESULT_BLOB_URL):
             env['PAL_BROWSER_RESULT_BLOB_URL']=ACTIVE_RESULT_BLOB_URL
@@ -316,6 +321,14 @@ def execute_lane(lane):
             'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'.json',
             'PAL_STAGE3_DEADLINE_EPOCH':str(int(time.time())+lane_deadline),
             'PAL_STAGE3_PRODUCER':'PAL_RENDER_STAGE3_BROWSER_V1',
+            # Role isolation leaves exactly one Stage3 Browser service
+            # (shard1). The historical two-shard worker default would process
+            # only half of each task, mark the task complete, and strand the
+            # other half forever because the former shard0 service is now
+            # dedicated to Stage2. One service therefore owns the whole proof
+            # queue; safety/proof gates are unchanged.
+            'PAL_STAGE3_SHARD_COUNT':'1',
+            'PAL_STAGE3_SHARD_INDEX':'0',
         })
         cp=subprocess.run(
             [sys.executable,str(WORKER)],env=env,text=True,
