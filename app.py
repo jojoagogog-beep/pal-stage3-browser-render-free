@@ -515,9 +515,13 @@ def stage2_wake():
     # next cycle yields the shared lock to Stage3 instead of immediately
     # starting another 24-worker Stage2 batch.
     browser_wait=_browser_demand_remaining()
-    if browser_wait>0 or (PUMP_THREAD and PUMP_THREAD.is_alive()):
+    browser_queued=None
+    if _valid_blob_url(ACTIVE_TASK_BLOB_URL):
+        browser_queued=_browser_queue_has_tasks(ACTIVE_TASK_BLOB_URL)
+    if browser_wait>0 or (PUMP_THREAD and PUMP_THREAD.is_alive()) or browser_queued is True:
         return jsonify(status='BUSY_STAGE3_PRIORITY',
                        browser_demand_seconds=round(browser_wait,1),
+                       browser_queue_pending=browser_queued,
                        resource_owner=_resource_owner()),202
     if not STAGE2_LOCK.acquire(blocking=False):
         return jsonify(status='BUSY',state=_stage2_snapshot()),202
@@ -558,7 +562,7 @@ def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    scheduler_revision=SCHEDULER_REVISION,
                    service_name=SERVICE_NAME,
-                   service_role=('STAGE2_PRIMARY' if STAGE2_PRIMARY_ROLE else 'STAGE3_BROWSER'),
+                   service_role=('STAGE2_STAGE3_DUAL' if STAGE2_PRIMARY_ROLE else 'STAGE3_BROWSER'),
                    worker_protocol='AWAITED_ROUTE_HANDLER_V1',
                    resource_profile='RENDER_FREE_SHARED_LOCK_V5_DYNAMIC_BLOB',
                    exit_policy='BOUNDED_EVENT_LOOP_V1',
@@ -591,9 +595,10 @@ def cron_wake():
 def wake():
     if not allowed():
         return ('unauthorized',401)
-    if STAGE2_PRIMARY_ROLE:
-        return jsonify(status='STAGE2_PRIMARY_RESERVED',
-                       service_role='STAGE2_PRIMARY'),409
+    # Primary is dual-role: Stage2 and Stage3 never overlap because both use
+    # RUN_LOCK. A Stage3 wake received while Stage2 is running records Browser
+    # demand, so Stage2 yields the next quantum instead of monopolizing shard 0.
+    # This restores the intended two-shard Stage3 topology without extra services.
     payload=request.get_json(silent=True) or {}
     pm=payload.get('priority_markets') if isinstance(payload,dict) else None
     task_url=payload.get('task_url') if isinstance(payload,dict) else None

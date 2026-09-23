@@ -9,11 +9,10 @@ def function_source(name):
     return ast.get_source_segment(SRC,node) or ''
 
 class RoleSeparationTests(unittest.TestCase):
-    def test_primary_rejects_stage3_wake(self):
+    def test_primary_stage3_wake_uses_shared_lock_path(self):
         s=function_source('wake')
-        self.assertIn('if STAGE2_PRIMARY_ROLE',s)
-        self.assertIn("status='STAGE2_PRIMARY_RESERVED'",s)
-        self.assertLess(s.index("status='STAGE2_PRIMARY_RESERVED'"),s.index('start_or_extend'))
+        self.assertNotIn("status='STAGE2_PRIMARY_RESERVED'",s)
+        self.assertIn('start_or_extend',s)
 
     def test_primary_rejects_stage3_sync_tick(self):
         s=function_source('tick')
