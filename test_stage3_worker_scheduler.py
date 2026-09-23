@@ -1,4 +1,5 @@
 import importlib
+import os
 import sys
 import types
 import unittest
@@ -64,6 +65,24 @@ class Stage3WorkerSchedulingTests(unittest.TestCase):
         finally:
             w._TASK_BLOB_CANDIDATES=old_candidates
             w.blob_get=old_get
+
+    def test_browser_queue_precedes_legacy_generic_env(self):
+        keys=('PAL_ROUTE_TASK_BLOB_URL','PAL_BROWSER_TASK_BLOB_URL','PAL_STAGE3_TRANSPORT_CONFIG_FILE')
+        old={k:os.environ.get(k) for k in keys}
+        try:
+            os.environ['PAL_ROUTE_TASK_BLOB_URL']='https://superjsonblob.com/api/jsonBlob/legacy-stage2'
+            os.environ.pop('PAL_BROWSER_TASK_BLOB_URL',None)
+            os.environ['PAL_STAGE3_TRANSPORT_CONFIG_FILE']='/tmp/pal-no-such-stage3-transport.json'
+            ww=importlib.reload(w)
+            self.assertEqual(ww.TASK_BLOB,ww._DEFAULT_BROWSER_TASK_BLOB)
+            self.assertLess(
+                ww._TASK_BLOB_CANDIDATES.index(ww._DEFAULT_BROWSER_TASK_BLOB),
+                ww._TASK_BLOB_CANDIDATES.index(os.environ['PAL_ROUTE_TASK_BLOB_URL']))
+        finally:
+            for k,v in old.items():
+                if v is None: os.environ.pop(k,None)
+                else: os.environ[k]=v
+            importlib.reload(w)
 
 if __name__=='__main__':
     unittest.main(verbosity=2)

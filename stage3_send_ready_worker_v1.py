@@ -16,10 +16,17 @@ _TRANSPORT_SECRET=_transport_secret_config()
 _DEFAULT_BROWSER_TASK_BLOB='https://superjsonblob.com/api/jsonBlob/cc1b98e3-f44a-4229-b6e2-f96c5a52c8fc'
 _DEFAULT_BROWSER_RESULT_BLOB='https://superjsonblob.com/api/jsonBlob/f4776f37-7f0b-469f-86f6-92f94d1de939'
 _TASK_BLOB_CANDIDATES=[]
+# Stage3 Browser must consume the Browser-specific queue. Older Render service
+# environments still carry PAL_ROUTE_TASK_BLOB_URL pointing at the generic
+# Stage2 route queue; giving that legacy variable first priority makes a healthy
+# Browser worker report tasks=0 forever while the real Browser queue fills.
+# Prefer an explicit Browser variable/transport secret/default first, and keep
+# the legacy generic route variable only as the final compatibility fallback.
 for _u in (
-    os.environ.get('PAL_ROUTE_TASK_BLOB_URL',''),
+    os.environ.get('PAL_BROWSER_TASK_BLOB_URL',''),
     str(_TRANSPORT_SECRET.get('browser_task_blob_url') or ''),
     _DEFAULT_BROWSER_TASK_BLOB,
+    os.environ.get('PAL_ROUTE_TASK_BLOB_URL',''),
 ):
     _u=str(_u or '').strip()
     if _u and _u not in _TASK_BLOB_CANDIDATES:
@@ -395,14 +402,22 @@ async def inspect(browser,rec,sem,slow=False):
                 lane_wait={'FAST_DOM':900,'DYNAMIC_JS':1800,'IFRAME_DEEP':1500,'DEEP':2600}.get(LANE_MODE,1200)
                 if slow: lane_wait=max(lane_wait,2200)
                 await page.wait_for_timeout(lane_wait)
-                # Static FULL preflight already proved that a contact form exists.
-                # Give CSS/JS hydration a short bounded chance to make at least
-                # one form control visible before scanning. This is scheduling
-                # only: every captcha/safety/fillability gate below is unchanged.
+                # Static contact-form evidence can refer to a form below the
+                # initial viewport. Duda-style sites keep such widgets
+                # visibility:hidden behind a running-animation class until an
+                # IntersectionObserver sees them. Trigger only that normal
+                # viewport event; never mutate CSS/visibility or bypass gates.
                 if LANE_MODE=='FAST_DOM' and (
                         bool(rec.get('static_full_preflight'))
                         or str(rec.get('static_status') or '')=='STATIC_FORM_CANDIDATE'):
                     try:
+                        forms_for_reveal=page.locator('form')
+                        for reveal_i in range(min(await forms_for_reveal.count(),4)):
+                            try:
+                                await forms_for_reveal.nth(reveal_i).scroll_into_view_if_needed(timeout=1800)
+                                await page.wait_for_timeout(350)
+                            except Exception:
+                                continue
                         await page.wait_for_function("""() => [...document.forms].some(f =>
                           [...f.querySelectorAll('input,textarea,select,button')].some(e => {
                             const s=getComputedStyle(e),r=e.getBoundingClientRect();
@@ -411,6 +426,8 @@ async def inspect(browser,rec,sem,slow=False):
                                    r.width>0 && r.height>0;
                           }))""", timeout=2500)
                     except PlaywrightTimeoutError:
+                        pass
+                    except Exception:
                         pass
                 if LANE_MODE in {'DYNAMIC_JS','DEEP'} or slow:
                     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
