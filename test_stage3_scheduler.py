@@ -119,6 +119,7 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertIn("PAL_STAGE3_SHARD_COUNT','2'",src)
         self.assertIn("RENDER_SERVICE_NAME",src)
         self.assertIn("endswith('-v2')",src)
+        self.assertIn("'shard1' in _RENDER_SERVICE_NAME",src)
         self.assertIn("(rid % SHARD_COUNT)==SHARD_INDEX",src)
         self.assertIn("not shard_accept(rec) or not lane_accept(rec)",src)
 

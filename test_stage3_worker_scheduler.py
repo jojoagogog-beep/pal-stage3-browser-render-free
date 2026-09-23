@@ -49,5 +49,21 @@ class Stage3WorkerSchedulingTests(unittest.TestCase):
     def test_existing_later_deadline_is_not_shortened(self):
         self.assertEqual(w.effective_work_deadline(500.0,42,now=100.0),500.0)
 
+    def test_task_blob_falls_back_to_browser_queue(self):
+        old_candidates=list(w._TASK_BLOB_CANDIDATES)
+        old_get=w.blob_get
+        try:
+            w._TASK_BLOB_CANDIDATES=['legacy-route-blob','browser-blob']
+            def fake_get(url):
+                if url=='legacy-route-blob':
+                    return {'tasks':[{'kind':'PAL_CANDIDATE_ROUTE_BATCH_V2','task_id':'route-1'}]}
+                return {'tasks':[{'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','task_id':'browser-1','routes':[]}]}
+            w.blob_get=fake_get
+            got=w.task_messages()
+            self.assertEqual([x['task_id'] for x in got],['browser-1'])
+        finally:
+            w._TASK_BLOB_CANDIDATES=old_candidates
+            w.blob_get=old_get
+
 if __name__=='__main__':
     unittest.main(verbosity=2)

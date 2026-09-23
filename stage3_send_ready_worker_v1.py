@@ -13,10 +13,21 @@ def _transport_secret_config():
         return {}
 
 _TRANSPORT_SECRET=_transport_secret_config()
-TASK_BLOB=(os.environ.get('PAL_ROUTE_TASK_BLOB_URL','')
-           or str(_TRANSPORT_SECRET.get('browser_task_blob_url') or ''))
+_DEFAULT_BROWSER_TASK_BLOB='https://superjsonblob.com/api/jsonBlob/cc1b98e3-f44a-4229-b6e2-f96c5a52c8fc'
+_DEFAULT_BROWSER_RESULT_BLOB='https://superjsonblob.com/api/jsonBlob/f4776f37-7f0b-469f-86f6-92f94d1de939'
+_TASK_BLOB_CANDIDATES=[]
+for _u in (
+    os.environ.get('PAL_ROUTE_TASK_BLOB_URL',''),
+    str(_TRANSPORT_SECRET.get('browser_task_blob_url') or ''),
+    _DEFAULT_BROWSER_TASK_BLOB,
+):
+    _u=str(_u or '').strip()
+    if _u and _u not in _TASK_BLOB_CANDIDATES:
+        _TASK_BLOB_CANDIDATES.append(_u)
+TASK_BLOB=_TASK_BLOB_CANDIDATES[0] if _TASK_BLOB_CANDIDATES else ''
 RESULT_BLOB=(os.environ.get('PAL_BROWSER_RESULT_BLOB_URL','')
-             or str(_TRANSPORT_SECRET.get('browser_result_blob_url') or ''))
+             or str(_TRANSPORT_SECRET.get('browser_result_blob_url') or '')
+             or _DEFAULT_BROWSER_RESULT_BLOB)
 STATE=Path(os.environ.get('PAL_STAGE3_STATE_FILE','pal_offload/stage3_send_ready_state_v1.json'))
 LANE_MODE=str(os.environ.get('PAL_STAGE3_LANE_MODE','FAST_DOM') or 'FAST_DOM').upper()
 PRODUCER=str(os.environ.get('PAL_STAGE3_PRODUCER','PAL_STAGE3_BROWSER_WORKER_V1') or 'PAL_STAGE3_BROWSER_WORKER_V1')
@@ -35,7 +46,7 @@ PRIORITY_MARKETS=[x.strip() for x in os.environ.get('PAL_STAGE3_PRIORITY_MARKETS
 # name when no explicit shard index is configured. This lets a service whose
 # name ends in -v2 become shard 1 without replacing inherited env vars/secrets.
 _RENDER_SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '').lower()
-_DEFAULT_SHARD_INDEX='1' if _RENDER_SERVICE_NAME.endswith('-v2') else '0'
+_DEFAULT_SHARD_INDEX='1' if (_RENDER_SERVICE_NAME.endswith('-v2') or 'shard1' in _RENDER_SERVICE_NAME) else '0'
 SHARD_COUNT=max(1,min(16,int(os.environ.get('PAL_STAGE3_SHARD_COUNT','2') or 2)))
 SHARD_INDEX=max(0,min(SHARD_COUNT-1,int(os.environ.get('PAL_STAGE3_SHARD_INDEX',_DEFAULT_SHARD_INDEX) or _DEFAULT_SHARD_INDEX)))
 LOCAL_FALLBACK=os.environ.get('PAL_STAGE3_LOCAL_FALLBACK','').lower() in {'1','true','yes'}
@@ -204,17 +215,34 @@ def blob_put(url,obj):
     with urllib.request.urlopen(q,timeout=20,context=SSL_CONTEXT) as r:r.read(10000)
 
 def task_messages():
-    if not TASK_BLOB:
+    if not _TASK_BLOB_CANDIDATES:
         print(json.dumps({'stage3_task_diag':{'error':'NO_TASK_BLOB'}}))
         return []
-    try:
-        q=blob_get(TASK_BLOB)
-    except Exception as e:
-        print(json.dumps({'stage3_task_diag':{'error':type(e).__name__,'detail':str(e)[:220]}}))
+    last_error=None
+    source_diags=[]
+    out=[]
+    source_index=None
+    for idx,url in enumerate(_TASK_BLOB_CANDIDATES):
+        try:
+            q=blob_get(url)
+        except Exception as e:
+            last_error={'error':type(e).__name__,'detail':str(e)[:220],'source_index':idx}
+            continue
+        all_tasks=[m for m in (q.get('tasks') or []) if isinstance(m,dict)]
+        browser=[m for m in all_tasks if m.get('kind')=='PAL_BROWSER_PREFLIGHT_TASK_V1']
+        source_diags.append({'source_index':idx,'all_tasks':len(all_tasks),'browser_tasks':len(browser)})
+        if browser:
+            out=browser
+            source_index=idx
+            break
+    if not out:
+        diag={'sources':source_diags,'browser_tasks':0}
+        if last_error:diag['last_error']=last_error
+        print(json.dumps({'stage3_task_diag':diag}))
         return []
-    all_tasks=[m for m in (q.get('tasks') or []) if isinstance(m,dict)]
-    out=[m for m in all_tasks if m.get('kind')=='PAL_BROWSER_PREFLIGHT_TASK_V1']
-    print(json.dumps({'stage3_task_diag':{'all_tasks':len(all_tasks),'browser_tasks':len(out)}}))
+    print(json.dumps({'stage3_task_diag':{
+        'source_index':source_index,'sources_checked':len(source_diags),
+        'all_tasks':source_diags[-1]['all_tasks'],'browser_tasks':len(out)}}))
     seen=set();ded=[]
     for m in out:
         tid=str(m.get('task_id') or '')
