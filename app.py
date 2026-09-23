@@ -1,5 +1,5 @@
 from __future__ import annotations
-import itertools, json, os, subprocess, sys, threading, time, urllib.request
+import hashlib, itertools, json, os, subprocess, sys, threading, time, urllib.request
 from pathlib import Path
 from flask import Flask, jsonify, request
 
@@ -189,6 +189,14 @@ def _valid_blob_url(raw):
     u=str(raw or '').strip()
     return u.startswith('https://superjsonblob.com/api/jsonBlob/') and len(u)<300
 
+def route_shard(route_id, shard_count=2):
+    try: rid=int(route_id or 0); count=max(1,int(shard_count))
+    except Exception: return -1
+    if rid<=0:return -1
+    # Stable hash avoids pathological ID-parity skew while remaining fully
+    # deterministic across Render clones and deploys.
+    return hashlib.sha256(str(rid).encode('ascii')).digest()[0] % count
+
 def _browser_queue_has_tasks(url=None):
     """Return whether this Render shard owns Browser work; None on I/O error.
 
@@ -226,7 +234,7 @@ def _browser_queue_has_tasks(url=None):
                     continue
                 try: rid=int(rec.get('route_id') or 0)
                 except Exception: rid=0
-                if rid>0 and (rid % 2)==shard_index:
+                if rid>0 and route_shard(rid,2)==shard_index:
                     return True
         return False
     except Exception:
@@ -276,7 +284,7 @@ def _browser_queue_lane_counts(url=None, max_age=3.0):
                     continue
                 try: rid=int(rec.get('route_id') or 0)
                 except Exception: rid=0
-                if rid<=0 or (rid % 2)!=shard_index:
+                if rid<=0 or route_shard(rid,2)!=shard_index:
                     continue
                 market=str(rec.get('market') or task_market)
                 all_counts[lane]+=1

@@ -154,15 +154,26 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertIn("browser_wait=_browser_demand_remaining()",src)
         self.assertIn("try: RUN_LOCK.release()",src)
 
-    def test_browser_routes_are_deterministically_sharded(self):
+    def test_browser_routes_are_deterministically_hash_sharded(self):
         from pathlib import Path
         src=(Path(__file__).resolve().parent/'stage3_send_ready_worker_v1.py').read_text()
+        app=(Path(__file__).resolve().parent/'app.py').read_text()
         self.assertIn("PAL_STAGE3_SHARD_COUNT','2'",src)
         self.assertIn("RENDER_SERVICE_NAME",src)
         self.assertIn("endswith('-v2')",src)
         self.assertIn("'shard1' in _RENDER_SERVICE_NAME",src)
-        self.assertIn("(rid % SHARD_COUNT)==SHARD_INDEX",src)
+        self.assertIn("route_shard(rid,SHARD_COUNT)==SHARD_INDEX",src)
+        self.assertIn("SHA256_ROUTE_ID_V1",src)
+        self.assertIn("route_shard(rid,2)==shard_index",app)
         self.assertIn("not shard_accept(rec) or not lane_accept(rec)",src)
+        # Stable hash must not recreate the pathological even-ID skew that left
+        # shard1 nearly idle in production. Keep this bounded but non-exact so
+        # the contract tests balance rather than one particular digest sample.
+        counts=[0,0]
+        for rid in range(1,257):
+            counts[m.route_shard(rid,2)]+=1
+        self.assertGreater(min(counts),96,counts)
+        self.assertLess(max(counts),160,counts)
 
     def test_browser_queue_probe_detects_real_browser_work(self):
         class Resp:
@@ -171,12 +182,18 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
             def __exit__(self,*a): return False
             def read(self,n=-1): return self.raw
         good='https://superjsonblob.com/api/jsonBlob/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        rid=next(x for x in range(100,300) if m.route_shard(x,2)==1)
         payload={'tasks':[{'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1',
-                           'routes':[{'route_id':123}]}]}
-        with patch.object(m.urllib.request,'urlopen',return_value=Resp(payload)):
-            self.assertIs(m._browser_queue_has_tasks(good),True)
-        with patch.object(m.urllib.request,'urlopen',return_value=Resp({'tasks':[]})):
-            self.assertIs(m._browser_queue_has_tasks(good),False)
+                           'routes':[{'route_id':rid}]}]}
+        old_role=m.STAGE2_PRIMARY_ROLE
+        try:
+            m.STAGE2_PRIMARY_ROLE=False
+            with patch.object(m.urllib.request,'urlopen',return_value=Resp(payload)):
+                self.assertIs(m._browser_queue_has_tasks(good),True)
+            with patch.object(m.urllib.request,'urlopen',return_value=Resp({'tasks':[]})):
+                self.assertIs(m._browser_queue_has_tasks(good),False)
+        finally:
+            m.STAGE2_PRIMARY_ROLE=old_role
 
     def test_lane_counts_are_shard_and_priority_market_aware(self):
         class Resp:
@@ -185,13 +202,15 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
             def __exit__(self,*a): return False
             def read(self,n=-1): return self.raw
         good='https://superjsonblob.com/api/jsonBlob/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        shard1=[rid for rid in range(1,512) if m.route_shard(rid,2)==1][:3]
+        shard0=[rid for rid in range(1,512) if m.route_shard(rid,2)==0][:2]
         payload={'tasks':[
             {'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','market':'GB-EN','lane_hint':'FAST_DOM',
-             'routes':[{'route_id':100,'market':'GB-EN'}]},
+             'routes':[{'route_id':shard0[0],'market':'GB-EN'}]},
             {'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','market':'SG-EN','lane_hint':'DYNAMIC_JS',
-             'routes':[{'route_id':101,'market':'SG-EN'},{'route_id':103,'market':'SG-EN'}]},
+             'routes':[{'route_id':shard1[0],'market':'SG-EN'},{'route_id':shard1[1],'market':'SG-EN'}]},
             {'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','market':'NZ-EN','lane_hint':'DYNAMIC_JS',
-             'routes':[{'route_id':105,'market':'NZ-EN'}]},
+             'routes':[{'route_id':shard0[1],'market':'NZ-EN'}]},
         ]}
         old_priority=list(m.ACTIVE_PRIORITY_MARKETS)
         old_role=m.STAGE2_PRIMARY_ROLE

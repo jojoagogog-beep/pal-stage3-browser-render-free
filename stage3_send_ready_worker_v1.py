@@ -64,10 +64,19 @@ _PRIORITY_RANK={m:i for i,m in enumerate(PRIORITY_MARKETS)}
 def market_rank(rec):
     return _PRIORITY_RANK.get(str(rec.get('market') or ''),1000)
 
+def route_shard(route_id, shard_count=SHARD_COUNT):
+    try: rid=int(route_id or 0); count=max(1,int(shard_count))
+    except Exception: return -1
+    if rid<=0:return -1
+    # Same stable shard function as app.py queue probes. Using the hash rather
+    # than raw route-id parity prevents one Render clone from receiving almost
+    # the entire queue when route IDs are parity-skewed.
+    return hashlib.sha256(str(rid).encode('ascii')).digest()[0] % count
+
 def shard_accept(rec):
     try: rid=int(rec.get('route_id') or 0)
     except Exception: return False
-    return rid>0 and (rid % SHARD_COUNT)==SHARD_INDEX
+    return rid>0 and route_shard(rid,SHARD_COUNT)==SHARD_INDEX
 
 def task_lane_quality(task):
     vals=[]
@@ -328,7 +337,8 @@ def www_fallback_url(u,official_domain):
         return ''
 
 STATE_TOPOLOGY={
-    'schema':'PAL_STAGE3_WORKER_STATE_V2',
+    'schema':'PAL_STAGE3_WORKER_STATE_V3_HASH_SHARD',
+    'shard_strategy':'SHA256_ROUTE_ID_V1',
     'shard_count':SHARD_COUNT,
     'shard_index':SHARD_INDEX,
 }
