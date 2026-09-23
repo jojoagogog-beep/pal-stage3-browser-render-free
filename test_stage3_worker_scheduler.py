@@ -84,5 +84,61 @@ class Stage3WorkerSchedulingTests(unittest.TestCase):
                 else: os.environ[k]=v
             importlib.reload(w)
 
+
+def _task(market,n,quality=0):
+    return {'task_id':f'{market}-{n}','routes':[
+        {'market':market,'stage3_quality':quality,'route_id':abs(hash((market,n)))%1000,
+         'static_status':'STATIC_FORM_CANDIDATE'}]}
+
+
+class RankPendingTasksTests(unittest.TestCase):
+    """2026-09-24: a flat quality sort let one PRIORITY_MARKETS entry with
+    more ADMITTED/high-quality tasks (stage3_quality is weighted +20000 per
+    admitted route) consume a worker's entire bounded lease before a market
+    with a far larger backlog got a single task. Live evidence: JP-JA took
+    18/30 Browser dispatches in a 30-minute window while GB-EN, the largest
+    open-market backlog, took only 4."""
+
+    def setUp(self):
+        self.old_lane=w.LANE_MODE
+        w.LANE_MODE='FAST_DOM'
+
+    def tearDown(self):
+        w.LANE_MODE=self.old_lane
+
+    def test_admitted_heavy_market_no_longer_monopolizes_the_lease_front(self):
+        pending=(
+            [_task('JP-JA',i,quality=20000) for i in range(2)]
+            +[_task('GB-EN',i) for i in range(6)]
+            +[_task('SG-EN',i) for i in range(4)]
+            +[_task('NZ-EN',i) for i in range(1)]
+        )
+        ranked=w.rank_pending_tasks(pending,['JP-JA','GB-EN','SG-EN','NZ-EN'])
+        front_markets={t['task_id'].rsplit('-',1)[0] for t in ranked[:4]}
+        self.assertEqual(front_markets,{'JP-JA','GB-EN','SG-EN','NZ-EN'})
+        nz_position=[t['task_id'] for t in ranked].index('NZ-EN-0')
+        self.assertLess(nz_position,4,f'NZ-EN starved to position {nz_position}')
+
+    def test_quality_priority_is_preserved_within_a_single_market(self):
+        pending=[_task('GB-EN','low',quality=0),_task('GB-EN','high',quality=9999)]
+        ranked=w.rank_pending_tasks(pending,['GB-EN'])
+        self.assertEqual([t['task_id'] for t in ranked],['GB-EN-high','GB-EN-low'])
+
+    def test_priority_order_still_wins_the_first_pick_each_round(self):
+        pending=[_task('SG-EN',i) for i in range(2)]+[_task('GB-EN',i) for i in range(2)]
+        ranked=w.rank_pending_tasks(pending,['SG-EN','GB-EN'])
+        self.assertTrue(ranked[0]['task_id'].startswith('SG-EN'))
+
+    def test_non_priority_market_tasks_keep_flat_quality_order_after_priority_block(self):
+        pending=[_task('GB-EN',0,quality=1),_task('US-ET','low',quality=1),_task('US-ET','high',quality=9)]
+        ranked=w.rank_pending_tasks(pending,['GB-EN'])
+        self.assertEqual([t['task_id'] for t in ranked],['GB-EN-0','US-ET-high','US-ET-low'])
+
+    def test_empty_priority_markets_falls_back_to_flat_quality_order(self):
+        pending=[_task('US-ET','low',quality=1),_task('US-ET','high',quality=9)]
+        ranked=w.rank_pending_tasks(pending,[])
+        self.assertEqual([t['task_id'] for t in ranked],['US-ET-high','US-ET-low'])
+
+
 if __name__=='__main__':
     unittest.main(verbosity=2)

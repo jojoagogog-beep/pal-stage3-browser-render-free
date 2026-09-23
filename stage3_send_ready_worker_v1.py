@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio, hashlib, json, os, re, ssl, sys, time, traceback, urllib.request
+from itertools import zip_longest
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
@@ -91,6 +92,48 @@ def effective_work_deadline(deadline,route_timeout,now=None):
 
 def task_market_rank(task):
     return min((market_rank(r) for r in (task.get('routes') or [])),default=1000)
+
+def rank_pending_tasks(pending,priority_markets):
+    """Order fetched tasks for one bounded worker lease.
+
+    A flat quality sort (highest task_lane_quality first, portfolio-wide) let
+    one PRIORITY_MARKETS entry with more ADMITTED/high-quality tasks (e.g.
+    JP-JA, weighted +20000 per admitted route in stage3_quality) consume this
+    worker's entire lease before a market with a far larger backlog (e.g.
+    GB-EN) got a single task -- even though every PRIORITY_MARKETS entry is
+    simultaneously sendable right now. Live evidence (2026-09-23/24):
+    JP-JA took 18/30 dispatches in a 30-minute window while GB-EN, the
+    largest open-market backlog, took 4. Sort each priority market's own
+    tasks by quality first (ADMITTED conversions still lead within their own
+    market), then round-robin one task per market so a bounded lease reaches
+    every priority market before taking a second task from any single one.
+    Non-priority-market tasks keep the prior flat quality sort, appended
+    after the priority block -- they are not simultaneously sendable with
+    each other so cross-market starvation does not apply to them.
+    """
+    pset=set(priority_markets or [])
+    def _task_market(t):
+        for r in (t.get('routes') or []):
+            m=str(r.get('market') or '')
+            if m:return m
+        return str(t.get('market') or '')
+    priority=[t for t in pending if _task_market(t) in pset]
+    other=[t for t in pending if _task_market(t) not in pset]
+    other=[m for _,m in sorted(
+        enumerate(other),
+        key=lambda im:(-task_lane_quality(im[1]),task_market_rank(im[1]),im[0]),
+    )]
+    by_market={}
+    for idx,t in enumerate(priority):
+        by_market.setdefault(_task_market(t),[]).append((idx,t))
+    for m in by_market:
+        by_market[m].sort(key=lambda im:(-task_lane_quality(im[1]),im[0]))
+    cycle=[m for m in priority_markets if m in by_market]
+    cycle.extend(m for m in by_market if m not in cycle)
+    lists=[[t for _,t in by_market[m]] for m in cycle]
+    interleaved=[t for group in zip_longest(*lists) for t in group
+                 if t is not None] if lists else []
+    return interleaved+other
 
 RECENT_ROUTE_SECONDS=max(60,min(3600,int(os.environ.get('PAL_STAGE3_RECENT_ROUTE_SECONDS','600') or 600)))
 RECENT_TECH_SECONDS=max(60,min(1800,int(os.environ.get('PAL_STAGE3_RECENT_TECH_SECONDS','600') or 600)))
@@ -984,12 +1027,9 @@ async def amain():
     raw_tasks=task_messages()
     perf['task_fetch_ms']=round((time.monotonic()-perf_fetch)*1000,1)
     pending=[m for m in raw_tasks if str(m.get('task_id') or '') not in done]
-    # All PRIORITY_MARKETS are currently sendable. Prefer the strongest
-    # Stage3 evidence across them, using market order only as a tie-breaker.
-    pending=[m for _,m in sorted(
-        enumerate(pending),
-        key=lambda im:(-task_lane_quality(im[1]),task_market_rank(im[1]),im[0]),
-    )]
+    # All PRIORITY_MARKETS are currently sendable and must not starve one
+    # another within this worker's bounded lease -- see rank_pending_tasks().
+    pending=rank_pending_tasks(pending,PRIORITY_MARKETS)
     # Local fallback owns one expensive Browser process. With market-pure tasks,
     # hard-filter it to the controller's short-lived proof markets so one quantum
     # ends as soon as the currently-sendable markets are done. Remote/default
