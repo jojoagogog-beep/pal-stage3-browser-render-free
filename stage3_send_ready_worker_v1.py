@@ -283,6 +283,14 @@ def final_control_candidates(controls):
     return fallback if len(fallback)==1 else []
 
 
+def strong_main_form_candidate(cand,frame_index):
+    if not isinstance(cand,dict) or int(frame_index)!=0:
+        return False
+    kind=str(cand.get('control_kind') or '')
+    score=int(cand.get('score') or 0)
+    return ((kind=='DIRECT_SUBMIT' and score>=13)
+            or (kind=='CONFIRM_STEP' and score>=12))
+
 def lane_accept(rec):
     st=str(rec.get('static_status') or '')
     try: rid=int(rec.get('route_id') or 0)
@@ -859,7 +867,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     cand=None
                 if cand and (best is None or cand['score']>best['score']):
                     best=cand
-                if best and str(best.get('control_kind') or '')=='DIRECT_SUBMIT' and int(best.get('score') or 0)>=13:
+                if strong_main_form_candidate(best,frame_index):
                     break
             if not best:
                 return {**base,'status':'NO_SAFE_FORM','code':'NO_DIRECT_SEND_READY_FORM',

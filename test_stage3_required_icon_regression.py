@@ -25,6 +25,16 @@ class RequiredIconRegressionTests(unittest.TestCase):
         self.assertFalse(w.is_completion_route("https://example.com/contact"))
         self.assertFalse(w.is_completion_route("https://example.com/success-stories"))
 
+    def test_strong_main_confirm_candidate_can_stop_extra_frame_scan(self):
+        self.assertTrue(w.strong_main_form_candidate(
+            {"control_kind":"CONFIRM_STEP","score":12},0))
+        self.assertTrue(w.strong_main_form_candidate(
+            {"control_kind":"DIRECT_SUBMIT","score":13},0))
+        self.assertFalse(w.strong_main_form_candidate(
+            {"control_kind":"CONFIRM_STEP","score":11},0))
+        self.assertFalse(w.strong_main_form_candidate(
+            {"control_kind":"CONFIRM_STEP","score":15},1))
+
     def test_transactional_privacy_consent_gate(self):
         self.assertTrue(w.form_requires_transactional_consent(
             "プライバシーポリシーに同意の上、送信いただきますようお願いいたします。"))
