@@ -399,7 +399,9 @@ async def inspect(browser,rec,sem,slow=False):
                 # Give CSS/JS hydration a short bounded chance to make at least
                 # one form control visible before scanning. This is scheduling
                 # only: every captcha/safety/fillability gate below is unchanged.
-                if bool(rec.get('static_full_preflight')) and LANE_MODE=='FAST_DOM':
+                if LANE_MODE=='FAST_DOM' and (
+                        bool(rec.get('static_full_preflight'))
+                        or str(rec.get('static_status') or '')=='STATIC_FORM_CANDIDATE'):
                     try:
                         await page.wait_for_function("""() => [...document.forms].some(f =>
                           [...f.querySelectorAll('input,textarea,select,button')].some(e => {
