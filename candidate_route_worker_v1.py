@@ -183,6 +183,13 @@ def _post_ntfy(msg):
     except Exception:return False
 
 def publish_messages(msgs):
+    """Publish result + DONE records and report whether the whole task batch is durable.
+
+    A task may be checkpointed into processed_task_ids only after every result/DONE
+    record is durably published. Otherwise the source task must remain retryable;
+    marking it processed on a transport failure leaves the authoritative task queue
+    full forever while the worker reports zero pending work.
+    """
     if RESULT_BLOB:
         try:
             q=_blob_get(RESULT_BLOB)
@@ -192,13 +199,38 @@ def publish_messages(msgs):
             payload={'schema':'PAL_ROUTE_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),
                      'messages':(prior+list(msgs))[-256:]}
             _blob_put(RESULT_BLOB,payload)
-            return 'SUPERJSONBLOB_V1'
+            return 'SUPERJSONBLOB_V1',True
         except Exception:
             pass
     ok=0
     for m in msgs:
         ok+=1 if _post_ntfy(m) else 0
-    return 'NTFY_FALLBACK' if ok else 'NO_RESULT_TRANSPORT'
+    if msgs and ok==len(msgs):
+        return 'NTFY_FALLBACK',True
+    if ok:
+        return 'NTFY_PARTIAL',False
+    return 'NO_RESULT_TRANSPORT',False
+
+def durable_done_task_ids():
+    """Return task ids with a durable DONE record in the authoritative result blob.
+
+    None means the result store could not be read, in which case local state is
+    left untouched (fail conservative). An empty set is a successful read with
+    no DONE records.
+    """
+    if not RESULT_BLOB:
+        return None
+    try:
+        q=_blob_get(RESULT_BLOB)
+        return {
+            str(m.get('task_id') or '')
+            for m in (q.get('messages') or [])
+            if isinstance(m,dict)
+            and str(m.get('kind') or '')=='PAL_CANDIDATE_ROUTE_TASK_DONE_V1'
+            and str(m.get('task_id') or '')
+        }
+    except Exception:
+        return None
 
 def _event_payload(e):
     try:return json.loads(e.get('message') or '{}')
@@ -534,8 +566,17 @@ def main():
     started=time.monotonic()
     try:state=json.loads(STATE.read_text())
     except Exception:state={}
-    processed=list(state.get('processed_task_ids') or []);done=set(processed);pending=[]
-    for m in messages():
+    processed=list(state.get('processed_task_ids') or [])
+    current_messages=messages()
+    current_ids={str(m.get('task_id') or '') for m in current_messages if str(m.get('task_id') or '')}
+    remote_done=durable_done_task_ids()
+    stale_local_done=set()
+    if remote_done is not None:
+        stale_local_done=(set(processed) & current_ids) - set(remote_done)
+        if stale_local_done:
+            processed=[tid for tid in processed if tid not in stale_local_done]
+    done=set(processed);pending=[]
+    for m in current_messages:
         tid=str(m.get('task_id') or '')
         if not tid or tid in done:continue
         slot=sum(tid.encode('utf-8')) % LANE_COUNT
@@ -572,15 +613,22 @@ def main():
               'items':results[i:i+32],'task_ids':task_ids,'last_seen_epoch':int(time.time())})
     for tid in task_ids:
         out_msgs.append({'kind':'PAL_CANDIDATE_ROUTE_TASK_DONE_V1','task_id':tid,'run_id':run_id,'last_seen_epoch':int(time.time())})
-    transport=publish_messages(out_msgs) if out_msgs else ('SUPERJSONBLOB_V1' if RESULT_BLOB else 'NO_RESULTS')
-    processed=(processed+task_ids)[-1600:]
+    if out_msgs:
+        transport,publish_ok=publish_messages(out_msgs)
+    else:
+        transport=('SUPERJSONBLOB_V1' if RESULT_BLOB else 'NO_RESULTS')
+        publish_ok=True
+    committed_task_ids=task_ids if publish_ok else []
+    processed=(processed+committed_task_ids)[-1600:]
     state={'updated_at_epoch':int(time.time()),'processed_task_ids':processed,'last_tasks':len(pending),
            'last_candidates':len(rows),'last_pages_checked':sum(int(x.get('pages') or 0) for x in results),
            'last_routes':sum(bool(x.get('route_hint')) for x in results),
            'last_verified':sum(bool(x.get('verified')) for x in results),
            'last_errors':sum(int(x.get('errors') or 0) for x in results),
            'last_inspect_exceptions':sum(bool(x.get('worker_error')) for x in results),
-           'last_elapsed_seconds':round(time.monotonic()-started,3),'transport':transport}
+           'last_elapsed_seconds':round(time.monotonic()-started,3),'transport':transport,
+           'publish_ok':bool(publish_ok),'committed_tasks':len(committed_task_ids),
+           'stale_local_done_reopened':len(stale_local_done)}
     STATE.write_text(json.dumps(state,indent=2)+'\n')
     print(json.dumps({'status':'PASS','tasks':len(pending),'candidates':len(rows),
                       'pages_checked':state['last_pages_checked'],'routes':state['last_routes'],

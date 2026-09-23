@@ -479,6 +479,9 @@ def stage2_wake():
     global STAGE2_THREAD
     if not allowed():
         return ('unauthorized',401)
+    if not STAGE2_PRIMARY_ROLE:
+        return jsonify(status='STAGE3_BROWSER_RESERVED',
+                       service_role='STAGE3_BROWSER'),409
     body=request.get_json(silent=True) or {}
     task_url=str(body.get('task_url') or '')
     result_url=str(body.get('result_url') or '')
@@ -571,6 +574,9 @@ def cron_wake():
 def wake():
     if not allowed():
         return ('unauthorized',401)
+    if STAGE2_PRIMARY_ROLE:
+        return jsonify(status='STAGE2_PRIMARY_RESERVED',
+                       service_role='STAGE2_PRIMARY'),409
     payload=request.get_json(silent=True) or {}
     pm=payload.get('priority_markets') if isinstance(payload,dict) else None
     task_url=payload.get('task_url') if isinstance(payload,dict) else None
@@ -582,6 +588,9 @@ def wake():
 def tick():
     if not allowed():
         return ('unauthorized',401)
+    if STAGE2_PRIMARY_ROLE:
+        return jsonify(status='STAGE2_PRIMARY_RESERVED',
+                       service_role='STAGE2_PRIMARY'),409
     _note_browser_demand()
     _extend_lease('SYNC_TICK')
     if not RUN_LOCK.acquire(blocking=False):
