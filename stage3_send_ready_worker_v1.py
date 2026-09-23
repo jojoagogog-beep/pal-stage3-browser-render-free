@@ -206,23 +206,43 @@ def confirm_control_matches(target,live):
     a=normalized_control_text(target); b=normalized_control_text(live)
     return bool(a and b and (a==b or a in b or b in a))
 
+def control_semantic_text(control):
+    if not isinstance(control,dict):
+        return ''
+    # Prefer only user-visible/action-label text. Internal name/id metadata may
+    # contain strings like submitConfirm even on the final "送信する" button;
+    # mixing that metadata into semantics caused false NONFINAL rejection.
+    label=str(control.get('label') or '').strip()
+    return label or str(control.get('text') or '').strip()
+
 def final_control_candidates(controls):
     controls=[x for x in (controls or []) if isinstance(x,dict)]
-    finals=[x for x in controls
-            if FINAL.search(str(x.get('text') or ''))
-            and (not NONFINAL.search(str(x.get('text') or '')) or re.search(
+    finals=[]
+    for x in controls:
+        semantic=control_semantic_text(x)
+        if not FINAL.search(semantic):
+            continue
+        if NONFINAL.search(semantic) and not re.search(
                 r'(確認して送信|確認のうえ送信|confirm.{0,12}send|send.{0,12}confirm)',
-                str(x.get('text') or ''),re.I))
-            # Explicitly-labelled JS final buttons are common after a confirm
-            # step. Keep image inputs excluded because their semantic label can
-            # come from a non-visible id/name rather than a user-facing action.
-            and not (str(x.get('tag') or '')=='input' and str(x.get('type') or '')=='image')]
+                semantic,re.I):
+            continue
+        # Explicitly-labelled JS final buttons are common after a confirm
+        # step. Keep image inputs excluded because their semantic label can
+        # come from a non-visible id/name rather than a user-facing action.
+        if str(x.get('tag') or '')=='input' and str(x.get('type') or '')=='image':
+            continue
+        finals.append(x)
     if finals:
         return finals
-    fallback=[x for x in controls
-              if not NONFINAL.search(str(x.get('text') or ''))
-              and not re.search(r'(コメント|comment|レビュー|review|reset|clear)',str(x.get('text') or ''),re.I)
-              and (str(x.get('tag') or '')=='button' or str(x.get('type') or '')=='submit')]
+    fallback=[]
+    for x in controls:
+        semantic=control_semantic_text(x)
+        if NONFINAL.search(semantic):
+            continue
+        if re.search(r'(コメント|comment|レビュー|review|reset|clear)',semantic,re.I):
+            continue
+        if str(x.get('tag') or '')=='button' or str(x.get('type') or '')=='submit':
+            fallback.append(x)
     return fallback if len(fallback)==1 else []
 
 
@@ -631,9 +651,18 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                       const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.disabled&&e.type!=='hidden'&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
                       const desc=e=>{const id=e.id||'',lab=id?document.querySelector('label[for="'+CSS.escape(id)+'"]'):null;
                         const labels=e.labels?[...e.labels].map(x=>x.innerText||'').join(' '):'';
-                        const tr=e.closest('tr'),cell=e.closest('th,td');let rowLabel='';
+                        const tr=e.closest('tr'),cell=e.closest('th,td');let rowLabel='',rowRequiredIcon=false;
                         if(tr&&cell){const cells=[...tr.children],idx=cells.indexOf(cell);
-                          rowLabel=((idx>0?cells.slice(0,idx).map(c=>c.innerText||'').join(' '):'')||(tr.querySelector('th')?.innerText||'')).trim();}
+                          const prior=(idx>0?cells.slice(0,idx):[]);
+                          rowLabel=((prior.map(c=>c.innerText||'').join(' '))||(tr.querySelector('th')?.innerText||'')).trim();
+                          const labelCells=prior.length?prior:[tr.querySelector('th')].filter(Boolean);
+                          rowRequiredIcon=labelCells.some(c=>[...c.querySelectorAll('img')].some(img=>{
+                            const src=String(img.getAttribute('src')||'').toLowerCase();
+                            const alt=String(img.getAttribute('alt')||'').toLowerCase();
+                            const title=String(img.getAttribute('title')||'').toLowerCase();
+                            return /(asterisk|required|mandatory|hissu|必須)/.test(src+' '+alt+' '+title);
+                          }));
+                        }
                         const dd=e.closest('dd');
                         if(!rowLabel&&dd&&dd.previousElementSibling&&dd.previousElementSibling.tagName==='DT')
                           rowLabel=(dd.previousElementSibling.innerText||'').trim();
@@ -643,13 +672,13 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                         const w=e.closest('label,.form-group,.form-row,.field,li,dl,dd,dt,p')||e.parentElement;
                         let local=((lab&&lab.innerText)||labels||((w&&w.innerText)||'')).trim();if(local.length>300)local='';
                         const self=[e.name||'',id,e.placeholder||'',e.getAttribute('aria-label')||'',(lab&&lab.innerText)||'',labels].join(' ');
-                        return {self:self.slice(0,500),local:local.slice(0,500),rowLabel:rowLabel.slice(0,500)};
+                        return {self:self.slice(0,500),local:local.slice(0,500),rowLabel:rowLabel.slice(0,500),rowRequiredIcon};
                       };
                       return [...document.forms].slice(0,12).map((f,index)=>{
                         const allFields=[...f.querySelectorAll('input,textarea,select')];
                         const fs=allFields.map((e,all_i)=>({e,all_i})).filter(x=>vis(x.e)).map(({e,all_i})=>{const d=desc(e);
                           const reqText=(d.self+' '+d.rowLabel+' '+d.local);
-                          const req=!!e.required||e.getAttribute('aria-required')==='true'||/(?:^|\\s)required(?:\\s|$)/i.test(String(e.className||''))||/[※＊*]\\s*$/.test(d.rowLabel)||(/(必須|required|mandatory)/i.test(reqText)&&!/(任意|optional)/i.test(reqText));
+                          const req=!!e.required||e.getAttribute('aria-required')==='true'||d.rowRequiredIcon===true||/(?:^|\\s)required(?:\\s|$)/i.test(String(e.className||''))||/[※＊*]\\s*$/.test(d.rowLabel)||(/(必須|required|mandatory)/i.test(reqText)&&!/(任意|optional)/i.test(reqText));
                           return {i:all_i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),name:e.name||'',id:e.id||'',required:req,
                             checked:!!e.checked,value:e.value||'',self_desc:d.self.slice(0,500),local_desc:d.local.slice(0,500),row_label:d.rowLabel.slice(0,500),
                             desc:(d.self+' '+d.rowLabel+' '+d.local).slice(0,900)}});
@@ -1000,7 +1029,9 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     try:
                         xs=await root2.locator('button,input[type=submit],input[type=button],input[type=image]').evaluate_all(r"""els=>els.map((e,i)=>{
                           const s=getComputedStyle(e),r=e.getBoundingClientRect(); const visible=!e.disabled&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;
-                          return {i,visible,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),text:((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.name||'')+' '+(e.id||'')).trim()};
+                          const label=((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')).trim();
+                          return {i,visible,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),label,
+                            text:(label+' '+(e.name||'')+' '+(e.id||'')).trim()};
                         }).filter(x=>x.visible)""")
                         for x in xs: x['frame_index']=fi
                         all_ctrls.extend(xs)
@@ -1011,7 +1042,12 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     return {**base,'status':'CAPTCHA','code':'VISIBLE_CAPTCHA_AFTER_CONFIRM','final_url':final_url,'stage3_send_ready':False}
                 finals=final_control_candidates(all_ctrls)
                 if not finals:
-                    return {**base,'status':'TECH_DEFER','code':'FINAL_SUBMIT_CONTROL_NOT_FOUND_AFTER_CONFIRM','final_url':final_url,'stage3_send_ready':False}
+                    return {**base,'status':'TECH_DEFER','code':'FINAL_SUBMIT_CONTROL_NOT_FOUND_AFTER_CONFIRM',
+                            'final_url':final_url,'stage3_send_ready':False,
+                            'final_control_samples':[
+                                {k:x.get(k) for k in ('frame_index','tag','type','label','text')}
+                                for x in all_ctrls[:16]
+                            ]}
                 control=finals[0]
                 control_kind='CONFIRM_THEN_DIRECT_SUBMIT'
             proof_fields=list(((post or {}).get('fields') if isinstance(post,dict) else None) or best.get('fields') or [])
