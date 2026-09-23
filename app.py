@@ -17,6 +17,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Stage3 Browser cron work. This prevents Browser cron leases on the primary
 # from starving Stage2 for minutes at a time.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
+SCHEDULER_REVISION='STAGE2_DURABILITY_ROLE_ISOLATION_V1'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -540,6 +541,7 @@ def stage2_state():
 @app.get('/health')
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
+                   scheduler_revision=SCHEDULER_REVISION,
                    service_name=SERVICE_NAME,
                    service_role=('STAGE2_PRIMARY' if STAGE2_PRIMARY_ROLE else 'STAGE3_BROWSER'),
                    worker_protocol='AWAITED_ROUTE_HANDLER_V1',
