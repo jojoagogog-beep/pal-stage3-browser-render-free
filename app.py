@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64, hashlib, json, os, subprocess, tarfile, tempfile, threading, time, uuid
+import base64, hashlib, json, os, shutil, subprocess, tarfile, tempfile, threading, time, uuid
 from pathlib import Path
 from flask import Flask, jsonify, request, send_file
 from cryptography.hazmat.primitives import hashes, serialization
@@ -47,7 +47,7 @@ def process_job(jid,td,mode,profile,premastered,duration):
             update(jid,status="RUNNING",started_at=time.time())
             src=td/"input_audio"; art=td/"image.png"; master=td/"master.flac"; video=td/"video.mp4"
             if premastered:
-                run(["ffmpeg","-y","-loglevel","error","-i",str(src),"-ar","48000","-ac","2","-c:a","flac",str(master)])
+                shutil.copyfile(src,master)
             else:
                 target,tp,lra,tone=PROFILES[profile]
                 af=f"highpass=f=45,lowpass=f=16500,{tone},loudnorm=I={target}:TP={tp}:LRA={lra}"
@@ -55,8 +55,8 @@ def process_job(jid,td,mode,profile,premastered,duration):
             aac=td/"audio.m4a"
             run(["ffmpeg","-y","-loglevel","error","-i",str(master),"-vn","-c:a","aac","-b:a","192k","-ar","48000","-ac","2",str(aac)])
             if mode=="short":
-                vf="scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0012,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30,format=yuv420p"
-                run(["ffmpeg","-y","-loglevel","error","-loop","1","-i",str(art),"-stream_loop","-1","-i",str(aac),"-t",str(duration),"-vf",vf,"-c:v","libx264","-preset","veryfast","-crf","25","-c:a","copy","-shortest",str(video)])
+                vf="scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p"
+                run(["ffmpeg","-y","-loglevel","error","-loop","1","-framerate","1","-i",str(art),"-stream_loop","-1","-i",str(aac),"-t",str(duration),"-vf",vf,"-c:v","libx264","-preset","ultrafast","-crf","25","-tune","stillimage","-r","1","-c:a","copy","-shortest",str(video)])
             else:
                 seg=td/"segment.mp4"
                 vf="scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p"
