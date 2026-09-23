@@ -187,6 +187,44 @@ FINAL=re.compile(r'(この内容で送信|内容を送信|送信する|送信|se
 NONFINAL=re.compile(r'(確認|confirm|next|次へ|preview|戻る|back|cancel|修正)',re.I)
 CONFIRM=re.compile(r'(確認画面(?:へ)?|入力内容(?:を)?確認|内容(?:を)?確認|確認(?:する|へ)?|confirm|review|next|次へ)',re.I)
 
+def normalized_control_text(value):
+    return re.sub(r'\s+',' ',str(value or '')).strip().casefold()
+
+def safe_confirm_text(value):
+    text=str(value or '')
+    if not CONFIRM.search(text):
+        return False
+    # A control that already explicitly says "send/submit" is a final action,
+    # not a harmless confirmation step.
+    if re.search(r'(この内容で送信|内容を送信|送信する|確認して送信|送信$|\bsend\b|\bsubmit\b|確定)',text,re.I):
+        return False
+    return True
+
+def confirm_control_matches(target,live):
+    if not safe_confirm_text(target) or not safe_confirm_text(live):
+        return False
+    a=normalized_control_text(target); b=normalized_control_text(live)
+    return bool(a and b and (a==b or a in b or b in a))
+
+def final_control_candidates(controls):
+    controls=[x for x in (controls or []) if isinstance(x,dict)]
+    finals=[x for x in controls
+            if FINAL.search(str(x.get('text') or ''))
+            and (not NONFINAL.search(str(x.get('text') or '')) or re.search(
+                r'(確認して送信|確認のうえ送信|confirm.{0,12}send|send.{0,12}confirm)',
+                str(x.get('text') or ''),re.I))
+            # Explicitly-labelled JS final buttons are common after a confirm
+            # step. Keep image inputs excluded because their semantic label can
+            # come from a non-visible id/name rather than a user-facing action.
+            and not (str(x.get('tag') or '')=='input' and str(x.get('type') or '')=='image')]
+    if finals:
+        return finals
+    fallback=[x for x in controls
+              if not NONFINAL.search(str(x.get('text') or ''))
+              and not re.search(r'(コメント|comment|レビュー|review|reset|clear)',str(x.get('text') or ''),re.I)
+              and (str(x.get('tag') or '')=='button' or str(x.get('type') or '')=='submit')]
+    return fallback if len(fallback)==1 else []
+
 
 def lane_accept(rec):
     st=str(rec.get('static_status') or '')
@@ -900,22 +938,39 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 phase('confirmation_step')
                 target=str(control.get('text') or '')
                 clicked=False
-                # Use a real Playwright click. DOM element.click() can be ignored by
-                # form frameworks that require a trusted pointer event, leaving us
-                # on the input page and falsely reporting no final submit control.
+                # Use the DOM index captured by the post-fill scan first. That
+                # scan already verified this exact control as a safe confirm
+                # action. Text can gain whitespace/framework suffixes between
+                # scan and click, so fall back to semantic normalized matching.
                 controls_loc=form.locator('button,input[type=submit],input[type=button],input[type=image]')
-                for ci in range(min(await controls_loc.count(),40)):
-                    loc2=controls_loc.nth(ci)
+                control_count=min(await controls_loc.count(),40)
+                try:
+                    preferred_index=int(control.get('i'))
+                except Exception:
+                    preferred_index=-1
+                if 0<=preferred_index<control_count:
+                    loc2=controls_loc.nth(preferred_index)
                     try:
-                        if not await loc2.is_visible() or await loc2.is_disabled():
-                            continue
-                        tx=await loc2.evaluate("e=>((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.name||'')+' '+(e.id||'')).trim()")
-                        if str(tx)==target:
-                            await loc2.click(timeout=7000)
-                            clicked=True
-                            break
+                        if await loc2.is_visible() and not await loc2.is_disabled():
+                            tx=await loc2.evaluate("e=>((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.name||'')+' '+(e.id||'')).trim()")
+                            if confirm_control_matches(target,tx):
+                                await loc2.click(timeout=7000)
+                                clicked=True
                     except Exception:
-                        continue
+                        pass
+                if not clicked:
+                    for ci in range(control_count):
+                        loc2=controls_loc.nth(ci)
+                        try:
+                            if not await loc2.is_visible() or await loc2.is_disabled():
+                                continue
+                            tx=await loc2.evaluate("e=>((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.name||'')+' '+(e.id||'')).trim()")
+                            if confirm_control_matches(target,tx):
+                                await loc2.click(timeout=7000)
+                                clicked=True
+                                break
+                        except Exception:
+                            continue
                 if not clicked:
                     return {**base,'status':'TECH_DEFER','code':'CONFIRM_CONTROL_NOT_FOUND','final_url':final_url,'stage3_send_ready':False}
                 try:
@@ -954,16 +1009,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     return {**base,'status':'SALES_PROHIBITED','code':'SALES_PROHIBITED_AFTER_CONFIRM','final_url':final_url,'stage3_send_ready':False}
                 if captcha_after:
                     return {**base,'status':'CAPTCHA','code':'VISIBLE_CAPTCHA_AFTER_CONFIRM','final_url':final_url,'stage3_send_ready':False}
-                finals=[x for x in all_ctrls if FINAL.search(str(x.get('text') or ''))
-                        and (not NONFINAL.search(str(x.get('text') or '')) or re.search(r'(確認して送信|確認のうえ送信|confirm.{0,12}send|send.{0,12}confirm)',str(x.get('text') or ''),re.I))
-                        and not (str(x.get('tag') or '')=='input' and str(x.get('type') or '') in {'button','image'})]
-                if not finals:
-                    fallback=[x for x in all_ctrls
-                              if not NONFINAL.search(str(x.get('text') or ''))
-                              and not re.search(r'(コメント|comment|レビュー|review|reset|clear)',str(x.get('text') or ''),re.I)
-                              and (str(x.get('tag') or '')=='button' or str(x.get('type') or '')=='submit')]
-                    if len(fallback)==1:
-                        finals=fallback
+                finals=final_control_candidates(all_ctrls)
                 if not finals:
                     return {**base,'status':'TECH_DEFER','code':'FINAL_SUBMIT_CONTROL_NOT_FOUND_AFTER_CONFIRM','final_url':final_url,'stage3_send_ready':False}
                 control=finals[0]
