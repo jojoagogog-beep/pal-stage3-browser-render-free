@@ -15,7 +15,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Primary is dual-role under one heavy-resource lock: Stage2 route verification
 # and Stage3 Browser never overlap. Shard1 remains dedicated Stage3 capacity.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
-SCHEDULER_REVISION='STAGE3_DUAL_SHARD_BACKLOG_V5'
+SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V6'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -31,6 +31,9 @@ BROWSER_PRIORITY_GRACE_SECONDS=max(30,min(300,int(os.environ.get('PAL_RENDER_BRO
 STAGE2_DEMAND_LOCK=threading.Lock()
 STAGE2_DEMAND_UNTIL=0.0
 STAGE2_DEMAND_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_STAGE2_DEMAND_SECONDS','300') or 300)))
+STAGE2_TURN_LOCK=threading.Lock()
+STAGE2_TURN_UNTIL=0.0
+STAGE2_TURN_SECONDS=max(10,min(60,int(os.environ.get('PAL_RENDER_STAGE2_TURN_SECONDS','30') or 30)))
 STAGE2_THREAD=None
 STAGE2_STATE={'status':'IDLE','at':0,'started_at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None,'workers':0,'batch':0,'priority_markets':[]}
 STATE_LOCK=threading.Lock()
@@ -119,6 +122,29 @@ def _clear_stage2_demand():
     global STAGE2_DEMAND_UNTIL
     with STAGE2_DEMAND_LOCK:
         STAGE2_DEMAND_UNTIL=0.0
+
+def _stage2_turn_remaining(now=None):
+    now=time.time() if now is None else float(now)
+    with STAGE2_TURN_LOCK:
+        return max(0.0,float(STAGE2_TURN_UNTIL)-now)
+
+def _grant_stage2_turn(now=None):
+    global STAGE2_TURN_UNTIL
+    now=time.time() if now is None else float(now)
+    with STAGE2_TURN_LOCK:
+        STAGE2_TURN_UNTIL=max(float(STAGE2_TURN_UNTIL),now+STAGE2_TURN_SECONDS)
+        return max(0.0,STAGE2_TURN_UNTIL-now)
+
+def _clear_stage2_turn():
+    global STAGE2_TURN_UNTIL
+    with STAGE2_TURN_LOCK:
+        STAGE2_TURN_UNTIL=0.0
+
+def _stage2_blocked_by_browser(browser_wait,browser_queued,pump_alive):
+    """A granted fairness turn wins exactly one shared-heavy-lane quantum."""
+    if _stage2_turn_remaining()>0 and _stage2_demand_remaining()>0:
+        return False
+    return bool(float(browser_wait or 0)>0 or pump_alive or browser_queued is True)
 
 def _resource_owner():
     t=PUMP_THREAD
@@ -506,6 +532,11 @@ def background_pump():
             # bounded route batch. Stage2's own lock still prevents overlap,
             # and its completion hands priority back to queued Browser work.
             if STAGE2_PRIMARY_ROLE and _stage2_demand_remaining()>0:
+                # Reserve the next lock acquisition for Stage2. Controller
+                # Stage2/Stage3 wakes run concurrently; merely releasing the
+                # lock let a fresh Stage3 wake win every time and starved the
+                # queued Stage2 request indefinitely.
+                _grant_stage2_turn()
                 _release_idle_browser_priority()
                 with STATE_LOCK:
                     STATE['idle_exit_reason']='YIELD_TO_WAITING_STAGE2'
@@ -571,6 +602,11 @@ def start_or_extend(source,priority_markets=None,task_url=None,result_url=None):
                     'state':_snapshot()},200
     _note_browser_demand()
     _extend_lease(source)
+    if (STAGE2_PRIMARY_ROLE and _stage2_turn_remaining()>0
+            and _stage2_demand_remaining()>0):
+        return {'status':'BUSY_STAGE2_PRIORITY','source':source,
+                'stage2_turn_seconds':round(_stage2_turn_remaining(),1),
+                'state':_snapshot()},202
     if not RUN_LOCK.acquire(blocking=False):
         return {'status':'BUSY','source':source,'state':_snapshot()},202
     try:
@@ -620,7 +656,8 @@ def stage2_wake():
     browser_queued=None
     if _valid_blob_url(ACTIVE_TASK_BLOB_URL):
         browser_queued=_browser_queue_has_tasks(ACTIVE_TASK_BLOB_URL)
-    if browser_wait>0 or (PUMP_THREAD and PUMP_THREAD.is_alive()) or browser_queued is True:
+    if _stage2_blocked_by_browser(
+            browser_wait,browser_queued,bool(PUMP_THREAD and PUMP_THREAD.is_alive())):
         return jsonify(status='BUSY_STAGE3_PRIORITY',
                        browser_demand_seconds=round(browser_wait,1),
                        browser_queue_pending=browser_queued,
@@ -634,6 +671,7 @@ def stage2_wake():
                        browser_demand_seconds=round(_browser_demand_remaining(),1),
                        resource_owner=_resource_owner()),202
     try:
+        _clear_stage2_turn()
         _clear_stage2_demand()
         with STAGE2_STATE_LOCK:
             STAGE2_STATE.update(status='RUNNING',at=int(time.time()),started_at=int(time.time()),
@@ -672,6 +710,7 @@ def health():
                    resource_owner=_resource_owner(),
                    browser_demand_seconds=round(_browser_demand_remaining(),1),
                    stage2_demand_seconds=round(_stage2_demand_remaining(),1),
+                   stage2_turn_seconds=round(_stage2_turn_remaining(),1),
                    stage2_busy=bool(STAGE2_THREAD and STAGE2_THREAD.is_alive()),
                    dynamic_blob_override=bool(_valid_blob_url(ACTIVE_TASK_BLOB_URL) and _valid_blob_url(ACTIVE_RESULT_BLOB_URL)),
                    lane_max_rows=LANE_MAX_ROWS,

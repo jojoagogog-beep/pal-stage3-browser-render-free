@@ -106,6 +106,30 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         finally:
             m.BROWSER_DEMAND_UNTIL=old
 
+    def test_granted_stage2_turn_survives_new_browser_demand(self):
+        old_turn=m.STAGE2_TURN_UNTIL
+        old_stage2=m.STAGE2_DEMAND_UNTIL
+        try:
+            now=time.time()
+            m.STAGE2_DEMAND_UNTIL=now+120
+            m.STAGE2_TURN_UNTIL=now+30
+            self.assertFalse(m._stage2_blocked_by_browser(120,True,True))
+        finally:
+            m.STAGE2_TURN_UNTIL=old_turn
+            m.STAGE2_DEMAND_UNTIL=old_stage2
+
+    def test_browser_keeps_priority_without_fairness_grant(self):
+        old_turn=m.STAGE2_TURN_UNTIL
+        old_stage2=m.STAGE2_DEMAND_UNTIL
+        try:
+            now=time.time()
+            m.STAGE2_DEMAND_UNTIL=now+120
+            m.STAGE2_TURN_UNTIL=0.0
+            self.assertTrue(m._stage2_blocked_by_browser(120,True,True))
+        finally:
+            m.STAGE2_TURN_UNTIL=old_turn
+            m.STAGE2_DEMAND_UNTIL=old_stage2
+
     def test_stage2_and_stage3_share_the_heavy_resource_lock(self):
         from pathlib import Path
         src=(Path(__file__).resolve().parent/'app.py').read_text()
