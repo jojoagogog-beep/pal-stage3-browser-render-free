@@ -915,6 +915,12 @@ async def amain():
     for m in pending[:64]:
         tid=str(m.get('task_id') or '')
         if not tid or tid in seen:continue
+        # Dispatcher emits market-pure, lane-pure tasks. A worker invocation for
+        # one lane must never checkpoint another lane's task as globally done;
+        # doing so made the first lane erase all work for the remaining lanes.
+        task_lane=str(m.get('lane_hint') or '').upper()
+        if task_lane and task_lane!=LANE_MODE:
+            continue
         part=[];part_ids=set()
         ranked=sorted(list(m.get('routes') or [])[:12],key=lambda r:(market_rank(r),-int(r.get('stage3_quality') or 0)))
         for rec in ranked:
@@ -926,7 +932,12 @@ async def amain():
                 continue
             part_ids.add(rid);part.append(rec)
         if not part:
-            seen.add(tid);chosen.append(m);immediate_done.append(tid);continue
+            # Only retire an explicit task owned by this lane. Legacy/mixed or
+            # other-lane tasks must remain visible to the appropriate future
+            # worker invocation.
+            if task_lane==LANE_MODE:
+                seen.add(tid);chosen.append(m);immediate_done.append(tid)
+            continue
         # MAX_ROWS is a hard per-run route budget. Older code let the first
         # eligible task bypass this cap (up to 12 routes), which made a nominal
         # 2-row Render run process 6-8 routes and hit the 190s outer timeout.

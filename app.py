@@ -318,7 +318,9 @@ def execute_lane(lane):
             'PAL_STAGE3_RETRY_LIMIT':'0',
             'PAL_STAGE3_RECENT_ROUTE_SECONDS':'900',
             'PAL_STAGE3_RECENT_TECH_SECONDS':'600',
-            'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'.json',
+            # New state namespace: older deployments incorrectly marked
+            # other-lane tasks as processed. Never import those poisoned IDs.
+            'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'_single_owner_v2.json',
             'PAL_STAGE3_DEADLINE_EPOCH':str(int(time.time())+lane_deadline),
             'PAL_STAGE3_PRODUCER':'PAL_RENDER_STAGE3_BROWSER_V1',
             # Role isolation leaves exactly one Stage3 Browser service

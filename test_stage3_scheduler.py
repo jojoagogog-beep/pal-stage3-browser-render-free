@@ -152,6 +152,16 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
             m.BROWSER_DEMAND_UNTIL=old_demand
             m.LEASE_UNTIL=old_lease
 
+    def test_lane_worker_does_not_retire_other_lane_tasks(self):
+        from pathlib import Path
+        app=(Path(__file__).resolve().parent/'app.py').read_text()
+        worker=(Path(__file__).resolve().parent/'stage3_send_ready_worker_v1.py').read_text()
+        self.assertIn("if task_lane and task_lane!=LANE_MODE:",worker)
+        self.assertIn("if task_lane==LANE_MODE:",worker)
+        self.assertIn("single_owner_v2.json",app)
+        self.assertIn("'PAL_STAGE3_SHARD_COUNT':'1'",app)
+        self.assertIn("env['PAL_BROWSER_TASK_BLOB_URL']=ACTIVE_TASK_BLOB_URL",app)
+
     def test_network_route_handler_is_awaited_not_fire_and_forget(self):
         # Fire-and-forget Playwright route tasks kept asyncio.run() alive long
         # after proof publication. Keep network interception structured so a
