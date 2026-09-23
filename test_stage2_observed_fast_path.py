@@ -38,6 +38,40 @@ assert out['route_hint']['stage2_evidence']['sales_prohibited_absent'] is True, 
 assert calls==['https://example.com/','https://example.com/contact'], calls
 print('PASS observed_fast_path calls=',calls)
 
+# A generic start/contact URL remains a fallback, but an explicit business
+# route published on that same page must win inside the same bounded probe cap.
+prefer_calls=[]
+GENERIC_CONTACT='''<html><body>
+<a href="/sales/contact">Contact our sales team</a>
+<form method="post"><input type="email" name="email" required>
+<textarea name="message" required></textarea><button type="submit">Send</button></form>
+</body></html>'''
+SALES_CONTACT='''<html><body><h1>Sales Contact</h1>
+<form method="post"><input type="email" name="email" required>
+<textarea name="message" required></textarea><button type="submit">Send</button></form>
+</body></html>'''
+def prefer_fetch(url,timeout=4,max_bytes=600000):
+    prefer_calls.append(url)
+    if url == 'https://prefer.example/contact':
+        return url,200,GENERIC_CONTACT
+    if url == 'https://prefer.example/sales/contact':
+        return url,200,SALES_CONTACT
+    return url,404,''
+w.fetch=prefer_fetch
+prefer={
+    'candidate_id':11,'domain':'prefer.example','country':'GB','market':'GB-EN',
+    'source_url':'https://prefer.example/contact',
+    'homepage_url':'https://prefer.example/',
+    'observed_contact_urls':[],
+    'preferred_contact_paths':[],
+}
+out=w.inspect(prefer)
+assert out.get('route_hint'),out
+assert out['route_hint']['contact_url']=='https://prefer.example/sales/contact',out
+assert out['route_hint']['explicit_business_hint'] is True,out
+assert len(prefer_calls)<=1+w.LANE_DEPTH,prefer_calls
+print('PASS explicit_business_route_preferred calls=',prefer_calls)
+
 # Safety regression: an observed route with explicit sales prohibition must never pass.
 unsafe_calls=[]
 UNSAFE='''<html><body><p>No sales solicitations.</p><form method="post">

@@ -381,16 +381,19 @@ def inspect(rec):
     require_explicit_business=bool(rec.get('require_explicit_business_channel'))
     initial_sendability=static_sendability_score(doc) if initial_static else 0
     initial_rejected=url_key(root) in rejected_keys
+    initial_hint=None;initial_hint_score=-1
     if (initial_static or initial_provider or initial_contact) and not initial_rejected and not CAPTCHA.search(doc) and not PROHIBIT.search(initial_plain):
-        # Stage 2 is high recall. General official contact forms are allowed to
-        # reach Stage 3; Stage 3 remains the authoritative business/safety gate.
+        # Stage 2 is high recall. Keep a safe generic contact route as fallback,
+        # but do not stop discovery before checking whether the same official
+        # site publishes a more explicit sales/quote/business route. Stage 3
+        # remains the authoritative business/safety gate.
         qscore=route_quality_score(root,'LEARNED_OR_START_URL',initial_static,initial_provider,initial_contact,initial_business,rec.get('preferred_contact_paths') or [])
         qscore=min(100,max(qscore,initial_sendability+(10 if initial_business else 0), (85 if initial_business else 75) if initial_contact else 0))
         rendered_required=bool(initial_contact and not initial_static and not initial_provider)
         if (not initial_vendor_only and initial_contact
                 and (not require_explicit_business or initial_business)
                 and (initial_sendability>=70 or (initial_provider and qscore>=60) or rendered_required)):
-            item['route_hint']={'contact_url':root,'anchor':'LEARNED_OR_START_URL',
+            initial_hint={'contact_url':root,'anchor':'LEARNED_OR_START_URL',
               'static_form_hint':initial_static,'dynamic_hint':bool((initial_provider and initial_sendability<70) or rendered_required),
               'contact_intent_hint':initial_contact,'explicit_business_hint':initial_business,
               'route_quality_score':qscore,'static_sendability_score':initial_sendability,
@@ -400,15 +403,20 @@ def inspect(rec):
                                  'contact_intent':initial_contact,'captcha_absent':True,'sales_prohibited_absent':True,
                                  'sendability_score':initial_sendability},
               'trusted_source_id':'PAL_CANDIDATE_ROUTE_OFFLOAD_V13_CONTACT_ROUTE'}
-            item['pages']=pages;item['errors']=errors
-            return item
+            initial_hint_score=qscore
+            # An already-explicit start URL cannot be improved by spending more
+            # probes merely to find another equivalent route.
+            if initial_business:
+                item['route_hint']=initial_hint
+                item['pages']=pages;item['errors']=errors
+                return item
     observed=[]
     for raw in list(rec.get('observed_contact_urls') or []):
         u=str(raw or '').strip()
         if u and host(u)==domain and url_key(u) not in rejected_keys:
             if u not in observed: observed.append(u)
 
-    best_hint=None;best_score=-1;attempted=set()
+    best_hint=initial_hint;best_score=initial_hint_score;attempted={url_key(root)}
     def evaluate(candidates):
         nonlocal pages,errors,best_hint,best_score
         for _,u,label in candidates:
@@ -454,19 +462,24 @@ def inspect(rec):
             return True
         return False
     def bounded_candidates(sitemap=(),cap=None):
-        """Keep the same probe budget, but reserve US probes for explicit B2B routes."""
+        """Keep the same probe budget while reserving explicit B2B routes."""
         cap=max(1,int(cap or LANE_DEPTH))
         ranked=candidate_urls(root,doc,domain,rec.get('preferred_contact_paths') or [],sitemap,observed)
         chosen=list(ranked[:cap])
-        if not require_explicit_business:
-            return chosen
         def explicit_contact(cand):
-            _,u,label=cand
+            rank,u,label=cand
             blob=(str(label)+' '+urlsplit(str(u or '')).path.replace('-',' ').replace('_',' '))
-            return bool(ACTIONABLE_BUSINESS.search(blob) and ROUTE_CONTACT.search(' '+blob+' '))
-        # A generic /contact page can otherwise consume the entire four-probe
-        # budget before /sales/contact, /business/inquiry or /request-a-quote.
-        # Replace lower-value generic probes rather than increasing page count.
+            # Outside the US, only elevate an explicit route that the company
+            # actually published/observed (negative rank). For US strict B2B
+            # routing, keep the existing bounded guessed-path reservation.
+            published_or_us_strict=(int(rank)<0 or require_explicit_business)
+            return bool(published_or_us_strict
+                        and ACTIONABLE_BUSINESS.search(blob)
+                        and ROUTE_CONTACT.search(' '+blob+' '))
+        # Generic /contact pages can consume the bounded probe budget before a
+        # company-published /sales/contact, /business/inquiry or quote route.
+        # Reserve up to two existing slots for those higher-yield routes; the
+        # total page-probe cap is unchanged for every market.
         explicit=[x for x in ranked if explicit_contact(x)]
         reserve=min(2,cap)
         for cand in explicit[:reserve]:
@@ -482,6 +495,7 @@ def inspect(rec):
                     chosen.append(cand)
                 continue
             chosen[replace]=cand
+        chosen.sort(key=lambda cand:(0 if explicit_contact(cand) else 1,cand[0],len(cand[1])))
         return chosen[:cap]
 
     # Fast path: observed upstream URLs, live page links and learned paths first.
