@@ -395,6 +395,21 @@ async def inspect(browser,rec,sem,slow=False):
                 lane_wait={'FAST_DOM':900,'DYNAMIC_JS':1800,'IFRAME_DEEP':1500,'DEEP':2600}.get(LANE_MODE,1200)
                 if slow: lane_wait=max(lane_wait,2200)
                 await page.wait_for_timeout(lane_wait)
+                # Static FULL preflight already proved that a contact form exists.
+                # Give CSS/JS hydration a short bounded chance to make at least
+                # one form control visible before scanning. This is scheduling
+                # only: every captcha/safety/fillability gate below is unchanged.
+                if bool(rec.get('static_full_preflight')) and LANE_MODE=='FAST_DOM':
+                    try:
+                        await page.wait_for_function("""() => [...document.forms].some(f =>
+                          [...f.querySelectorAll('input,textarea,select,button')].some(e => {
+                            const s=getComputedStyle(e),r=e.getBoundingClientRect();
+                            return !e.disabled && e.type!=='hidden' &&
+                                   s.display!=='none' && s.visibility!=='hidden' &&
+                                   r.width>0 && r.height>0;
+                          }))""", timeout=2500)
+                    except PlaywrightTimeoutError:
+                        pass
                 if LANE_MODE in {'DYNAMIC_JS','DEEP'} or slow:
                     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     await page.wait_for_timeout(1600 if LANE_MODE!='DEEP' else 2400)
@@ -667,6 +682,17 @@ async def inspect(browser,rec,sem,slow=False):
                 post=None
             post_same=(isinstance(post,dict)
                        and int(post.get('index') or -1)==int(best.get('index') or -2))
+            if not post_same:
+                # Some JS form frameworks replace/enable the submit control only
+                # after input/change handlers settle. Give that rendered state one
+                # bounded second observation; no stale pre-fill proof is accepted.
+                try:
+                    await page.wait_for_timeout(700)
+                    post=await scan_root(active_root,int(best.get('frame_index') or 0))
+                except Exception:
+                    post=None
+                post_same=(isinstance(post,dict)
+                           and int(post.get('index') or -1)==int(best.get('index') or -2))
             if not post_same:
                 # The pre-fill form/control observation is not sufficient for a
                 # FULL proof. Dynamic frameworks can disable/remove/replace the
