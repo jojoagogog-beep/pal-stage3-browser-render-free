@@ -245,43 +245,6 @@ def control_semantic_text(control):
     label=str(control.get('label') or '').strip()
     return label or str(control.get('text') or '').strip()
 
-def radio_group_choice(members):
-    members=[x for x in (members or []) if isinstance(x,dict)]
-    if not members or any(bool(x.get('checked')) for x in members):
-        return False,None
-    blob=' '.join(
-        str(x.get('name') or '')+' '+str(x.get('value') or '')+' '+str(x.get('desc') or '')
-        for x in members
-    )
-    consent=[x for x in members
-             if CONSENT.search(str(x.get('desc') or '')+' '+str(x.get('name') or ''))
-             and not MARKETING.search(str(x.get('desc') or '')+' '+str(x.get('name') or ''))]
-    if consent:
-        return True,consent[0]
-    required=any(bool(x.get('required')) for x in members)
-    semantic_group=bool(re.search(
-        r'(category|division|contact.?type|inquiry.?type|enquiry.?type|お問い合わせ項目|問い合わせ項目|区分)',
-        blob,re.I))
-    if not required and not semantic_group:
-        return False,None
-    safe_re=re.compile(
-        r'(その他|一般|法人|問い合わせ|business|other|general|new inquiry|service inquiry|request information|no preference|not applicable)',
-        re.I)
-    bad_re=re.compile(
-        r'(newsletter|marketing|メルマガ|広告|キャンペーン|採用|求人|career|job|電話|phone|住所|address)',
-        re.I)
-    # Prefer the option's own value/name before broader wrapper text so a group
-    # containing "その他" does not accidentally select a different option.
-    for x in members:
-        own=str(x.get('value') or '')+' '+str(x.get('name') or '')
-        if safe_re.search(own) and not bad_re.search(own):
-            return True,x
-    for x in members:
-        desc=str(x.get('desc') or '')
-        if safe_re.search(desc) and not bad_re.search(desc):
-            return True,x
-    return True,None
-
 def final_control_candidates(controls):
     controls=[x for x in (controls or []) if isinstance(x,dict)]
     finals=[]
@@ -732,8 +695,12 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                           rowRequiredClass=labelCells.some(c=>/(?:^|[ _-])(required|req|mandatory|hissu)(?:$|[ _-])/i.test(String(c.className||'')));
                         }
                         const dd=e.closest('dd');
-                        if(!rowLabel&&dd&&dd.previousElementSibling&&dd.previousElementSibling.tagName==='DT')
-                          rowLabel=(dd.previousElementSibling.innerText||'').trim();
+                        if(!rowLabel&&dd&&dd.previousElementSibling&&dd.previousElementSibling.tagName==='DT'){
+                          const dt=dd.previousElementSibling;
+                          rowLabel=(dt.innerText||'').trim();
+                          if(/(?:^|[ _-])(required|req|mandatory|hissu)(?:$|[ _-])/i.test(String(dt.className||'')))
+                            rowRequiredIcon=true;
+                        }
                         {const box=e.closest('.form-item-box,.form-group,.form02,.form-row,.field,.mwform-field,.contact-field');
                           const h=box&&box.querySelector('dt,label,.form__label,.form03,.field-label,.form-label,.label');
                           if(h){
@@ -747,13 +714,13 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                         const w=e.closest('label,.form-group,.form-row,.field,li,dl,dd,dt,p')||e.parentElement;
                         let local=((lab&&lab.innerText)||labels||((w&&w.innerText)||'')).trim();if(local.length>300)local='';
                         const self=[e.name||'',id,e.placeholder||'',e.getAttribute('aria-label')||'',(lab&&lab.innerText)||'',labels].join(' ');
-                        return {self:self.slice(0,500),local:local.slice(0,500),rowLabel:rowLabel.slice(0,500),rowRequiredIcon};
+                        return {self:self.slice(0,500),local:local.slice(0,500),rowLabel:rowLabel.slice(0,500),rowRequiredIcon:(rowRequiredIcon||rowRequiredClass)};
                       };
                       return [...document.forms].slice(0,12).map((f,index)=>{
                         const allFields=[...f.querySelectorAll('input,textarea,select')];
                         const fs=allFields.map((e,all_i)=>({e,all_i})).filter(x=>vis(x.e)).map(({e,all_i})=>{const d=desc(e);
                           const reqText=(d.self+' '+d.rowLabel+' '+d.local);
-                          const req=!!e.required||e.getAttribute('aria-required')==='true'||d.rowRequiredIcon===true||/(?:^|\\s)required(?:\\s|$)/i.test(String(e.className||''))||/[※＊*]\\s*$/.test(d.rowLabel)||(/(必須|required|mandatory)/i.test(reqText)&&!/(任意|optional)/i.test(reqText));
+                          const req=!!e.required||e.getAttribute('aria-required')==='true'||d.rowRequiredIcon===true||/(?:^|\\s)required(?:\\s|$)/i.test(String(e.className||''))||(/[※＊*]/.test(d.rowLabel+' '+d.local)&&!/(任意|optional)/i.test(reqText))||(/(必須|required|mandatory)/i.test(reqText)&&!/(任意|optional)/i.test(reqText));
                           return {i:all_i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),name:e.name||'',id:e.id||'',required:req,
                             checked:!!e.checked,value:e.value||'',self_desc:d.self.slice(0,500),local_desc:d.local.slice(0,500),row_label:d.rowLabel.slice(0,500),
                             desc:(d.self+' '+d.rowLabel+' '+d.local).slice(0,900)}});
