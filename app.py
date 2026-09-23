@@ -28,6 +28,9 @@ STAGE2_STATE_LOCK=threading.Lock()
 BROWSER_DEMAND_LOCK=threading.Lock()
 BROWSER_DEMAND_UNTIL=0.0
 BROWSER_PRIORITY_GRACE_SECONDS=max(30,min(300,int(os.environ.get('PAL_RENDER_BROWSER_PRIORITY_GRACE_SECONDS','120') or 120)))
+STAGE2_DEMAND_LOCK=threading.Lock()
+STAGE2_DEMAND_UNTIL=0.0
+STAGE2_DEMAND_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_STAGE2_DEMAND_SECONDS','300') or 300)))
 STAGE2_THREAD=None
 STAGE2_STATE={'status':'IDLE','at':0,'started_at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None,'workers':0,'batch':0,'priority_markets':[]}
 STATE_LOCK=threading.Lock()
@@ -99,6 +102,23 @@ def _note_browser_demand(now=None):
     with BROWSER_DEMAND_LOCK:
         BROWSER_DEMAND_UNTIL=max(float(BROWSER_DEMAND_UNTIL),now+BROWSER_PRIORITY_GRACE_SECONDS)
         return max(0.0,BROWSER_DEMAND_UNTIL-now)
+
+def _stage2_demand_remaining(now=None):
+    now=time.time() if now is None else float(now)
+    with STAGE2_DEMAND_LOCK:
+        return max(0.0,float(STAGE2_DEMAND_UNTIL)-now)
+
+def _note_stage2_demand(now=None):
+    global STAGE2_DEMAND_UNTIL
+    now=time.time() if now is None else float(now)
+    with STAGE2_DEMAND_LOCK:
+        STAGE2_DEMAND_UNTIL=max(float(STAGE2_DEMAND_UNTIL),now+STAGE2_DEMAND_SECONDS)
+        return max(0.0,STAGE2_DEMAND_UNTIL-now)
+
+def _clear_stage2_demand():
+    global STAGE2_DEMAND_UNTIL
+    with STAGE2_DEMAND_LOCK:
+        STAGE2_DEMAND_UNTIL=0.0
 
 def _resource_owner():
     t=PUMP_THREAD
@@ -480,6 +500,16 @@ def background_pump():
             body,code=execute_lane(lane)
             summary=body.get('worker_summary') or {}
             _record_lane_result(lane,summary,code)
+            # Primary shares one memory-safe heavy slot with Stage2. Once a
+            # valid Stage2 request has waited through one complete Browser
+            # quantum, yield the lock so the next controller tick can drain a
+            # bounded route batch. Stage2's own lock still prevents overlap,
+            # and its completion hands priority back to queued Browser work.
+            if STAGE2_PRIMARY_ROLE and _stage2_demand_remaining()>0:
+                _release_idle_browser_priority()
+                with STATE_LOCK:
+                    STATE['idle_exit_reason']='YIELD_TO_WAITING_STAGE2'
+                break
             tasks=int(summary.get('tasks') or 0)
             routes=int(summary.get('routes') or 0)
             if code>=500:
@@ -580,6 +610,7 @@ def stage2_wake():
         if x and x not in markets: markets.append(x)
     workers=max(4,min(24,int(body.get('workers') or 8)))
     batch=max(16,min(128,int(body.get('batch') or 64)))
+    _note_stage2_demand()
     # Stage3 Browser owns the scarce Render Free memory lane. Stage2 is useful
     # external I/O work, but it must never overlap Chromium. Browser demand is
     # renewed by every /wake call, so once an in-flight Stage2 run finishes the
@@ -603,6 +634,7 @@ def stage2_wake():
                        browser_demand_seconds=round(_browser_demand_remaining(),1),
                        resource_owner=_resource_owner()),202
     try:
+        _clear_stage2_demand()
         with STAGE2_STATE_LOCK:
             STAGE2_STATE.update(status='RUNNING',at=int(time.time()),started_at=int(time.time()),
                                 duration_seconds=0,returncode=None,
@@ -639,6 +671,7 @@ def health():
                    exit_policy='BOUNDED_EVENT_LOOP_V1',
                    resource_owner=_resource_owner(),
                    browser_demand_seconds=round(_browser_demand_remaining(),1),
+                   stage2_demand_seconds=round(_stage2_demand_remaining(),1),
                    stage2_busy=bool(STAGE2_THREAD and STAGE2_THREAD.is_alive()),
                    dynamic_blob_override=bool(_valid_blob_url(ACTIVE_TASK_BLOB_URL) and _valid_blob_url(ACTIVE_RESULT_BLOB_URL)),
                    lane_max_rows=LANE_MAX_ROWS,
