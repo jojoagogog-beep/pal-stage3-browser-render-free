@@ -417,6 +417,10 @@ async def inspect(browser,rec,sem,slow=False):
             if await visible_captcha(page):
                 return {**base,'status':'CAPTCHA','code':'VISIBLE_CAPTCHA','final_url':final_url,'stage3_send_ready':False}
 
+            # Bounded structural diagnostics for false NO_SAFE_FORM analysis.
+            # Never records field values or submitted content.
+            scan_debug=[]
+
             async def scan_root(root,frame_index):
                 try:
                     root_html=await root.content()
@@ -428,6 +432,9 @@ async def inspect(browser,rec,sem,slow=False):
                 if await visible_captcha(root):
                     return None
                 forms=root.locator('form'); n=min(await forms.count(),20); best_local=None
+                root_diag={'frame_index':int(frame_index),'form_count':int(n),'evaluate_errors':0,'forms':[]}
+                if len(scan_debug)<20:
+                    scan_debug.append(root_diag)
                 for i in range(n):
                     form=forms.nth(i)
                     try:
@@ -462,6 +469,7 @@ async def inspect(browser,rec,sem,slow=False):
                           return {text:(f.innerText||'').slice(0,12000),action:f.action||'',method:(f.method||'get').toLowerCase(),ident:((f.id||'')+' '+(f.className||'')+' '+(f.action||'')).slice(0,1000),fields:fs,controls};
                         }""")
                     except Exception:
+                        root_diag['evaluate_errors']=int(root_diag.get('evaluate_errors') or 0)+1
                         continue
                     blob=(str(meta.get('text') or '')+' '+str(meta.get('ident') or '')).lower()
                     ident_blob=str(meta.get('ident') or '').lower()
@@ -481,9 +489,16 @@ async def inspect(browser,rec,sem,slow=False):
                     fields=list(meta.get('fields') or [])
                     has_email=any(str(x.get('type') or '')=='email' or re.search(r'(e-?mail|メール)',str(x.get('desc') or ''),re.I) for x in fields)
                     has_msg=any(str(x.get('tag') or '')=='textarea' or re.search(r'(message|inquir|enquir|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)',str(x.get('desc') or ''),re.I) for x in fields)
+                    form_diag={'index':int(i),'field_count':len(fields),
+                               'has_email':bool(has_email),'has_message':bool(has_msg),
+                               'ident':str(meta.get('ident') or '')[:180]}
+                    if len(root_diag['forms'])<20:
+                        root_diag['forms'].append(form_diag)
                     if not (has_email and has_msg):
+                        form_diag['decision']='NO_EMAIL_OR_MESSAGE'
                         continue
                     ctrls=list(meta.get('controls') or [])
+                    form_diag['control_count']=len(ctrls)
                     # A visible type=submit control on a verified contact form is a
                     # final control even when branded text says "Get in touch",
                     # "Contact us", etc. Exclude explicit Next/Confirm/Back controls.
@@ -502,8 +517,12 @@ async def inspect(browser,rec,sem,slow=False):
                             continue
                         if CONFIRM.search(tx):
                             safe_confirm.append(x)
+                    form_diag['direct_submit_count']=len(direct)
+                    form_diag['safe_confirm_count']=len(safe_confirm)
                     if not direct and not safe_confirm:
+                        form_diag['decision']='NO_SAFE_SUBMIT_CONTROL'
                         continue
+                    form_diag['decision']='CANDIDATE'
                     # Do not reject a valid contact form only because its HTML method
                     # is GET or omitted. Many modern forms submit through JavaScript/AJAX.
                     # Email + message fields, explicit submit/confirm control, same-domain,
@@ -537,7 +556,9 @@ async def inspect(browser,rec,sem,slow=False):
                 if best and str(best.get('control_kind') or '')=='DIRECT_SUBMIT' and int(best.get('score') or 0)>=13:
                     break
             if not best:
-                return {**base,'status':'NO_SAFE_FORM','code':'NO_DIRECT_SEND_READY_FORM','final_url':final_url,'stage3_send_ready':False}
+                return {**base,'status':'NO_SAFE_FORM','code':'NO_DIRECT_SEND_READY_FORM',
+                        'final_url':final_url,'stage3_send_ready':False,
+                        'form_scan_debug':scan_debug[:20]}
 
             active_root=roots[int(best.get('frame_index') or 0)]
             forms=active_root.locator('form')
