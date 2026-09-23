@@ -937,7 +937,12 @@ async def amain():
     raw_tasks=task_messages()
     perf['task_fetch_ms']=round((time.monotonic()-perf_fetch)*1000,1)
     pending=[m for m in raw_tasks if str(m.get('task_id') or '') not in done]
-    pending=[m for _,m in sorted(enumerate(pending),key=lambda im:(task_market_rank(im[1]),-task_lane_quality(im[1]),im[0]))]
+    # All PRIORITY_MARKETS are currently sendable. Prefer the strongest
+    # Stage3 evidence across them, using market order only as a tie-breaker.
+    pending=[m for _,m in sorted(
+        enumerate(pending),
+        key=lambda im:(-task_lane_quality(im[1]),task_market_rank(im[1]),im[0]),
+    )]
     # Local fallback owns one expensive Browser process. With market-pure tasks,
     # hard-filter it to the controller's short-lived proof markets so one quantum
     # ends as soon as the currently-sendable markets are done. Remote/default
