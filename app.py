@@ -20,6 +20,7 @@ PUBLIC_KEY=serialization.load_pem_public_key(PUBLIC_KEY_PEM.encode())
 PROFILES={"morning":(-18.0,-2.0,7,"anull"),"afternoon":(-19.0,-2.2,7,"anull"),
           "night":(-21.0,-2.8,8,"equalizer=f=3200:t=q:w=1.2:g=-1.4,highshelf=f=5200:g=3.2:w=0.8"),
           "short":(-17.0,-2.0,6,"equalizer=f=3200:t=q:w=1.2:g=-1.0,highshelf=f=5200:g=4.0:w=0.8")}
+EXPECTED_SF_SHA="9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe"
 JOBS={}; LOCK=threading.Lock(); WORKER_LOCK=threading.Lock()
 def authorized():
     try:
@@ -46,6 +47,16 @@ def process_job(jid,td,mode,profile,premastered,duration):
         try:
             update(jid,status="RUNNING",started_at=time.time())
             src=td/"input_audio"; art=td/"image.png"; master=td/"master.flac"; video=td/"video.mp4"
+            synthesized=False
+            if (td/"input.mid").exists():
+                sf=td/"soundfont.sf2"
+                if not sf.exists() or sha256(sf)!=EXPECTED_SF_SHA:
+                    raise RuntimeError("SOUNDFONT_HASH_MISMATCH")
+                run(["fluidsynth","-ni","-q","-r","48000","-g","0.72","-F",str(src),
+                     "-o","audio.file.format=s24","-o","synth.chorus.active=0","-o","synth.reverb.active=1",
+                     "-o","synth.reverb.room-size=0.36","-o","synth.reverb.damp=0.52",
+                     "-o","synth.reverb.level=0.28","-o","synth.reverb.width=0.92",str(sf),str(td/"input.mid")])
+                synthesized=True
             if premastered:
                 shutil.copyfile(src,master)
             else:
@@ -62,8 +73,9 @@ def process_job(jid,td,mode,profile,premastered,duration):
                 vf="scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p"
                 run(["ffmpeg","-y","-loglevel","error","-loop","1","-framerate","1","-i",str(art),"-t","2","-vf",vf,"-c:v","libx264","-threads","1","-preset","ultrafast","-crf","25","-tune","stillimage","-r","1","-an",str(seg)])
                 run(["ffmpeg","-y","-loglevel","error","-stream_loop","-1","-i",str(seg),"-stream_loop","-1","-i",str(aac),"-t",str(duration),"-map","0:v:0","-map","1:a:0","-c","copy","-movflags","+faststart","-shortest",str(video)])
-            manifest={"schema":"MOONLIT_REMOTE_MEDIA_V2","status":"PASS","mode":mode,"duration":duration,
-                      "profile":profile,"premastered_input":premastered,
+            manifest={"schema":"MOONLIT_REMOTE_MEDIA_V3","status":"PASS","mode":mode,"duration":duration,
+                      "profile":profile,"premastered_input":premastered,"synthesized_external":synthesized,
+                      "soundfont_sha256":EXPECTED_SF_SHA if synthesized else None,
                       "master_sha256":sha256(master),"video_sha256":sha256(video)}
             (td/"manifest.json").write_text(json.dumps(manifest,indent=2))
             archive=td/"result.tar.gz"
@@ -93,6 +105,24 @@ def create_job():
     audio.save(td/"input_audio"); image.save(td/"image.png")
     update(jid,status="QUEUED",created_at=time.time())
     threading.Thread(target=process_job,args=(jid,td,mode,profile,premastered,duration),daemon=True).start()
+    return jsonify(job_id=jid,status="QUEUED"),202
+
+@app.post("/full-jobs")
+def create_full_job():
+    if not authorized(): return jsonify(error="unauthorized"),401
+    mode=str(request.form.get("mode","")).lower()
+    profile=str(request.form.get("profile","")).lower()
+    try: duration=int(float(request.form.get("duration","0")))
+    except Exception:return jsonify(error="bad duration"),400
+    midi=request.files.get("midi"); soundfont=request.files.get("soundfont"); image=request.files.get("image")
+    if mode not in {"short","long"} or profile not in PROFILES or duration<5 or duration>10800:
+        return jsonify(error="bad request"),400
+    if not midi or not soundfont or not image:return jsonify(error="midi, soundfont and image required"),400
+    jid=uuid.uuid4().hex
+    td=Path(tempfile.mkdtemp(prefix=f"moonlit_{jid}_"))
+    midi.save(td/"input.mid"); soundfont.save(td/"soundfont.sf2"); image.save(td/"image.png")
+    update(jid,status="QUEUED",created_at=time.time(),job_type="FULL_SYNTH_MEDIA")
+    threading.Thread(target=process_job,args=(jid,td,mode,profile,False,duration),daemon=True).start()
     return jsonify(job_id=jid,status="QUEUED"),202
 
 @app.get("/jobs/<jid>")
