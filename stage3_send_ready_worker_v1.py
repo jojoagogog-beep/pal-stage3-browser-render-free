@@ -181,11 +181,41 @@ CAPTCHA=re.compile(r'(g-recaptcha|grecaptcha|recaptcha/api|hcaptcha|h-captcha|ch
 CAPTCHA_SELECTOR='iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey]'
 PROHIBIT=re.compile(r'(no\s+(?:unsolicited|sales\s+solicit)|sales\s+solicitations?.{0,30}(?:not\s+accepted|prohibited|declin|refus)|(?:営業(?:目的|勧誘|メール|メ[ー－-]ル)|ご?提案|セールス).{0,40}(?:禁止|お断り|受け付け(?:て)?おりません|受付(?:して)?おりません|ご遠慮))',re.I)
 SENSITIVE=re.compile(r'(電話|\btel\b|\bphone\b|mobile|\b(?:full|contact|telephone|phone)[ _.-]?number\b|住所|\baddress\b|郵便|postal|postcode|\bzip\b|都道府県|市区町村|番地)',re.I)
-MARKETING=re.compile(r'(newsletter|marketing|メルマガ|広告|キャンペーン)',re.I)
+MARKETING=re.compile(r'(newsletter|marketing|マーケティング|メルマガ|広告|キャンペーン|販促|プロモーション)',re.I)
 CONSENT=re.compile(r'(privacy|terms|agree|consent|同意|プライバシー|利用規約|個人情報)',re.I)
+CONSENT_GATE=re.compile(
+    r'(同意(?:の)?上.{0,30}(?:送信|問い合わせ)|同意して.{0,30}(?:送信|問い合わせ)|'
+    r'(?:送信|問い合わせ).{0,30}同意|must\s+agree.{0,50}(?:submit|send)|'
+    r'agree.{0,50}(?:before|to).{0,30}(?:submit|send)|'
+    r'consent.{0,50}(?:submit|send))',re.I)
 FINAL=re.compile(r'(この内容で送信|内容を送信|送信する|送信|send\s*(message|inquiry|enquiry)?|submit\s*(message|inquiry|enquiry|form)?)',re.I)
 NONFINAL=re.compile(r'(確認|confirm|next|次へ|preview|戻る|back|cancel|修正)',re.I)
 CONFIRM=re.compile(r'(確認画面(?:へ)?|入力内容(?:を)?確認|内容(?:を)?確認|確認(?:する|へ)?|confirm|review|next|次へ)',re.I)
+
+def form_requires_transactional_consent(text):
+    return bool(CONSENT_GATE.search(str(text or '')))
+
+def safe_consent_radio_choice(members):
+    rows=[x for x in (members or []) if isinstance(x,dict)]
+    eligible=[]
+    for x in rows:
+        desc=(str(x.get('desc') or '')+' '+str(x.get('value') or '')).strip()
+        if MARKETING.search(desc) or not CONSENT.search(desc):
+            continue
+        if re.search(r'(同意しない|同意しません|拒否|不同意|disagree|do\s+not\s+agree|decline|reject|no\b)',desc,re.I):
+            continue
+        if re.search(r'(同意する|同意します|agree|accept|consent|\byes\b|\btrue\b)',desc,re.I):
+            eligible.append(x)
+    if len(eligible)==1:
+        return eligible[0]
+    if not eligible and len(rows)==1:
+        desc=(str(rows[0].get('desc') or '')+' '+str(rows[0].get('value') or '')).strip()
+        negative=bool(re.search(
+            r'(同意しない|同意しません|拒否|不同意|disagree|do\s+not\s+agree|decline|reject|\bno\b)',
+            desc,re.I))
+        if CONSENT.search(desc) and not MARKETING.search(desc) and not negative:
+            return rows[0]
+    return None
 
 def normalized_control_text(value):
     return re.sub(r'\s+',' ',str(value or '')).strip().casefold()
@@ -214,6 +244,43 @@ def control_semantic_text(control):
     # mixing that metadata into semantics caused false NONFINAL rejection.
     label=str(control.get('label') or '').strip()
     return label or str(control.get('text') or '').strip()
+
+def radio_group_choice(members):
+    members=[x for x in (members or []) if isinstance(x,dict)]
+    if not members or any(bool(x.get('checked')) for x in members):
+        return False,None
+    blob=' '.join(
+        str(x.get('name') or '')+' '+str(x.get('value') or '')+' '+str(x.get('desc') or '')
+        for x in members
+    )
+    consent=[x for x in members
+             if CONSENT.search(str(x.get('desc') or '')+' '+str(x.get('name') or ''))
+             and not MARKETING.search(str(x.get('desc') or '')+' '+str(x.get('name') or ''))]
+    if consent:
+        return True,consent[0]
+    required=any(bool(x.get('required')) for x in members)
+    semantic_group=bool(re.search(
+        r'(category|division|contact.?type|inquiry.?type|enquiry.?type|お問い合わせ項目|問い合わせ項目|区分)',
+        blob,re.I))
+    if not required and not semantic_group:
+        return False,None
+    safe_re=re.compile(
+        r'(その他|一般|法人|問い合わせ|business|other|general|new inquiry|service inquiry|request information|no preference|not applicable)',
+        re.I)
+    bad_re=re.compile(
+        r'(newsletter|marketing|メルマガ|広告|キャンペーン|採用|求人|career|job|電話|phone|住所|address)',
+        re.I)
+    # Prefer the option's own value/name before broader wrapper text so a group
+    # containing "その他" does not accidentally select a different option.
+    for x in members:
+        own=str(x.get('value') or '')+' '+str(x.get('name') or '')
+        if safe_re.search(own) and not bad_re.search(own):
+            return True,x
+    for x in members:
+        desc=str(x.get('desc') or '')
+        if safe_re.search(desc) and not bad_re.search(desc):
+            return True,x
+    return True,None
 
 def final_control_candidates(controls):
     controls=[x for x in (controls or []) if isinstance(x,dict)]
@@ -651,7 +718,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                       const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.disabled&&e.type!=='hidden'&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
                       const desc=e=>{const id=e.id||'',lab=id?document.querySelector('label[for="'+CSS.escape(id)+'"]'):null;
                         const labels=e.labels?[...e.labels].map(x=>x.innerText||'').join(' '):'';
-                        const tr=e.closest('tr'),cell=e.closest('th,td');let rowLabel='',rowRequiredIcon=false;
+                        const tr=e.closest('tr'),cell=e.closest('th,td');let rowLabel='',rowRequiredIcon=false,rowRequiredClass=false;
                         if(tr&&cell){const cells=[...tr.children],idx=cells.indexOf(cell);
                           const prior=(idx>0?cells.slice(0,idx):[]);
                           rowLabel=((prior.map(c=>c.innerText||'').join(' '))||(tr.querySelector('th')?.innerText||'')).trim();
@@ -662,13 +729,21 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                             const title=String(img.getAttribute('title')||'').toLowerCase();
                             return /(asterisk|required|mandatory|hissu|必須)/.test(src+' '+alt+' '+title);
                           }));
+                          rowRequiredClass=labelCells.some(c=>/(?:^|[ _-])(required|req|mandatory|hissu)(?:$|[ _-])/i.test(String(c.className||'')));
                         }
                         const dd=e.closest('dd');
                         if(!rowLabel&&dd&&dd.previousElementSibling&&dd.previousElementSibling.tagName==='DT')
                           rowLabel=(dd.previousElementSibling.innerText||'').trim();
-                        if(!rowLabel){const box=e.closest('.form-item-box,.form-group,.form-row,.field');
-                          const h=box&&box.querySelector('dt,.field-label,.form-label,.label');
-                          if(h)rowLabel=(h.innerText||'').trim();}
+                        {const box=e.closest('.form-item-box,.form-group,.form02,.form-row,.field,.mwform-field,.contact-field');
+                          const h=box&&box.querySelector('dt,label,.form__label,.form03,.field-label,.form-label,.label');
+                          if(h){
+                            const ht=(h.innerText||'').trim();
+                            if(!rowLabel)rowLabel=ht;
+                            if(/[※＊*]\\s*$/.test(ht)||/(必須|required|mandatory)/i.test(ht)
+                              ||h.querySelector('.req,.required,.hissu,[class*="required"],[class*="mandatory"]')){
+                              rowRequiredIcon=true;
+                            }
+                          }}
                         const w=e.closest('label,.form-group,.form-row,.field,li,dl,dd,dt,p')||e.parentElement;
                         let local=((lab&&lab.innerText)||labels||((w&&w.innerText)||'')).trim();if(local.length>300)local='';
                         const self=[e.name||'',id,e.placeholder||'',e.getAttribute('aria-label')||'',(lab&&lab.innerText)||'',labels].join(' ');
@@ -756,7 +831,8 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     kind='DIRECT_SUBMIT' if direct else 'CONFIRM_STEP'
                     chosen_control=direct[0] if direct else safe_confirm[0]
                     score=10+(3 if direct else 2)+(2 if re.search(r'(会社|法人|company|organization)',blob,re.I) else 0)
-                    cand={'index':i,'fields':fields,'control':chosen_control,'control_kind':kind,'score':score,'frame_index':frame_index}
+                    cand={'index':i,'fields':fields,'control':chosen_control,'control_kind':kind,'score':score,
+                          'frame_index':frame_index,'form_text':form_text[:12000]}
                     if best_local is None or score>best_local['score']:
                         best_local=cand
                 return best_local
@@ -819,21 +895,35 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             form=forms.nth(int(best['index']))
             sensitive_required=[]
             unfillable=[]
-            # Required radios are group requirements. Choose only a semantically
-            # safe general/other/business-inquiry option; otherwise fail closed.
+            # Required radios are group requirements. In addition, some forms
+            # use a privacy-policy consent radio without the HTML required
+            # attribute while explicitly stating that consent is required before
+            # sending. Treat only that transactional consent pattern as gated;
+            # marketing/newsletter choices remain excluded.
+            consent_gate=form_requires_transactional_consent(best.get('form_text'))
             radio_groups={}
             for rr in best['fields']:
-                if str(rr.get('type') or '')=='radio' and bool(rr.get('required')):
+                if str(rr.get('type') or '')!='radio':
+                    continue
+                desc=str(rr.get('desc') or '')
+                is_consent=bool(CONSENT.search(desc)) and not bool(MARKETING.search(desc))
+                if bool(rr.get('required')) or (consent_gate and is_consent):
                     key=str(rr.get('name') or ('__radio_'+str(rr.get('i'))))
                     radio_groups.setdefault(key,[]).append(rr)
             for _key,members in radio_groups.items():
                 if any(bool(x.get('checked')) for x in members):
                     continue
-                pick=next((x for x in members if
-                    re.search(r'(その他|一般|法人|問い合わせ|business|other|general|new inquiry|service inquiry|request information|no preference|not applicable)',
-                              str(x.get('desc') or ''),re.I)
-                    and not re.search(r'(newsletter|marketing|メルマガ|広告|キャンペーン|電話|phone|住所|address)',
-                                      str(x.get('desc') or ''),re.I)),None)
+                consent_members=[x for x in members
+                                 if CONSENT.search(str(x.get('desc') or ''))
+                                 and not MARKETING.search(str(x.get('desc') or ''))]
+                if consent_gate and consent_members:
+                    pick=safe_consent_radio_choice(consent_members)
+                else:
+                    pick=next((x for x in members if
+                        re.search(r'(その他|一般|法人|問い合わせ|business|other|general|new inquiry|service inquiry|request information|no preference|not applicable)',
+                                  str(x.get('desc') or ''),re.I)
+                        and not re.search(r'(newsletter|marketing|メルマガ|広告|キャンペーン|電話|phone|住所|address)',
+                                          str(x.get('desc') or ''),re.I)),None)
                 if pick is None:
                     unfillable.append(str(members[0].get('desc') or 'required_radio')[:120])
                 else:
