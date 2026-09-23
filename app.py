@@ -121,11 +121,14 @@ def _valid_blob_url(raw):
     return u.startswith('https://superjsonblob.com/api/jsonBlob/') and len(u)<300
 
 def _browser_queue_has_tasks(url=None):
-    """Return True/False for the authoritative Browser queue; None on I/O error.
+    """Return whether this Render shard owns Browser work; None on I/O error.
 
     A MAC_WAKE must not reserve the shared free Render heavy lane when the
-    Browser queue is empty. Unknown/error remains conservative (None), so a
-    transient JSONBlob read failure never suppresses real proof work.
+    Browser queue is empty *for this deterministic shard*. Treating an odd
+    route owned by shard1 as work for primary/shard0 made primary spin empty
+    Browser lanes and continuously reject Stage2 route work. Unknown/error
+    remains conservative (None), so a transient JSONBlob read failure never
+    suppresses real proof work.
     """
     u=str(url or ACTIVE_TASK_BLOB_URL or os.environ.get('PAL_ROUTE_TASK_BLOB_URL','')).strip()
     if not _valid_blob_url(u):
@@ -143,14 +146,19 @@ def _browser_queue_has_tasks(url=None):
         if len(raw)>2000000:
             return None
         data=json.loads(raw.decode('utf-8','ignore'))
+        shard_index=0 if STAGE2_PRIMARY_ROLE else 1
         for task in (data.get('tasks') or []):
             if not isinstance(task,dict):
                 continue
             if str(task.get('kind') or '')!='PAL_BROWSER_PREFLIGHT_TASK_V1':
                 continue
-            if any(isinstance(r,dict) and int(r.get('route_id') or 0)>0
-                   for r in (task.get('routes') or [])):
-                return True
+            for rec in (task.get('routes') or []):
+                if not isinstance(rec,dict):
+                    continue
+                try: rid=int(rec.get('route_id') or 0)
+                except Exception: rid=0
+                if rid>0 and (rid % 2)==shard_index:
+                    return True
         return False
     except Exception:
         return None
