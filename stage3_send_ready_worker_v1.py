@@ -361,13 +361,41 @@ async def visible_captcha(root):
         pass
     return False
 
-async def inspect(browser,rec,sem,slow=False):
+def same_form_snapshot(before,after):
+    """DOM form/frame indexes are zero-based; missing indexes are not zero."""
+    if not isinstance(before,dict) or not isinstance(after,dict):
+        return False
+    for key in ('index','frame_index'):
+        left,right=before.get(key),after.get(key)
+        if type(left) is not int or type(right) is not int:
+            return False
+        if left<0 or right<0 or left!=right:
+            return False
+    return True
+
+async def inspect_with_timeout(browser,rec,sem,timeout,slow=False):
+    progress={'phase':'waiting_for_slot'}
+    started=time.monotonic()
+    try:
+        return await asyncio.wait_for(
+            inspect(browser,rec,sem,slow=slow,progress=progress),timeout=timeout)
+    except asyncio.TimeoutError:
+        return {**base_result(rec),'status':'TECH_DEFER',
+                'code':'OVERALL_ROUTE_TIMEOUT_OR_ERROR','stage3_send_ready':False,
+                'error_type':'TimeoutError','error_detail':'Route wall-clock budget exceeded',
+                'timeout_phase':progress['phase'],'lane_mode':LANE_MODE,
+                'elapsed_seconds':round(time.monotonic()-started,3)}
+
+async def inspect(browser,rec,sem,slow=False,progress=None):
     async with sem:
         base=base_result(rec); rid=base['route_id'];url=str(rec.get('canonical_url') or '');domain=base['official_domain']
         if not rid or not url or not domain or host(url)!=domain:
             return {**base,'status':'TECH_DEFER','code':'INVALID_TASK','stage3_send_ready':False}
         ctx=None
-        timeout_phase='context_init'
+        progress=progress if progress is not None else {}
+        def phase(name):
+            progress['phase']=name
+        phase('context_init')
         try:
             ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False)
             # Await routing decisions directly instead of spawning an untracked
@@ -403,7 +431,7 @@ async def inspect(browser,rec,sem,slow=False):
                 except PlaywrightTimeoutError:
                     pass
             try:
-                timeout_phase='navigate'
+                phase('navigate')
                 await navigate_ready(url)
             except Exception as nav_exc:
                 # Discovery stores company domains normalized without www.
@@ -421,6 +449,7 @@ async def inspect(browser,rec,sem,slow=False):
             # Four lane modes share the same safety gates but inspect different
             # render depths so one DOM assumption cannot dominate all results.
             try:
+                phase('render_wait')
                 lane_wait={'FAST_DOM':900,'DYNAMIC_JS':1800,'IFRAME_DEEP':1500,'DEEP':2600}.get(LANE_MODE,1200)
                 if slow: lane_wait=max(lane_wait,2200)
                 await page.wait_for_timeout(lane_wait)
@@ -459,7 +488,7 @@ async def inspect(browser,rec,sem,slow=False):
             final_url=page.url
             if host(final_url)!=domain:
                 return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED','final_url':final_url,'stage3_send_ready':False}
-            timeout_phase='body_text'
+            phase('body_text')
             text=str(await page.evaluate(
                 "() => ((document.body && document.body.innerText) || "
                 "(document.documentElement && document.documentElement.innerText) || '')"
@@ -470,6 +499,7 @@ async def inspect(browser,rec,sem,slow=False):
                         'timeout_phase':'body_text','lane_mode':LANE_MODE}
             if PROHIBIT.search(text):
                 return {**base,'status':'SALES_PROHIBITED','code':'SALES_PROHIBITED','final_url':final_url,'stage3_send_ready':False}
+            phase('captcha_scan')
             if await visible_captcha(page):
                 return {**base,'status':'CAPTCHA','code':'VISIBLE_CAPTCHA','final_url':final_url,'stage3_send_ready':False}
 
@@ -592,7 +622,7 @@ async def inspect(browser,rec,sem,slow=False):
                 return best_local
 
             frame_cap=20 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else (12 if LANE_MODE=='DYNAMIC_JS' else 8)
-            timeout_phase='form_scan'
+            phase('form_scan')
             roots=list(page.frames)[:frame_cap]
             best=None
             # A valid direct-submit contact form is already sufficient once the
@@ -617,6 +647,7 @@ async def inspect(browser,rec,sem,slow=False):
                         'form_scan_debug':scan_debug[:20]}
 
             active_root=roots[int(best.get('frame_index') or 0)]
+            phase('fill_fields')
             forms=active_root.locator('form')
             form=forms.nth(int(best['index']))
             sensitive_required=[]
@@ -708,6 +739,7 @@ async def inspect(browser,rec,sem,slow=False):
             if unfillable:
                 return {**base,'status':'REQUIRED_UNFILLABLE','code':'REQUIRED_UNFILLABLE','final_url':final_url,
                         'required_sensitive':False,'required_unfillable':True,'stage3_send_ready':False,'blocked_fields':unfillable[:6]}
+            phase('constraint_check')
             valid=await form.evaluate("f=>f.checkValidity()")
             if not valid:
                 invalid=await form.locator(':invalid').evaluate_all("els=>els.slice(0,8).map(e=>(e.name||e.id||e.type||e.tagName).slice(0,120))")
@@ -717,12 +749,12 @@ async def inspect(browser,rec,sem,slow=False):
             # Dynamic frameworks may reveal/mark fields required only after input
             # events or hydration. Re-scan the rendered form after all guarded
             # fills so Stage3 uses the same final-form semantics expected at send.
+            phase('post_fill_scan')
             try:
                 post=await scan_root(active_root,int(best.get('frame_index') or 0))
             except Exception:
                 post=None
-            post_same=(isinstance(post,dict)
-                       and int(post.get('index') or -1)==int(best.get('index') or -2))
+            post_same=same_form_snapshot(best,post)
             if not post_same:
                 # Some JS form frameworks replace/enable the submit control only
                 # after input/change handlers settle. Give that rendered state one
@@ -732,8 +764,7 @@ async def inspect(browser,rec,sem,slow=False):
                     post=await scan_root(active_root,int(best.get('frame_index') or 0))
                 except Exception:
                     post=None
-                post_same=(isinstance(post,dict)
-                           and int(post.get('index') or -1)==int(best.get('index') or -2))
+                post_same=same_form_snapshot(best,post)
             if not post_same:
                 # The pre-fill form/control observation is not sufficient for a
                 # FULL proof. Dynamic frameworks can disable/remove/replace the
@@ -757,6 +788,7 @@ async def inspect(browser,rec,sem,slow=False):
                 return {**base,'status':'REQUIRED_SENSITIVE','code':'REQUIRED_SENSITIVE_POST_FILL',
                         'final_url':final_url,'required_sensitive':True,'required_unfillable':False,
                         'stage3_send_ready':False,'blocked_fields':post_sensitive[:6]}
+            phase('post_fill_captcha_scan')
             if await visible_captcha(active_root) or await visible_captcha(page):
                 return {**base,'status':'CAPTCHA','code':'VISIBLE_CAPTCHA_AFTER_FILL','final_url':final_url,'stage3_send_ready':False}
             # Use the post-fill control, never the pre-fill snapshot. This keeps
@@ -765,6 +797,7 @@ async def inspect(browser,rec,sem,slow=False):
             control=post['control']
             control_kind=str(post.get('control_kind') or 'DIRECT_SUBMIT')
             if control_kind=='CONFIRM_STEP':
+                phase('confirmation_step')
                 target=str(control.get('text') or '')
                 clicked=False
                 # Use a real Playwright click. DOM element.click() can be ignored by
@@ -858,13 +891,13 @@ async def inspect(browser,rec,sem,slow=False):
                     'submit_text':str(control.get('text') or '')[:300]}
         except PlaywrightTimeoutError as e:
             return {**base,'status':'TECH_DEFER','code':'BROWSER_TIMEOUT','stage3_send_ready':False,
-                    'timeout_phase':timeout_phase,'error_detail':str(e)[:300],'lane_mode':LANE_MODE}
+                    'timeout_phase':progress['phase'],'error_detail':str(e)[:300],'lane_mode':LANE_MODE}
         except Exception as e:
             return {**base,'status':'TECH_DEFER','code':'BROWSER_ERROR_'+type(e).__name__,
                     'error_detail':str(e)[:300],'lane_mode':LANE_MODE,'stage3_send_ready':False}
         finally:
             if ctx:
-                try:await ctx.close()
+                try:await asyncio.wait_for(ctx.close(),timeout=5)
                 except Exception:pass
 
 def _count_results(results):
@@ -1011,7 +1044,7 @@ async def amain():
                     break
                 batch=rows[i:i+LANE_CONCURRENCY]
                 got=await asyncio.gather(
-                    *(asyncio.wait_for(inspect(browser,r,sem),timeout=ROUTE_TIMEOUT_SECONDS) for r in batch),
+                    *(inspect_with_timeout(browser,r,sem,ROUTE_TIMEOUT_SECONDS) for r in batch),
                     return_exceptions=True,
                 )
                 for rec,out in zip(batch,got):
@@ -1065,7 +1098,7 @@ async def amain():
                         break
                     idxs=retry_idx[j:j+retry_n]
                     got=await asyncio.gather(
-                        *(asyncio.wait_for(inspect(browser,rows[i],retry_sem,slow=True),timeout=RETRY_TIMEOUT_SECONDS) for i in idxs),
+                        *(inspect_with_timeout(browser,rows[i],retry_sem,RETRY_TIMEOUT_SECONDS,slow=True) for i in idxs),
                         return_exceptions=True,
                     )
                     changed=[]
@@ -1119,8 +1152,14 @@ async def amain():
     save_state(done,{**counts,'_result_transport':transport},recent_routes)
     perf['total_ms']=round((time.monotonic()-perf_start)*1000,1)
     perf['browser_and_publish_ms']=round(perf['total_ms']-perf.get('pre_browser_total_ms',0),1)
+    timeout_phases={}
+    for result in results:
+        phase_name=result.get('timeout_phase')
+        if phase_name:
+            timeout_phases[phase_name]=timeout_phases.get(phase_name,0)+1
     print(json.dumps({'status':'PASS','tasks':len(chosen),'routes':len(rows),
       'status_counts':counts,'code_counts':codes,'code_samples':samples,
+      'timeout_phase_counts':timeout_phases,
       'recent_routes_skipped':recent_skipped,'result_transport':transport,'timings':perf}))
 
 def _run_main():
