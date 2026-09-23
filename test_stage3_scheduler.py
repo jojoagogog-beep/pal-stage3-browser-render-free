@@ -67,6 +67,14 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertEqual(m._next_lane(),'B')
         self.assertEqual(m._next_lane(),'C')
 
+    def test_fast_dom_gets_first_quantum_when_available(self):
+        with patch.object(m,'_browser_queue_lane_counts',
+                          return_value={'FAST_DOM':1,'DYNAMIC_JS':23,'IFRAME_DEEP':0,'DEEP':4}):
+            self.assertEqual(m._next_lane(),'FAST_DOM')
+        with patch.object(m,'_browser_queue_lane_counts',
+                          return_value={'FAST_DOM':0,'DYNAMIC_JS':23,'IFRAME_DEEP':0,'DEEP':4}):
+            self.assertEqual(m._next_lane(),'DYNAMIC_JS')
+
     def test_dynamic_and_deep_backlog_get_priority_but_all_lanes_remain_represented(self):
         from pathlib import Path
         src=(Path(__file__).resolve().parent/'app.py').read_text()

@@ -392,6 +392,15 @@ def _next_lane():
     now=time.time()
     counts=_browser_queue_lane_counts()
     if isinstance(counts,dict):
+        # FAST_DOM is the measured high-yield lane and processes up to three
+        # routes serially per Chromium launch. Give any queued FAST_DOM work one
+        # quantum before falling back to backlog size; this prevents a large
+        # low-yield DYNAMIC_JS backlog from starving a small high-value lane.
+        if int(counts.get('FAST_DOM') or 0)>0:
+            lane='FAST_DOM'
+            LANE_EMPTY_STREAK[lane]=0
+            LANE_SKIP_UNTIL[lane]=0.0
+            return lane
         live=[(int(n or 0),lane) for lane,n in counts.items() if int(n or 0)>0]
         if live:
             live.sort(key=lambda x:(-x[0],x[1]))
