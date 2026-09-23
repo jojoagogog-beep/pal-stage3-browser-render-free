@@ -26,5 +26,14 @@ class ConfirmControlTests(unittest.TestCase):
         xs=[{"tag":"button","type":"submit","text":"Continue"}]
         self.assertEqual(w.final_control_candidates(xs),xs)
 
+class SemanticLabelTests(unittest.TestCase):
+    def test_visible_send_label_wins_over_internal_confirm_name(self):
+        x={"tag":"input","type":"button","label":"送信する","text":"送信する submitConfirm confirmButton"}
+        self.assertEqual(w.final_control_candidates([x]),[x])
+
+    def test_visible_confirm_label_is_not_final_even_if_internal_name_contains_submit(self):
+        x={"tag":"input","type":"submit","label":"確認画面へ","text":"確認画面へ submitConfirm submitButton"}
+        self.assertEqual(w.final_control_candidates([x]),[])
+
 if __name__=="__main__":
     unittest.main()
