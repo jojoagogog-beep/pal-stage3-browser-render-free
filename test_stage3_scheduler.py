@@ -79,9 +79,9 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         # Keep exactly one live Browser route/renderer per process. FAST_DOM may
         # amortize one Chromium launch across three routes, but only serially.
         self.assertEqual(set(m.LANE_CONCURRENCY.values()), {1})
-        self.assertEqual(m.LANE_MAX_ROWS['DYNAMIC_JS'],1)
+        self.assertEqual(m.LANE_MAX_ROWS['DYNAMIC_JS'],2)
         self.assertEqual(m.LANE_MAX_ROWS['IFRAME_DEEP'],1)
-        self.assertEqual(m.LANE_MAX_ROWS['DEEP'],1)
+        self.assertEqual(m.LANE_MAX_ROWS['DEEP'],2)
         self.assertEqual(m.LANE_MAX_ROWS['FAST_DOM'],3)
         self.assertGreaterEqual(m.LANE_DEADLINE_SECONDS['FAST_DOM'],100)
 

@@ -51,12 +51,12 @@ IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECOND
 # FAST_DOM may process up to three routes *serially inside the same Chromium
 # process* so high-confidence static-FULL candidates amortize browser launch
 # overhead without increasing concurrent memory pressure. Proof/safety gates are unchanged.
-LANE_MAX_ROWS={'DYNAMIC_JS':1,'IFRAME_DEEP':1,'DEEP':1,'FAST_DOM':3}
+LANE_MAX_ROWS={'DYNAMIC_JS':2,'IFRAME_DEEP':1,'DEEP':2,'FAST_DOM':3}
 LANE_CONCURRENCY={'DYNAMIC_JS':1,'IFRAME_DEEP':1,'DEEP':1,'FAST_DOM':1}
 # The per-route budget must exceed the internal navigation + render budget.
 # Previously 16-18s wrapped a page.goto() that could itself wait 30s, making
 # OVERALL_ROUTE_TIMEOUT_OR_ERROR inevitable on otherwise valid slower sites.
-LANE_DEADLINE_SECONDS={'DYNAMIC_JS':58,'IFRAME_DEEP':58,'DEEP':52,'FAST_DOM':118}
+LANE_DEADLINE_SECONDS={'DYNAMIC_JS':96,'IFRAME_DEEP':58,'DEEP':90,'FAST_DOM':118}
 LANE_ROUTE_TIMEOUT_SECONDS={'DYNAMIC_JS':42,'IFRAME_DEEP':42,'DEEP':38,'FAST_DOM':30}
 LANE_RETRY_TIMEOUT_SECONDS={'DYNAMIC_JS':42,'IFRAME_DEEP':42,'DEEP':38,'FAST_DOM':30}
 app=Flask(__name__)
