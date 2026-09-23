@@ -55,12 +55,12 @@ def process_job(jid,td,mode,profile,premastered,duration):
             aac=td/"audio.m4a"
             run(["ffmpeg","-y","-loglevel","error","-i",str(master),"-vn","-c:a","aac","-b:a","192k","-ar","48000","-ac","2",str(aac)])
             if mode=="short":
-                vf="scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p"
-                run(["ffmpeg","-y","-loglevel","error","-loop","1","-framerate","1","-i",str(art),"-stream_loop","-1","-i",str(aac),"-t",str(duration),"-vf",vf,"-c:v","libx264","-preset","ultrafast","-crf","25","-tune","stillimage","-r","1","-c:a","copy","-shortest",str(video)])
+                vf="scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,format=yuv420p"
+                run(["ffmpeg","-y","-loglevel","error","-loop","1","-framerate","1","-i",str(art),"-stream_loop","-1","-i",str(aac),"-t",str(duration),"-vf",vf,"-c:v","libx264","-threads","1","-preset","ultrafast","-crf","24","-tune","stillimage","-r","1","-c:a","copy","-shortest",str(video)])
             else:
                 seg=td/"segment.mp4"
                 vf="scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p"
-                run(["ffmpeg","-y","-loglevel","error","-loop","1","-framerate","1","-i",str(art),"-t","60","-vf",vf,"-c:v","libx264","-preset","veryfast","-crf","26","-tune","stillimage","-r","1","-an",str(seg)])
+                run(["ffmpeg","-y","-loglevel","error","-loop","1","-framerate","1","-i",str(art),"-t","60","-vf",vf,"-c:v","libx264","-threads","1","-preset","ultrafast","-crf","25","-tune","stillimage","-r","1","-an",str(seg)])
                 run(["ffmpeg","-y","-loglevel","error","-stream_loop","-1","-i",str(seg),"-stream_loop","-1","-i",str(aac),"-t",str(duration),"-map","0:v:0","-map","1:a:0","-c","copy","-movflags","+faststart","-shortest",str(video)])
             manifest={"schema":"MOONLIT_REMOTE_MEDIA_V2","status":"PASS","mode":mode,"duration":duration,
                       "profile":profile,"premastered_input":premastered,
