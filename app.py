@@ -15,7 +15,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Primary is dual-role under one heavy-resource lock: Stage2 route verification
 # and Stage3 Browser never overlap. Shard1 remains dedicated Stage3 capacity.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
-SCHEDULER_REVISION='STAGE3_DUAL_SHARD_QUEUE_V4'
+SCHEDULER_REVISION='STAGE3_DUAL_SHARD_BACKLOG_V5'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -46,7 +46,8 @@ ACTIVE_PRIORITY_MARKETS=[]
 # restricted to the approved SuperJSONBlob host and never exposed in /health.
 ACTIVE_TASK_BLOB_URL=''
 ACTIVE_RESULT_BLOB_URL=''
-LANE_EMPTY_STREAK={lane:0 for lane in ('FAST_DOM','DYNAMIC_JS','IFRAME_DEEP','DEEP')}
+BROWSER_LANES=('FAST_DOM','DYNAMIC_JS','IFRAME_DEEP','DEEP')
+LANE_EMPTY_STREAK={lane:0 for lane in BROWSER_LANES}
 LANE_SKIP_UNTIL={lane:0.0 for lane in LANE_EMPTY_STREAK}
 LANE_EMPTY_BASE_COOLDOWN_SECONDS=max(10,min(120,int(os.environ.get('PAL_RENDER_EMPTY_LANE_COOLDOWN_SECONDS','30') or 30)))
 LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180') or 180)))
@@ -154,6 +155,62 @@ def _browser_queue_has_tasks(url=None):
     except Exception:
         return None
 
+_LANE_QUEUE_CACHE={'at':0.0,'url':'','priority':(),'shard':-1,'counts':None}
+
+def _browser_queue_lane_counts(url=None, max_age=3.0):
+    # Scheduling only: count authoritative queued Browser routes for this
+    # deterministic Render shard. Proof/safety/send contracts are untouched.
+    u=str(url or ACTIVE_TASK_BLOB_URL or os.environ.get('PAL_ROUTE_TASK_BLOB_URL','')).strip()
+    if not _valid_blob_url(u):
+        return None
+    shard_index=0 if STAGE2_PRIMARY_ROLE else 1
+    priority=tuple(ACTIVE_PRIORITY_MARKETS)
+    now=time.time()
+    cached=_LANE_QUEUE_CACHE
+    if (cached.get('url')==u and cached.get('priority')==priority
+        and int(cached.get('shard') if cached.get('shard') is not None else -1)==shard_index
+        and cached.get('counts') is not None
+        and now-float(cached.get('at') or 0)<=max(0.0,float(max_age))):
+        return dict(cached['counts'])
+    try:
+        sep='&' if '?' in u else '?'
+        req=urllib.request.Request(
+            u+sep+'_pal_lane_ts='+str(time.time_ns()),
+            headers={'User-Agent':'PAL-Render-Lane-Probe/1.0',
+                     'Accept':'application/json',
+                     'Cache-Control':'no-cache, no-store',
+                     'Pragma':'no-cache'})
+        with urllib.request.urlopen(req,timeout=4) as resp:
+            raw=resp.read(2000001)
+        if len(raw)>2000000:
+            return None
+        data=json.loads(raw.decode('utf-8','ignore'))
+        all_counts={lane:0 for lane in BROWSER_LANES}
+        priority_counts={lane:0 for lane in BROWSER_LANES}
+        for task in (data.get('tasks') or []):
+            if not isinstance(task,dict) or str(task.get('kind') or '')!='PAL_BROWSER_PREFLIGHT_TASK_V1':
+                continue
+            lane=str(task.get('lane_hint') or '').upper()
+            if lane not in all_counts:
+                continue
+            task_market=str(task.get('market') or '')
+            for rec in (task.get('routes') or []):
+                if not isinstance(rec,dict):
+                    continue
+                try: rid=int(rec.get('route_id') or 0)
+                except Exception: rid=0
+                if rid<=0 or (rid % 2)!=shard_index:
+                    continue
+                market=str(rec.get('market') or task_market)
+                all_counts[lane]+=1
+                if priority and market in priority:
+                    priority_counts[lane]+=1
+        counts=priority_counts if sum(priority_counts.values())>0 else all_counts
+        cached.update(at=now,url=u,priority=priority,shard=shard_index,counts=dict(counts))
+        return dict(counts)
+    except Exception:
+        return None
+
 def _release_idle_browser_priority():
     """Yield the shared Stage3/Stage2 heavy slot after Browser queue drains."""
     global BROWSER_DEMAND_UNTIL,LEASE_UNTIL
@@ -248,6 +305,15 @@ def _extend_lease(source):
 
 def _next_lane():
     now=time.time()
+    counts=_browser_queue_lane_counts()
+    if isinstance(counts,dict):
+        live=[(int(n or 0),lane) for lane,n in counts.items() if int(n or 0)>0]
+        if live:
+            live.sort(key=lambda x:(-x[0],x[1]))
+            lane=live[0][1]
+            LANE_EMPTY_STREAK[lane]=0
+            LANE_SKIP_UNTIL[lane]=0.0
+            return lane
     fallback=None
     fallback_until=None
     for _ in range(12):

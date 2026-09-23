@@ -138,6 +138,42 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         with patch.object(m.urllib.request,'urlopen',return_value=Resp({'tasks':[]})):
             self.assertIs(m._browser_queue_has_tasks(good),False)
 
+    def test_lane_counts_are_shard_and_priority_market_aware(self):
+        class Resp:
+            def __init__(self,obj): self.raw=json.dumps(obj).encode()
+            def __enter__(self): return self
+            def __exit__(self,*a): return False
+            def read(self,n=-1): return self.raw
+        good='https://superjsonblob.com/api/jsonBlob/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        payload={'tasks':[
+            {'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','market':'GB-EN','lane_hint':'FAST_DOM',
+             'routes':[{'route_id':100,'market':'GB-EN'}]},
+            {'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','market':'SG-EN','lane_hint':'DYNAMIC_JS',
+             'routes':[{'route_id':101,'market':'SG-EN'},{'route_id':103,'market':'SG-EN'}]},
+            {'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','market':'NZ-EN','lane_hint':'DYNAMIC_JS',
+             'routes':[{'route_id':105,'market':'NZ-EN'}]},
+        ]}
+        old_priority=list(m.ACTIVE_PRIORITY_MARKETS)
+        old_role=m.STAGE2_PRIMARY_ROLE
+        old_url=m.ACTIVE_TASK_BLOB_URL
+        old_cache=dict(m._LANE_QUEUE_CACHE)
+        try:
+            m.STAGE2_PRIMARY_ROLE=False
+            m.ACTIVE_PRIORITY_MARKETS[:]=['SG-EN']
+            m.ACTIVE_TASK_BLOB_URL=good
+            m._LANE_QUEUE_CACHE.update(at=0.0,url='',priority=(),shard=-1,counts=None)
+            with patch.object(m.urllib.request,'urlopen',return_value=Resp(payload)):
+                counts=m._browser_queue_lane_counts(good,max_age=0)
+            self.assertEqual(counts['DYNAMIC_JS'],2)
+            self.assertEqual(counts['FAST_DOM'],0)
+            with patch.object(m,'_browser_queue_lane_counts',return_value={'FAST_DOM':0,'DYNAMIC_JS':23,'IFRAME_DEEP':0,'DEEP':1}):
+                self.assertEqual(m._next_lane(),'DYNAMIC_JS')
+        finally:
+            m.ACTIVE_PRIORITY_MARKETS[:]=old_priority
+            m.STAGE2_PRIMARY_ROLE=old_role
+            m.ACTIVE_TASK_BLOB_URL=old_url
+            m._LANE_QUEUE_CACHE.clear(); m._LANE_QUEUE_CACHE.update(old_cache)
+
     def test_idle_browser_priority_releases_shared_slot_quickly(self):
         old_demand=m.BROWSER_DEMAND_UNTIL
         old_lease=m.LEASE_UNTIL
