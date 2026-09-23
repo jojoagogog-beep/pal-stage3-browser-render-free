@@ -35,6 +35,12 @@ STATE={
 LEASE_UNTIL=0.0
 PUMP_THREAD=None
 ACTIVE_PRIORITY_MARKETS=[]
+# Authenticated /wake calls may supply the current Browser task/result blob URLs.
+# This removes a fragile dependency on Render dashboard env values drifting from
+# the Mac controller's authoritative remote_transport_v2.json. Values are still
+# restricted to the approved SuperJSONBlob host and never exposed in /health.
+ACTIVE_TASK_BLOB_URL=''
+ACTIVE_RESULT_BLOB_URL=''
 LANE_EMPTY_STREAK={lane:0 for lane in ('FAST_DOM','DYNAMIC_JS','IFRAME_DEEP','DEEP')}
 LANE_SKIP_UNTIL={lane:0.0 for lane in LANE_EMPTY_STREAK}
 LANE_EMPTY_BASE_COOLDOWN_SECONDS=max(10,min(120,int(os.environ.get('PAL_RENDER_EMPTY_LANE_COOLDOWN_SECONDS','30') or 30)))
@@ -241,6 +247,10 @@ def execute_lane(lane):
         lane_deadline=int(LANE_DEADLINE_SECONDS.get(lane,90))
         lane_route_timeout=int(LANE_ROUTE_TIMEOUT_SECONDS.get(lane,24))
         lane_retry_timeout=int(LANE_RETRY_TIMEOUT_SECONDS.get(lane,lane_route_timeout))
+        if _valid_blob_url(ACTIVE_TASK_BLOB_URL):
+            env['PAL_ROUTE_TASK_BLOB_URL']=ACTIVE_TASK_BLOB_URL
+        if _valid_blob_url(ACTIVE_RESULT_BLOB_URL):
+            env['PAL_BROWSER_RESULT_BLOB_URL']=ACTIVE_RESULT_BLOB_URL
         env.update({
             'PAL_STAGE3_LANE_MODE':lane,
             'PAL_STAGE3_CONCURRENCY':str(lane_concurrency),
@@ -364,14 +374,22 @@ def background_pump():
             pass
         print(json.dumps({'event':'PUMP_STOPPED','reason':'CRASH' if crash else 'LEASE_EXPIRED'},separators=(',',':')),flush=True)
 
-def start_or_extend(source,priority_markets=None):
-    global PUMP_THREAD,ACTIVE_PRIORITY_MARKETS
+def start_or_extend(source,priority_markets=None,task_url=None,result_url=None):
+    global PUMP_THREAD,ACTIVE_PRIORITY_MARKETS,ACTIVE_TASK_BLOB_URL,ACTIVE_RESULT_BLOB_URL
     if priority_markets is not None:
         clean=[]
         for x in priority_markets:
             x=str(x or '').strip()
             if x and x not in clean: clean.append(x)
         ACTIVE_PRIORITY_MARKETS=clean[:8]
+    if task_url is not None:
+        if not _valid_blob_url(task_url):
+            return {'status':'BAD_TASK_BLOB_URL'},400
+        ACTIVE_TASK_BLOB_URL=str(task_url).strip()
+    if result_url is not None:
+        if not _valid_blob_url(result_url):
+            return {'status':'BAD_RESULT_BLOB_URL'},400
+        ACTIVE_RESULT_BLOB_URL=str(result_url).strip()
     _note_browser_demand()
     _extend_lease(source)
     if not RUN_LOCK.acquire(blocking=False):
@@ -458,11 +476,12 @@ def stage2_state():
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    worker_protocol='AWAITED_ROUTE_HANDLER_V1',
-                   resource_profile='RENDER_FREE_SHARED_LOCK_V4',
+                   resource_profile='RENDER_FREE_SHARED_LOCK_V5_DYNAMIC_BLOB',
                    exit_policy='BOUNDED_EVENT_LOOP_V1',
                    resource_owner=_resource_owner(),
                    browser_demand_seconds=round(_browser_demand_remaining(),1),
                    stage2_busy=bool(STAGE2_THREAD and STAGE2_THREAD.is_alive()),
+                   dynamic_blob_override=bool(_valid_blob_url(ACTIVE_TASK_BLOB_URL) and _valid_blob_url(ACTIVE_RESULT_BLOB_URL)),
                    lane_max_rows=LANE_MAX_ROWS,
                    lane_concurrency=LANE_CONCURRENCY,
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
@@ -487,7 +506,9 @@ def wake():
         return ('unauthorized',401)
     payload=request.get_json(silent=True) or {}
     pm=payload.get('priority_markets') if isinstance(payload,dict) else None
-    body,code=start_or_extend('MAC_WAKE',pm)
+    task_url=payload.get('task_url') if isinstance(payload,dict) else None
+    result_url=payload.get('result_url') if isinstance(payload,dict) else None
+    body,code=start_or_extend('MAC_WAKE',pm,task_url,result_url)
     return jsonify(body),code
 
 @app.post('/tick')
