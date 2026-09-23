@@ -39,16 +39,15 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         m.LANE_EMPTY_STREAK.clear(); m.LANE_EMPTY_STREAK.update(self.old_streak)
         m.LANE_SKIP_UNTIL.clear(); m.LANE_SKIP_UNTIL.update(self.old_skip)
 
-    def test_tech_defer_only_is_temporarily_cooled_down(self):
-        before=time.time()
+    def test_tech_defer_only_with_routes_keeps_lane_hot(self):
         m._record_lane_result('A',{
             'routes':4,
             'result_transport':'SUPERJSONBLOB_V1',
             'status_counts':{'TECH_DEFER':4},
             'code_counts':{'BROWSER_TIMEOUT':4},
         },200)
-        self.assertEqual(m.LANE_EMPTY_STREAK['A'],1)
-        self.assertGreater(m.LANE_SKIP_UNTIL['A'],before)
+        self.assertEqual(m.LANE_EMPTY_STREAK['A'],0)
+        self.assertEqual(m.LANE_SKIP_UNTIL['A'],0.0)
 
     def test_productive_safe_result_clears_prior_cooldown(self):
         m.LANE_EMPTY_STREAK['A']=2
@@ -68,11 +67,11 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertEqual(m._next_lane(),'B')
         self.assertEqual(m._next_lane(),'C')
 
-    def test_fast_dom_gets_majority_but_all_lanes_remain_represented(self):
+    def test_dynamic_and_deep_backlog_get_priority_but_all_lanes_remain_represented(self):
         from pathlib import Path
         src=(Path(__file__).resolve().parent/'app.py').read_text()
-        self.assertIn("'FAST_DOM','DYNAMIC_JS','FAST_DOM','IFRAME_DEEP'",src)
-        self.assertIn("'FAST_DOM','DEEP','FAST_DOM','FAST_DOM'",src)
+        self.assertIn("'DYNAMIC_JS','DEEP','DYNAMIC_JS','FAST_DOM'",src)
+        self.assertIn("'DYNAMIC_JS','DEEP','IFRAME_DEEP','FAST_DOM'",src)
 
     def test_free_plan_browser_parallelism_is_memory_safe(self):
         # Render Free still OOM-killed the service at two-way browser parallelism.

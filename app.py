@@ -15,8 +15,8 @@ TOKEN=(os.environ.get('PAL_RENDER_TOKEN','') or _secret_text('/etc/secrets/stage
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
 # every route still passes the exact same proof/safety contract.
-LANES=itertools.cycle(('FAST_DOM','DYNAMIC_JS','FAST_DOM','IFRAME_DEEP',
-                       'FAST_DOM','DEEP','FAST_DOM','FAST_DOM'))
+LANES=itertools.cycle(('DYNAMIC_JS','DEEP','DYNAMIC_JS','FAST_DOM',
+                       'DYNAMIC_JS','DEEP','IFRAME_DEEP','FAST_DOM'))
 RUN_LOCK=threading.Lock()  # shared heavy-resource lock: Stage3 Browser OR Stage2 route worker
 STAGE2_LOCK=threading.Lock()
 STAGE2_STATE_LOCK=threading.Lock()
@@ -263,17 +263,17 @@ def _record_lane_result(lane,summary,code):
     code_counts=summary.get('code_counts') or {}
     if code>=500:
         return
-    tech_defer_only=bool(status_counts) and set(map(str,status_counts.keys())) <= {'TECH_DEFER'}
+    # Any route result is useful queue progress, including TECH_DEFER:
+    # that route is checkpointed/retry-delayed and the next unique route can run.
+    # Cooling a lane after a TECH_DEFER-only batch froze large live backlogs.
     no_productive_output=(routes<=0 or transport=='NO_MESSAGES' or
-                          (not status_counts and not code_counts) or tech_defer_only)
+                          (not status_counts and not code_counts))
     if no_productive_output:
         streak=int(LANE_EMPTY_STREAK.get(lane) or 0)+1
         LANE_EMPTY_STREAK[lane]=streak
         base=LANE_EMPTY_BASE_COOLDOWN_SECONDS*(2**min(streak-1,2))
         if transport=='NO_MESSAGES':
             cooldown=max(180,min(600,base*4))
-        elif tech_defer_only:
-            cooldown=max(120,min(480,base*3))
         else:
             cooldown=max(90,min(360,base*2))
         LANE_SKIP_UNTIL[lane]=time.time()+cooldown
