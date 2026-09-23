@@ -489,10 +489,20 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             if host(final_url)!=domain:
                 return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED','final_url':final_url,'stage3_send_ready':False}
             phase('body_text')
-            text=str(await page.evaluate(
-                "() => ((document.body && document.body.innerText) || "
-                "(document.documentElement && document.documentElement.innerText) || '')"
-            ))[:180000]
+            # innerText can force a full layout flush and stall on JS-heavy pages.
+            # For the page-level prohibition/safety scan, textContent is sufficient
+            # and avoids that layout cost. Bound this step independently so one
+            # renderer cannot consume the entire route wall-clock budget here.
+            try:
+                raw_text=await asyncio.wait_for(
+                    page.locator('body').text_content(timeout=3000),
+                    timeout=4.0,
+                )
+            except Exception:
+                return {**base,'status':'TECH_DEFER','code':'BODY_TEXT_TIMEOUT',
+                        'final_url':final_url,'stage3_send_ready':False,
+                        'timeout_phase':'body_text','lane_mode':LANE_MODE}
+            text=str(raw_text or '')[:180000]
             if not text.strip():
                 return {**base,'status':'TECH_DEFER','code':'DOM_TEXT_EMPTY',
                         'final_url':final_url,'stage3_send_ready':False,
