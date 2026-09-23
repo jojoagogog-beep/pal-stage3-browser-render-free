@@ -191,6 +191,13 @@ CONSENT_GATE=re.compile(
 FINAL=re.compile(r'(この内容で送信|内容を送信|送信する|送信|send\s*(message|inquiry|enquiry)?|submit\s*(message|inquiry|enquiry|form)?)',re.I)
 NONFINAL=re.compile(r'(確認|confirm|next|次へ|preview|戻る|back|cancel|修正)',re.I)
 CONFIRM=re.compile(r'(確認画面(?:へ)?|入力内容(?:を)?確認|内容(?:を)?確認|確認(?:する|へ)?|confirm|review|next|次へ)',re.I)
+COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
+
+def is_completion_route(url):
+    try:
+        return bool(COMPLETION_PATH.search(urlsplit(str(url or '')).path or '/'))
+    except Exception:
+        return False
 
 def form_requires_transactional_consent(text):
     return bool(CONSENT_GATE.search(str(text or '')))
@@ -528,6 +535,9 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
         base=base_result(rec); rid=base['route_id'];url=str(rec.get('canonical_url') or '');domain=base['official_domain']
         if not rid or not url or not domain or host(url)!=domain:
             return {**base,'status':'TECH_DEFER','code':'INVALID_TASK','stage3_send_ready':False}
+        if is_completion_route(url):
+            return {**base,'status':'NO_SAFE_FORM','code':'COMPLETION_ROUTE_NOT_CONTACT',
+                    'final_url':url,'stage3_send_ready':False,'send_ready_proof_v2':False}
         ctx=None
         progress=progress if progress is not None else {}
         def phase(name):
@@ -701,8 +711,8 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                           if(/(?:^|[ _-])(required|req|mandatory|hissu)(?:$|[ _-])/i.test(String(dt.className||'')))
                             rowRequiredIcon=true;
                         }
-                        {const box=e.closest('.form-item-box,.form-group,.form02,.form-row,.field,.mwform-field,.contact-field');
-                          const h=box&&box.querySelector('dt,label,.form__label,.form03,.field-label,.form-label,.label');
+                        {const box=e.closest('fieldset,.form-item-box,.form-group,.form02,.form-row,.field,.mwform-field,.contact-field,.p-contact-group');
+                          const h=box&&box.querySelector('legend,dt,label,.form__label,.form03,.field-label,.form-label,.label,.p-contact-group__header');
                           if(h){
                             const ht=(h.innerText||'').trim();
                             if(!rowLabel)rowLabel=ht;

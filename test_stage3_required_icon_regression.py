@@ -13,7 +13,17 @@ class RequiredIconRegressionTests(unittest.TestCase):
         src=pathlib.Path(__file__).with_name("stage3_send_ready_worker_v1.py").read_text()
         self.assertIn(".form02",src)
         self.assertIn(".form03",src)
+        self.assertIn("fieldset",src)
+        self.assertIn(".p-contact-group__header",src)
         self.assertIn(".req,.required,.hissu",src)
+
+    def test_completion_routes_are_rejected_before_browser_work(self):
+        self.assertTrue(w.is_completion_route("https://example.com/contact/thanks"))
+        self.assertTrue(w.is_completion_route("https://example.com/contact/thank-you/"))
+        self.assertTrue(w.is_completion_route("https://example.com/contact/complete"))
+        self.assertTrue(w.is_completion_route("https://example.com/contact/success/"))
+        self.assertFalse(w.is_completion_route("https://example.com/contact"))
+        self.assertFalse(w.is_completion_route("https://example.com/success-stories"))
 
     def test_transactional_privacy_consent_gate(self):
         self.assertTrue(w.form_requires_transactional_consent(
