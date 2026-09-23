@@ -522,15 +522,20 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
 
             async def scan_root(root,frame_index):
                 try:
-                    root_html=await root.content()
-                    root_text=(await root.locator('body').inner_text())[:180000]
+                    # root.content() was unused and can serialize a very large DOM.
+                    # textContent avoids layout flushes and is enough for the
+                    # prohibition scan. Keep it independently bounded.
+                    root_text=str(await asyncio.wait_for(
+                        root.locator('body').text_content(timeout=1500),
+                        timeout=2.0,
+                    ) or '')[:180000]
                 except Exception:
-                    root_html=''; root_text=''
+                    root_text=''
                 if PROHIBIT.search(root_text):
                     return None
                 if await visible_captcha(root):
                     return None
-                forms=root.locator('form'); n=min(await forms.count(),20); best_local=None
+                forms=root.locator('form'); n=min(await forms.count(),12); best_local=None
                 root_diag={'frame_index':int(frame_index),'form_count':int(n),'evaluate_errors':0,'forms':[]}
                 if len(scan_debug)<20:
                     scan_debug.append(root_diag)
@@ -634,9 +639,30 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                         best_local=cand
                 return best_local
 
-            frame_cap=20 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else (12 if LANE_MODE=='DYNAMIC_JS' else 8)
+            # Main-frame forms dominate successful outreach. Third-party ad/chat
+            # iframes are expensive and almost never contain the target form.
+            # Scan main/same-origin frames first, then only likely form-provider
+            # frames, with a bounded cap. This changes scheduling only; every
+            # inspected form still passes the same safety/fillability contract.
+            all_roots=list(page.frames)
+            main=page.main_frame
+            same_origin=[]
+            provider=[]
+            other=[]
+            provider_re=re.compile(r'(form|contact|hubspot|jotform|typeform|wufoo|formstack|marketo|pardot|salesforce)',re.I)
+            for fr in all_roots:
+                if fr is main:
+                    continue
+                fu=str(getattr(fr,'url','') or '')
+                if host(fu)==domain:
+                    same_origin.append(fr)
+                elif provider_re.search(fu):
+                    provider.append(fr)
+                else:
+                    other.append(fr)
+            frame_cap=8 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else (6 if LANE_MODE=='DYNAMIC_JS' else 4)
+            roots=([main]+same_origin+provider+other)[:frame_cap]
             phase('form_scan')
-            roots=list(page.frames)[:frame_cap]
             best=None
             # A valid direct-submit contact form is already sufficient once the
             # page/root safety gates above have passed. Do not keep scanning every
@@ -644,7 +670,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             # entire route wall-clock budget and converting good routes into
             # OVERALL_ROUTE_TIMEOUT_OR_ERROR. Per-root timeouts are fail-closed;
             # a hung frame is skipped, never accepted.
-            per_root_timeout=6.0 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else 4.0
+            per_root_timeout=3.5 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else 2.75
             for frame_index,root in enumerate(roots):
                 try:
                     cand=await asyncio.wait_for(scan_root(root,frame_index),timeout=per_root_timeout)
