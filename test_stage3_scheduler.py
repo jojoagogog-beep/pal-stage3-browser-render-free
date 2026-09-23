@@ -158,8 +158,9 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         worker=(Path(__file__).resolve().parent/'stage3_send_ready_worker_v1.py').read_text()
         self.assertIn("if task_lane and task_lane!=LANE_MODE:",worker)
         self.assertIn("if task_lane==LANE_MODE:",worker)
-        self.assertIn("single_owner_v2.json",app)
-        self.assertIn("'PAL_STAGE3_SHARD_COUNT':'1'",app)
+        self.assertIn("dual_shard_v3.json",app)
+        self.assertIn("'PAL_STAGE3_SHARD_COUNT':'2'",app)
+        self.assertIn("'PAL_STAGE3_SHARD_INDEX':('0' if STAGE2_PRIMARY_ROLE else '1')",app)
         self.assertIn("env['PAL_BROWSER_TASK_BLOB_URL']=ACTIVE_TASK_BLOB_URL",app)
 
     def test_network_route_handler_is_awaited_not_fire_and_forget(self):

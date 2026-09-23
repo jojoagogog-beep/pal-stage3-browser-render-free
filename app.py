@@ -12,12 +12,10 @@ def _secret_text(path):
 
 TOKEN=(os.environ.get('PAL_RENDER_TOKEN','') or _secret_text('/etc/secrets/stage3_token'))
 SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
-# The two free Render services have distinct permanent roles. The primary
-# authenticated service is Stage2 route verification capacity; shard1 owns
-# Stage3 Browser cron work. This prevents Browser cron leases on the primary
-# from starving Stage2 for minutes at a time.
+# Primary is dual-role under one heavy-resource lock: Stage2 route verification
+# and Stage3 Browser never overlap. Shard1 remains dedicated Stage3 capacity.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
-SCHEDULER_REVISION='STAGE3_SINGLE_OWNER_QUEUE_V3'
+SCHEDULER_REVISION='STAGE3_DUAL_SHARD_QUEUE_V4'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -318,19 +316,18 @@ def execute_lane(lane):
             'PAL_STAGE3_RETRY_LIMIT':'0',
             'PAL_STAGE3_RECENT_ROUTE_SECONDS':'900',
             'PAL_STAGE3_RECENT_TECH_SECONDS':'600',
-            # New state namespace: older deployments incorrectly marked
-            # other-lane tasks as processed. Never import those poisoned IDs.
-            'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'_single_owner_v2.json',
+            # New topology namespace: never inherit task completion IDs from
+            # the former single-owner worker after splitting the queue 2 ways.
+            'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'_dual_shard_v3.json',
             'PAL_STAGE3_DEADLINE_EPOCH':str(int(time.time())+lane_deadline),
             'PAL_STAGE3_PRODUCER':'PAL_RENDER_STAGE3_BROWSER_V1',
-            # Role isolation leaves exactly one Stage3 Browser service
-            # (shard1). The historical two-shard worker default would process
-            # only half of each task, mark the task complete, and strand the
-            # other half forever because the former shard0 service is now
-            # dedicated to Stage2. One service therefore owns the whole proof
-            # queue; safety/proof gates are unchanged.
-            'PAL_STAGE3_SHARD_COUNT':'1',
-            'PAL_STAGE3_SHARD_INDEX':'0',
+            # Both Render services now participate in Stage3. Primary is
+            # shard 0 when its shared Stage2/Stage3 lock is available; shard1 is
+            # shard 1 continuously. Deterministic route-id sharding prevents the
+            # two services from duplicating Browser work while preserving all
+            # proof/safety gates.
+            'PAL_STAGE3_SHARD_COUNT':'2',
+            'PAL_STAGE3_SHARD_INDEX':('0' if STAGE2_PRIMARY_ROLE else '1'),
         })
         cp=subprocess.run(
             [sys.executable,str(WORKER)],env=env,text=True,
