@@ -106,14 +106,30 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         finally:
             m.BROWSER_DEMAND_UNTIL=old
 
-    def test_granted_stage2_turn_survives_new_browser_demand(self):
+    def test_granted_stage2_turn_survives_new_browser_demand_at_low_water(self):
         old_turn=m.STAGE2_TURN_UNTIL
         old_stage2=m.STAGE2_DEMAND_UNTIL
         try:
             now=time.time()
             m.STAGE2_DEMAND_UNTIL=now+120
             m.STAGE2_TURN_UNTIL=now+30
-            self.assertFalse(m._stage2_blocked_by_browser(120,True,True))
+            with patch.object(m,'_primary_browser_backlog',return_value=m.STAGE2_YIELD_MAX_BROWSER_BACKLOG):
+                self.assertFalse(m._stage2_blocked_by_browser(120,True,True))
+        finally:
+            m.STAGE2_TURN_UNTIL=old_turn
+            m.STAGE2_DEMAND_UNTIL=old_stage2
+
+    def test_deep_browser_backlog_overrides_granted_stage2_turn(self):
+        old_turn=m.STAGE2_TURN_UNTIL
+        old_stage2=m.STAGE2_DEMAND_UNTIL
+        try:
+            now=time.time()
+            m.STAGE2_DEMAND_UNTIL=now+120
+            m.STAGE2_TURN_UNTIL=now+30
+            with patch.object(m,'_primary_browser_backlog',
+                              return_value=m.STAGE2_YIELD_MAX_BROWSER_BACKLOG+1):
+                self.assertTrue(m._stage2_blocked_by_browser(120,True,True))
+                self.assertFalse(m._stage2_fairness_allowed())
         finally:
             m.STAGE2_TURN_UNTIL=old_turn
             m.STAGE2_DEMAND_UNTIL=old_stage2

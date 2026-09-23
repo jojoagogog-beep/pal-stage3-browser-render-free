@@ -34,6 +34,13 @@ STAGE2_DEMAND_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_STAGE2_DEMA
 STAGE2_TURN_LOCK=threading.Lock()
 STAGE2_TURN_UNTIL=0.0
 STAGE2_TURN_SECONDS=max(10,min(60,int(os.environ.get('PAL_RENDER_STAGE2_TURN_SECONDS','30') or 30)))
+# Primary Render is dual-role, but Stage3 Browser is the measured revenue
+# bottleneck. When shard-0 Browser backlog is deep, do not hand the only
+# Chromium-safe heavy slot to Stage2 after every Browser quantum. Stage2 still
+# has Cloudflare/remote/fallback lanes and regains this Render slot as soon as
+# Browser backlog drains to the bounded low-water mark.
+STAGE2_YIELD_MAX_BROWSER_BACKLOG=max(0,min(32,int(
+    os.environ.get('PAL_RENDER_STAGE2_YIELD_MAX_BROWSER_BACKLOG','8') or 8)))
 STAGE2_THREAD=None
 STAGE2_STATE={'status':'IDLE','at':0,'started_at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None,'workers':0,'batch':0,'priority_markets':[]}
 STATE_LOCK=threading.Lock()
@@ -140,8 +147,24 @@ def _clear_stage2_turn():
     with STAGE2_TURN_LOCK:
         STAGE2_TURN_UNTIL=0.0
 
+def _primary_browser_backlog():
+    """Authoritative queued Browser routes owned by primary/shard-0."""
+    if not STAGE2_PRIMARY_ROLE:
+        return 0
+    counts=_browser_queue_lane_counts()
+    if not isinstance(counts,dict):
+        return None
+    return sum(max(0,int(v or 0)) for v in counts.values())
+
+def _stage2_fairness_allowed():
+    backlog=_primary_browser_backlog()
+    return backlog is None or backlog<=STAGE2_YIELD_MAX_BROWSER_BACKLOG
+
 def _stage2_blocked_by_browser(browser_wait,browser_queued,pump_alive):
-    """A granted fairness turn wins exactly one shared-heavy-lane quantum."""
+    """Stage2 gets a fairness turn only after the Browser low-water mark."""
+    backlog=_primary_browser_backlog()
+    if backlog is not None and backlog>STAGE2_YIELD_MAX_BROWSER_BACKLOG:
+        return True
     if _stage2_turn_remaining()>0 and _stage2_demand_remaining()>0:
         return False
     return bool(float(browser_wait or 0)>0 or pump_alive or browser_queued is True)
@@ -531,11 +554,13 @@ def background_pump():
             # quantum, yield the lock so the next controller tick can drain a
             # bounded route batch. Stage2's own lock still prevents overlap,
             # and its completion hands priority back to queued Browser work.
-            if STAGE2_PRIMARY_ROLE and _stage2_demand_remaining()>0:
-                # Reserve the next lock acquisition for Stage2. Controller
-                # Stage2/Stage3 wakes run concurrently; merely releasing the
-                # lock let a fresh Stage3 wake win every time and starved the
-                # queued Stage2 request indefinitely.
+            if (STAGE2_PRIMARY_ROLE and _stage2_demand_remaining()>0
+                    and _stage2_fairness_allowed()):
+                # Reserve the next lock acquisition for Stage2 only after the
+                # shard-0 Browser backlog reaches its low-water mark. Under a
+                # deep Stage3 backlog, continuing Browser work is the higher
+                # yield use of this single heavy slot; Stage2 remains served by
+                # its independent external/fallback lanes.
                 _grant_stage2_turn()
                 _release_idle_browser_priority()
                 with STATE_LOCK:
