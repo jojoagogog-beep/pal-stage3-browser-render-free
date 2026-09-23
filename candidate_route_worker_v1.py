@@ -436,9 +436,11 @@ def inspect(rec):
                                  'sendability_score':initial_sendability},
               'trusted_source_id':'PAL_CANDIDATE_ROUTE_OFFLOAD_V13_CONTACT_ROUTE'}
             initial_hint_score=qscore
-            # An already-explicit start URL cannot be improved by spending more
-            # probes merely to find another equivalent route.
-            if initial_business:
+            # Stop early only when the start URL already has a strong static
+            # form. A dynamic contact/business page is valid Stage2 evidence, but
+            # continuing the same bounded search may find a much higher-yield
+            # static form and avoid an expensive low-yield Stage3 Browser pass.
+            if initial_business and initial_static and initial_sendability>=70:
                 item['route_hint']=initial_hint
                 item['pages']=pages;item['errors']=errors
                 return item
@@ -488,10 +490,12 @@ def inspect(rec):
                   'trusted_source_id':'PAL_CANDIDATE_ROUTE_OFFLOAD_V13_CONTACT_ROUTE'}
             if qscore>best_score:
                 best_score=qscore;best_hint=hint
-            # candidate_urls() is priority-sorted. The first route that satisfies
-            # the unchanged evidence contract is sufficient for Stage2; probing
-            # lower-ranked alternatives only burns latency and network budget.
-            return True
+            # A dynamic route is useful fallback evidence, but live measurements
+            # show its Stage3 FULL-proof yield is far lower than a static form.
+            # Stay inside the same bounded candidate list and keep looking for a
+            # deterministic static form; only that stronger result ends probing.
+            if static_hint and sendability>=70:
+                return True
         return False
     def bounded_candidates(sitemap=(),cap=None):
         """Keep the same probe budget while reserving explicit B2B routes."""
@@ -532,12 +536,14 @@ def inspect(rec):
 
     # Fast path: observed upstream URLs, live page links and learned paths first.
     evaluate(bounded_candidates([],LANE_DEPTH))
-    if best_hint:
+    if best_hint and best_hint.get('static_form_hint') and int(best_hint.get('static_sendability_score') or 0)>=70:
         item['route_hint']=best_hint
         item['pages']=pages;item['errors']=errors
         return item
 
-    # Slow fallback only when the direct evidence path found nothing.
+    # If the fast path found only dynamic evidence, use the existing bounded
+    # sitemap fallback to look for a stronger static form before committing the
+    # candidate to Stage3 Browser. The dynamic hint remains the fallback.
     sitemap=sitemap_contact_urls(root,domain)
     if sitemap:pages+=1
     evaluate(bounded_candidates(sitemap,max(LANE_DEPTH,4)))
