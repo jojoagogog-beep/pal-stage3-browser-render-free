@@ -1,5 +1,5 @@
 from __future__ import annotations
-import itertools, json, os, subprocess, sys, threading, time
+import itertools, json, os, subprocess, sys, threading, time, urllib.request
 from pathlib import Path
 from flask import Flask, jsonify, request
 
@@ -113,6 +113,50 @@ def _stage2_snapshot():
 def _valid_blob_url(raw):
     u=str(raw or '').strip()
     return u.startswith('https://superjsonblob.com/api/jsonBlob/') and len(u)<300
+
+def _browser_queue_has_tasks(url=None):
+    """Return True/False for the authoritative Browser queue; None on I/O error.
+
+    A MAC_WAKE must not reserve the shared free Render heavy lane when the
+    Browser queue is empty. Unknown/error remains conservative (None), so a
+    transient JSONBlob read failure never suppresses real proof work.
+    """
+    u=str(url or ACTIVE_TASK_BLOB_URL or os.environ.get('PAL_ROUTE_TASK_BLOB_URL','')).strip()
+    if not _valid_blob_url(u):
+        return None
+    try:
+        sep='&' if '?' in u else '?'
+        req=urllib.request.Request(
+            u+sep+'_pal_ts='+str(time.time_ns()),
+            headers={'User-Agent':'PAL-Render-Queue-Probe/1.0',
+                     'Accept':'application/json',
+                     'Cache-Control':'no-cache, no-store',
+                     'Pragma':'no-cache'})
+        with urllib.request.urlopen(req,timeout=4) as resp:
+            raw=resp.read(2000001)
+        if len(raw)>2000000:
+            return None
+        data=json.loads(raw.decode('utf-8','ignore'))
+        for task in (data.get('tasks') or []):
+            if not isinstance(task,dict):
+                continue
+            if str(task.get('kind') or '')!='PAL_BROWSER_PREFLIGHT_TASK_V1':
+                continue
+            if any(isinstance(r,dict) and int(r.get('route_id') or 0)>0
+                   for r in (task.get('routes') or [])):
+                return True
+        return False
+    except Exception:
+        return None
+
+def _release_idle_browser_priority():
+    """Yield the shared Stage3/Stage2 heavy slot after Browser queue drains."""
+    global BROWSER_DEMAND_UNTIL,LEASE_UNTIL
+    now=time.time()
+    with BROWSER_DEMAND_LOCK:
+        BROWSER_DEMAND_UNTIL=min(float(BROWSER_DEMAND_UNTIL),now)
+    with LEASE_LOCK:
+        LEASE_UNTIL=min(float(LEASE_UNTIL),now+2.0)
 
 def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
     global STAGE2_THREAD
@@ -350,6 +394,12 @@ def background_pump():
                 continue
             if tasks<=0 and routes<=0:
                 idle_rounds+=1
+                queued=_browser_queue_has_tasks()
+                if queued is False:
+                    _release_idle_browser_priority()
+                    with STATE_LOCK:
+                        STATE['idle_exit_reason']='NO_BROWSER_TASKS'
+                    break
                 time.sleep(IDLE_SLEEP_SECONDS if idle_rounds>=2 else 2)
             else:
                 idle_rounds=0
@@ -390,6 +440,12 @@ def start_or_extend(source,priority_markets=None,task_url=None,result_url=None):
         if not _valid_blob_url(result_url):
             return {'status':'BAD_RESULT_BLOB_URL'},400
         ACTIVE_RESULT_BLOB_URL=str(result_url).strip()
+    if source=='MAC_WAKE':
+        queued=_browser_queue_has_tasks(ACTIVE_TASK_BLOB_URL)
+        if queued is False:
+            _release_idle_browser_priority()
+            return {'status':'NO_BROWSER_TASKS','source':source,
+                    'state':_snapshot()},200
     _note_browser_demand()
     _extend_lease(source)
     if not RUN_LOCK.acquire(blocking=False):

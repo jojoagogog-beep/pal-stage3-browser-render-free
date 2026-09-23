@@ -1,8 +1,10 @@
 import itertools
+import json
 import sys
 import time
 import types
 import unittest
+from unittest.mock import patch
 
 try:
     import flask  # noqa: F401
@@ -122,6 +124,34 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertIn("'shard1' in _RENDER_SERVICE_NAME",src)
         self.assertIn("(rid % SHARD_COUNT)==SHARD_INDEX",src)
         self.assertIn("not shard_accept(rec) or not lane_accept(rec)",src)
+
+    def test_browser_queue_probe_detects_real_browser_work(self):
+        class Resp:
+            def __init__(self,obj): self.raw=json.dumps(obj).encode()
+            def __enter__(self): return self
+            def __exit__(self,*a): return False
+            def read(self,n=-1): return self.raw
+        good='https://superjsonblob.com/api/jsonBlob/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        payload={'tasks':[{'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1',
+                           'routes':[{'route_id':123}]}]}
+        with patch.object(m.urllib.request,'urlopen',return_value=Resp(payload)):
+            self.assertIs(m._browser_queue_has_tasks(good),True)
+        with patch.object(m.urllib.request,'urlopen',return_value=Resp({'tasks':[]})):
+            self.assertIs(m._browser_queue_has_tasks(good),False)
+
+    def test_idle_browser_priority_releases_shared_slot_quickly(self):
+        old_demand=m.BROWSER_DEMAND_UNTIL
+        old_lease=m.LEASE_UNTIL
+        try:
+            now=time.time()
+            m.BROWSER_DEMAND_UNTIL=now+120
+            m.LEASE_UNTIL=now+180
+            m._release_idle_browser_priority()
+            self.assertLessEqual(m.BROWSER_DEMAND_UNTIL,time.time()+0.5)
+            self.assertLessEqual(m.LEASE_UNTIL,time.time()+2.5)
+        finally:
+            m.BROWSER_DEMAND_UNTIL=old_demand
+            m.LEASE_UNTIL=old_lease
 
     def test_network_route_handler_is_awaited_not_fire_and_forget(self):
         # Fire-and-forget Playwright route tasks kept asyncio.run() alive long
