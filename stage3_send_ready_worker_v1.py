@@ -181,9 +181,30 @@ def www_fallback_url(u,official_domain):
     except Exception:
         return ''
 
+STATE_TOPOLOGY={
+    'schema':'PAL_STAGE3_WORKER_STATE_V2',
+    'shard_count':SHARD_COUNT,
+    'shard_index':SHARD_INDEX,
+}
 def load_state():
-    try:return json.loads(STATE.read_text())
-    except Exception:return {}
+    try:
+        data=json.loads(STATE.read_text())
+    except Exception:
+        return {}
+    # processed_task_ids are only valid for the shard topology that produced
+    # them. Reusing a two-shard done-set after role isolation moved Stage3 onto
+    # a single service caused every surviving task to be skipped forever.
+    # Preserve recent per-route retry evidence, but invalidate task completion
+    # bookkeeping whenever topology/schema changes.
+    topo=data.get('topology') if isinstance(data,dict) else None
+    if topo!=STATE_TOPOLOGY:
+        return {
+            'recent_route_results':dict(data.get('recent_route_results') or {}) if isinstance(data,dict) else {},
+            'processed_task_ids':[],
+            'last_status_counts':dict(data.get('last_status_counts') or {}) if isinstance(data,dict) else {},
+            'topology_reset_from':topo,
+        }
+    return data if isinstance(data,dict) else {}
 
 def save_state(done,counts,recent_routes=None):
     now_epoch=int(time.time())
@@ -195,6 +216,7 @@ def save_state(done,counts,recent_routes=None):
         recent=dict(sorted(recent.items(),key=lambda kv:int(kv[1].get('at') or 0))[-2000:])
     STATE.write_text(json.dumps({
       'updated_at_epoch':now_epoch,
+      'topology':STATE_TOPOLOGY,
       'processed_task_ids':list(done)[-1000:],
       'recent_route_results':recent,
       'last_status_counts':counts,
