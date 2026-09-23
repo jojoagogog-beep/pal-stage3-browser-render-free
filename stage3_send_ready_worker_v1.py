@@ -541,46 +541,52 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     return None
                 if await visible_captcha(root):
                     return None
-                forms=root.locator('form'); n=min(await forms.count(),12); best_local=None
+                # Collect metadata for all bounded forms in one browser-side DOM
+                # evaluation. The previous implementation made one Playwright
+                # round-trip per form (up to 12) and dominated route latency.
+                # The same visibility/required/control semantics are preserved.
+                try:
+                    metas=await asyncio.wait_for(root.evaluate("""() => {
+                      const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.disabled&&e.type!=='hidden'&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
+                      const desc=e=>{const id=e.id||'',lab=id?document.querySelector('label[for="'+CSS.escape(id)+'"]'):null;
+                        const labels=e.labels?[...e.labels].map(x=>x.innerText||'').join(' '):'';
+                        const tr=e.closest('tr'),cell=e.closest('th,td');let rowLabel='';
+                        if(tr&&cell){const cells=[...tr.children],idx=cells.indexOf(cell);
+                          rowLabel=((idx>0?cells.slice(0,idx).map(c=>c.innerText||'').join(' '):'')||(tr.querySelector('th')?.innerText||'')).trim();}
+                        const dd=e.closest('dd');
+                        if(!rowLabel&&dd&&dd.previousElementSibling&&dd.previousElementSibling.tagName==='DT')
+                          rowLabel=(dd.previousElementSibling.innerText||'').trim();
+                        if(!rowLabel){const box=e.closest('.form-item-box,.form-group,.form-row,.field');
+                          const h=box&&box.querySelector('dt,.field-label,.form-label,.label');
+                          if(h)rowLabel=(h.innerText||'').trim();}
+                        const w=e.closest('label,.form-group,.form-row,.field,li,dl,dd,dt,p')||e.parentElement;
+                        let local=((lab&&lab.innerText)||labels||((w&&w.innerText)||'')).trim();if(local.length>300)local='';
+                        const self=[e.name||'',id,e.placeholder||'',e.getAttribute('aria-label')||'',(lab&&lab.innerText)||'',labels].join(' ');
+                        return {self:self.slice(0,500),local:local.slice(0,500),rowLabel:rowLabel.slice(0,500)};
+                      };
+                      return [...document.forms].slice(0,12).map((f,index)=>{
+                        const allFields=[...f.querySelectorAll('input,textarea,select')];
+                        const fs=allFields.map((e,all_i)=>({e,all_i})).filter(x=>vis(x.e)).map(({e,all_i})=>{const d=desc(e);
+                          const reqText=(d.self+' '+d.rowLabel+' '+d.local);
+                          const req=!!e.required||e.getAttribute('aria-required')==='true'||/(?:^|\\s)required(?:\\s|$)/i.test(String(e.className||''))||/[※＊*]\\s*$/.test(d.rowLabel)||(/(必須|required|mandatory)/i.test(reqText)&&!/(任意|optional)/i.test(reqText));
+                          return {i:all_i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),name:e.name||'',id:e.id||'',required:req,
+                            checked:!!e.checked,value:e.value||'',self_desc:d.self.slice(0,500),local_desc:d.local.slice(0,500),row_label:d.rowLabel.slice(0,500),
+                            desc:(d.self+' '+d.rowLabel+' '+d.local).slice(0,900)}});
+                        const controls=[...f.querySelectorAll('button,input[type=submit],input[type=button],input[type=image]')].filter(vis)
+                          .map((e,i)=>({i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),
+                            text:((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.name||'')+' '+(e.id||'')).trim()}));
+                        return {index,text:(f.innerText||'').slice(0,12000),action:f.action||'',method:(f.method||'get').toLowerCase(),
+                          ident:((f.id||'')+' '+(f.className||'')+' '+(f.action||'')).slice(0,1000),fields:fs,controls};
+                      });
+                    }"""),timeout=3.0)
+                except Exception:
+                    metas=[]
+                n=len(metas); best_local=None
                 root_diag={'frame_index':int(frame_index),'form_count':int(n),'evaluate_errors':0,'forms':[]}
                 if len(scan_debug)<20:
                     scan_debug.append(root_diag)
-                for i in range(n):
-                    form=forms.nth(i)
-                    try:
-                        meta=await form.evaluate("""f=>{
-                          const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.disabled&&e.type!=='hidden'&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
-                          const desc=e=>{const id=e.id||'',lab=id?document.querySelector('label[for="'+CSS.escape(id)+'"]'):null;
-                            const labels=e.labels?[...e.labels].map(x=>x.innerText||'').join(' '):'';
-                            const tr=e.closest('tr'),cell=e.closest('th,td');let rowLabel='';
-                            if(tr&&cell){const cells=[...tr.children],idx=cells.indexOf(cell);
-                              rowLabel=((idx>0?cells.slice(0,idx).map(c=>c.innerText||'').join(' '):'')||(tr.querySelector('th')?.innerText||'')).trim();}
-                            const dd=e.closest('dd');
-                            if(!rowLabel&&dd&&dd.previousElementSibling&&dd.previousElementSibling.tagName==='DT')
-                              rowLabel=(dd.previousElementSibling.innerText||'').trim();
-                            if(!rowLabel){const box=e.closest('.form-item-box,.form-group,.form-row,.field');
-                              const h=box&&box.querySelector('dt,.field-label,.form-label,.label');
-                              if(h)rowLabel=(h.innerText||'').trim();}
-                            const w=e.closest('label,.form-group,.form-row,.field,li,dl,dd,dt,p')||e.parentElement;
-                            let local=((lab&&lab.innerText)||labels||((w&&w.innerText)||'')).trim();if(local.length>300)local='';
-                            const self=[e.name||'',id,e.placeholder||'',e.getAttribute('aria-label')||'',(lab&&lab.innerText)||'',labels].join(' ');
-                            return {self:self.slice(0,500),local:local.slice(0,500),rowLabel:rowLabel.slice(0,500)};
-                          };
-                          const allFields=[...f.querySelectorAll('input,textarea,select')];
-                          const fs=allFields.map((e,all_i)=>({e,all_i})).filter(x=>vis(x.e)).map(({e,all_i})=>{const d=desc(e);
-                            const reqText=(d.self+' '+d.rowLabel+' '+d.local);
-                            const req=!!e.required||e.getAttribute('aria-required')==='true'||/(?:^|\\s)required(?:\\s|$)/i.test(String(e.className||''))||/[※＊*]\\s*$/.test(d.rowLabel)||(/(必須|required|mandatory)/i.test(reqText)&&!/(任意|optional)/i.test(reqText));
-                            return {i:all_i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),name:e.name||'',id:e.id||'',required:req,
-                              checked:!!e.checked,value:e.value||'',self_desc:d.self.slice(0,500),local_desc:d.local.slice(0,500),row_label:d.rowLabel.slice(0,500),
-                              desc:(d.self+' '+d.rowLabel+' '+d.local).slice(0,900)}});
-                          const controls=[...f.querySelectorAll('button,input[type=submit],input[type=button],input[type=image]')].filter(vis)
-                            .map((e,i)=>({i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),
-                              text:((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.name||'')+' '+(e.id||'')).trim()}));
-                          return {text:(f.innerText||'').slice(0,12000),action:f.action||'',method:(f.method||'get').toLowerCase(),ident:((f.id||'')+' '+(f.className||'')+' '+(f.action||'')).slice(0,1000),fields:fs,controls};
-                        }""")
-                    except Exception:
-                        root_diag['evaluate_errors']=int(root_diag.get('evaluate_errors') or 0)+1
-                        continue
+                for meta in metas:
+                    i=int(meta.get('index') or 0)
                     blob=(str(meta.get('text') or '')+' '+str(meta.get('ident') or '')).lower()
                     ident_blob=str(meta.get('ident') or '').lower()
                     form_text=str(meta.get('text') or '').lower()
@@ -667,7 +673,13 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 else:
                     other.append(fr)
             frame_cap=8 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else (6 if LANE_MODE=='DYNAMIC_JS' else 4)
-            roots=([main]+same_origin+provider+other)[:frame_cap]
+            if LANE_MODE in {'IFRAME_DEEP','DEEP'}:
+                roots=([main]+same_origin+provider+other)[:frame_cap]
+            else:
+                # Unrelated third-party frames are ads/chat/analytics in normal
+                # lanes. If the target form truly lives there, the explicit
+                # IFRAME_DEEP/DEEP lane remains responsible for it.
+                roots=([main]+same_origin+provider)[:frame_cap]
             phase('form_scan')
             best=None
             # A valid direct-submit contact form is already sufficient once the
