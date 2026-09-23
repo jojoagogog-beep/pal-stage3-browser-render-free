@@ -30,6 +30,19 @@ CONTACT=re.compile(r'(contact|inquir|enquir|get.{0,4}in.{0,4}touch|request.{0,8}
 ROUTE_CONTACT=re.compile(r'(?:^|[\s/_-])(contact(?:[\s/_-]*us)?|contactus|inquiry|enquiry|get[\s_-]*in[\s_-]*touch|request[\s_-]*(?:a[\s_-]*)?quote|rfq|business[\s_-]*contact|sales[\s_-]*contact|commercial[\s_-]*contact)(?:$|[\s/_-])',re.I)
 VENDOR_ONLY=re.compile(r'(?:^|[\s/_-])(vendor|vendors|supplier|suppliers|procurement|partnership|partnerships)(?:$|[\s/_-])',re.I)
 BUSINESS=re.compile(r'(sales|commercial|vendor|supplier|procurement|partnership|partner|proposal|business.{0,8}(?:inquiry|enquiry|contact)|corporate.{0,8}(?:inquiry|enquiry|contact)|work.{0,4}with.{0,4}us|request.{0,8}(?:a.{0,3})?quote)',re.I)
+ACTIONABLE_BUSINESS=re.compile(
+    r'(business[-_/ ]?(?:inquir(?:y|ies)|enquir(?:y|ies))|'
+    r'sales[-_/ ]?(?:inquir(?:y|ies)|enquir(?:y|ies))|(?:sales|business|commercial)[-_/ ]+contact|'
+    r'(?:talk[-_/ ]?to|contact[-_/ ]?)(?:our[-_/ ]+)?sales|'
+    r'request[-_/ ]+(?:a[-_/ ]+)?quote|quote[-_/ ]+request|get[-_/ ]+(?:a[-_/ ]+)?quote|'
+    r'(?:request|schedule|book)[-_/ ]+(?:a[-_/ ]+)?demo|'
+    r'(?:schedule|book|request)[-_/ ]+(?:a[-_/ ]+)?(?:free[-_/ ]+)?consult(?:ation|ing[-_/ ]+call)|'
+    r'(?:book|schedule)[-_/ ]+(?:a[-_/ ]+)?(?:discovery[-_/ ]+|intro(?:ductory)?[-_/ ]+)?call|'
+    r'submit[-_/ ]+(?:a[-_/ ]+)?proposal|work[-_/ ]?with[-_/ ]?us|'
+    r'become[-_/ ]?a[-_/ ]?(?:partner|vendor|supplier)|'
+    r'(?:discuss|tell[-_/ ]+us[-_/ ]+about)[-_ /]+(?:your[-_/ ]+|a[-_/ ]+)?project|'
+    r'project[-_/ ]+(?:inquir|enquir)|new[-_/ ]+business[-_/ ]+(?:inquir|enquir|opportunit)|'
+    r'free[-_/ ]+consultation|rfq|rfp)',re.I)
 BAD=re.compile(r'(career|jobs?|recruit|press|media|news|blog|support|help|privacy|security|complaint|investor)',re.I)
 FORM=re.compile(r'(hubspot|marketo|pardot|formstack|gravityforms|wpforms|jotform|salesforce)',re.I)
 PRIORITY_MARKETS={x.strip() for x in os.environ.get('PAL_ROUTE_PRIORITY_MARKETS','').split(',') if x.strip()}
@@ -364,7 +377,7 @@ def inspect(rec):
     initial_route_text=initial_path.replace('-',' ').replace('_',' ')
     initial_contact=bool(ROUTE_CONTACT.search(' '+initial_route_text+' '))
     initial_vendor_only=bool(VENDOR_ONLY.search(' '+initial_route_text+' ')) and not initial_contact
-    initial_business=bool(BUSINESS.search(initial_route_text))
+    initial_business=bool(ACTIONABLE_BUSINESS.search(initial_route_text))
     require_explicit_business=bool(rec.get('require_explicit_business_channel'))
     initial_sendability=static_sendability_score(doc) if initial_static else 0
     initial_rejected=url_key(root) in rejected_keys
@@ -414,7 +427,7 @@ def inspect(rec):
             route_blob=(str(label)+' '+urlsplit(fu).path.replace('-',' ').replace('_',' '))
             strong_contact=bool(ROUTE_CONTACT.search(' '+route_blob+' '))
             vendor_only=bool(VENDOR_ONLY.search(' '+route_blob+' ')) and not strong_contact
-            explicit_business=bool(BUSINESS.search(route_blob))
+            explicit_business=bool(ACTIONABLE_BUSINESS.search(route_blob))
             if not (static_hint or provider_hint or strong_contact):continue
             sendability=static_sendability_score(fd) if static_hint else 0
             qscore=route_quality_score(fu,label,static_hint,provider_hint,strong_contact,explicit_business,rec.get('preferred_contact_paths') or [])
@@ -440,8 +453,39 @@ def inspect(rec):
             # lower-ranked alternatives only burns latency and network budget.
             return True
         return False
+    def bounded_candidates(sitemap=(),cap=None):
+        """Keep the same probe budget, but reserve US probes for explicit B2B routes."""
+        cap=max(1,int(cap or LANE_DEPTH))
+        ranked=candidate_urls(root,doc,domain,rec.get('preferred_contact_paths') or [],sitemap,observed)
+        chosen=list(ranked[:cap])
+        if not require_explicit_business:
+            return chosen
+        def explicit_contact(cand):
+            _,u,label=cand
+            blob=(str(label)+' '+urlsplit(str(u or '')).path.replace('-',' ').replace('_',' '))
+            return bool(ACTIONABLE_BUSINESS.search(blob) and ROUTE_CONTACT.search(' '+blob+' '))
+        # A generic /contact page can otherwise consume the entire four-probe
+        # budget before /sales/contact, /business/inquiry or /request-a-quote.
+        # Replace lower-value generic probes rather than increasing page count.
+        explicit=[x for x in ranked if explicit_contact(x)]
+        reserve=min(2,cap)
+        for cand in explicit[:reserve]:
+            if cand in chosen:
+                continue
+            replace=None
+            for idx in range(len(chosen)-1,-1,-1):
+                if not explicit_contact(chosen[idx]):
+                    replace=idx
+                    break
+            if replace is None:
+                if len(chosen)<cap:
+                    chosen.append(cand)
+                continue
+            chosen[replace]=cand
+        return chosen[:cap]
+
     # Fast path: observed upstream URLs, live page links and learned paths first.
-    evaluate(candidate_urls(root,doc,domain,rec.get('preferred_contact_paths') or [],[],observed)[:LANE_DEPTH])
+    evaluate(bounded_candidates([],LANE_DEPTH))
     if best_hint:
         item['route_hint']=best_hint
         item['pages']=pages;item['errors']=errors
@@ -450,7 +494,7 @@ def inspect(rec):
     # Slow fallback only when the direct evidence path found nothing.
     sitemap=sitemap_contact_urls(root,domain)
     if sitemap:pages+=1
-    evaluate(candidate_urls(root,doc,domain,rec.get('preferred_contact_paths') or [],sitemap,observed)[:max(LANE_DEPTH,4)])
+    evaluate(bounded_candidates(sitemap,max(LANE_DEPTH,4)))
     if best_hint:item['route_hint']=best_hint
     item['pages']=pages;item['errors']=errors
     return item
