@@ -32,6 +32,8 @@ SAFE_CHOICE=re.compile(r'(general|other|business|partnership|collaboration|inqui
 UNSAFE_CHOICE=re.compile(r'(job|career|employment|採用|求人|support|customer service|technical support|newsletter|marketing|subscribe|個人|患者|student)',re.I)
 CONSENT_OK=re.compile(r'(privacy|terms|policy|個人情報|プライバシー|規約|同意)',re.I)
 CONSENT_BAD=re.compile(r'(newsletter|marketing|promotional|メルマガ|広告|案内を受け取|subscribe)',re.I)
+COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
+CONFIRM_PATH=re.compile(r'/(?:confirm|confirmation|review|check)(?:/|$)',re.I)
 
 def host(u):return (urlsplit(str(u or '')).hostname or '').lower().removeprefix('www.')
 def _get(u):
@@ -154,6 +156,18 @@ async def control(form,kind='final'):
  if len(semantic)==1:return semantic[0]
  if not semantic and len(fallback)==1:return fallback[0]
  return None
+async def unique_final_on_page(page):
+ hits=[]
+ try:n=min(await page.locator('form').count(),20)
+ except:return None
+ for fi in range(n):
+  try:
+   f=page.locator('form').nth(fi)
+   if not await f.is_visible():continue
+   c=await control(f,'final')
+   if c:hits.append((fi,c))
+  except:continue
+ return hits[0] if len(hits)==1 else None
 async def click_and_evidence(page,loc,message,email,before_text):
  mutations=[];responses=[];resp_objs=[]
  def on_req(req):
@@ -164,11 +178,15 @@ async def click_and_evidence(page,loc,message,email,before_text):
   try:
    req=resp.request
    if str(req.method).upper() not in {'GET','HEAD','OPTIONS'}:
-    m=_payload_match(req.post_data or '',message,email);responses.append({'method':req.method,'url':req.url[:500],'status':int(resp.status),'matches_form_payload':m});
+    m=_payload_match(req.post_data or '',message,email);hdrs=resp.headers or {};responses.append({'method':req.method,'url':req.url[:500],'status':int(resp.status),'location':str(hdrs.get('location') or '')[:500],'matches_form_payload':m});
     if m:resp_objs.append(resp)
   except:pass
  page.on('request',on_req);page.on('response',on_resp);click_error=''
- try:await loc.click(timeout=5000);await page.wait_for_timeout(1800)
+ try:
+  await loc.click(timeout=5000)
+  try:await page.wait_for_load_state('domcontentloaded',timeout=5000)
+  except:pass
+  await page.wait_for_timeout(1500)
  except Exception as e:click_error=type(e).__name__+':'+str(e)[:180]
  finally:
   try:page.remove_listener('request',on_req);page.remove_listener('response',on_resp)
@@ -184,8 +202,15 @@ async def click_and_evidence(page,loc,message,email,before_text):
  new_success=bool(SUCCESS.search(after) and (not SUCCESS.search(before_text) or SUCCESS.search(after).group(0)!=SUCCESS.search(before_text).group(0)))
  validation=bool(FAIL.search(after))
  corr2xx=any(x['matches_form_payload'] and 200<=x['status']<300 for x in responses);corr4xx=any(x['matches_form_payload'] and x['status'] in {400,401,403,404,405,410,415,422} for x in responses)
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
- if corr2xx and (provider_success or new_success) and not ev['server_not_sent']:return 'SENT_CONFIRMED',ev
+ def pathmatch(rx,u):
+  try:return bool(rx.search(urlsplit(str(u or '')).path or '/'))
+  except:return False
+ corr3xx=[x for x in responses if x['matches_form_payload'] and 300<=x['status']<400]
+ redirect_completion=any(pathmatch(COMPLETION_PATH,x.get('location')) for x in corr3xx)
+ redirect_confirm=any(pathmatch(CONFIRM_PATH,x.get('location')) for x in corr3xx)
+ final_completion=pathmatch(COMPLETION_PATH,page.url)
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_redirect_completion':redirect_completion,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ if (corr2xx and (provider_success or new_success) or redirect_completion or final_completion) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):
@@ -229,23 +254,39 @@ async def process_task(browser,t):
   if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':fill}
   await page.wait_for_timeout(250)
   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_AFTER_FILL','evidence':{'pre_submit':True}}
-  final=await control(form,'final');confirm=await control(form,'confirm') if final is None else None
-  if final is None and confirm is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_CONTROL_NOT_FOUND','evidence':{'pre_submit':True}}
-  if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'form_index':fi,'final_control':bool(final),'confirm_control':bool(confirm)}}
+  try:form_action=str(await form.get_attribute('action') or '')
+  except:form_action=''
+  confirm_action=bool(re.search(r'(confirm|review|check|kakunin|確認)',unquote_plus(form_action),re.I))
+  confirm=await control(form,'confirm');final=await control(form,'final')
+  if confirm_action and confirm is None and final is not None:
+   confirm=final;final=None
+  elif confirm is not None:
+   final=None
+  if final is None and confirm is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_CONTROL_NOT_FOUND','evidence':{'pre_submit':True,'form_action':form_action[:500]}}
+  if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'form_index':fi,'form_action':form_action[:500],'final_control':bool(final),'confirm_control':bool(confirm)}}
   before=txt
   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True,'control_recheck':True}}
   if confirm is not None:
-   outcome,ev=await click_and_evidence(page,confirm[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
-   if outcome=='SENT_CONFIRMED':return {**out,'outcome':outcome,'reason':'CONFIRM_CLICK_SENT','evidence':ev}
-   if outcome=='AMBIGUOUS_HOLD':return {**out,'outcome':outcome,'reason':'CONFIRM_AMBIGUOUS','evidence':ev}
-   # confirmed not sent: allow exactly one final click only if a unique final control now exists.
-   try:form=page.locator('form').nth(fi)
-   except:return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'FORM_GONE_AFTER_CONFIRM','evidence':ev}
-   final=await control(form,'final')
-   if final is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'CONFIRM_NO_FINAL_CONTROL','evidence':ev}
-   try:before=' '.join((await page.locator('body').inner_text(timeout=2000)).split())
-   except:before=''
-   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**ev,'control_recheck':True}}
+   outcome,cev=await click_and_evidence(page,confirm[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
+   if outcome=='SENT_CONFIRMED':return {**out,'outcome':outcome,'reason':'CONFIRM_CLICK_SENT','evidence':cev}
+   if outcome=='CONFIRMED_NOT_SENT':return {**out,'outcome':outcome,'reason':'CONFIRM_REJECTED','evidence':cev}
+   corr_redirect=any(x.get('matches_form_payload') and 300<=int(x.get('status') or 0)<400 for x in (cev.get('network_responses') or []))
+   if not (confirm_action and corr_redirect and not cev.get('validation_error') and not cev.get('server_not_sent')):
+    return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'CONFIRM_AMBIGUOUS','evidence':cev}
+   await page.wait_for_timeout(500)
+   final_forms=[]
+   for j in range(min(await page.locator('form').count(),12)):
+    f2=page.locator('form').nth(j)
+    try:
+     if not await f2.is_visible():continue
+     c2=await control(f2,'final')
+     if c2 is not None:final_forms.append((f2,c2))
+    except:continue
+   if len(final_forms)!=1:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'CONFIRM_NO_UNIQUE_FINAL_CONTROL','evidence':{**cev,'confirm_navigation':True,'final_candidates':len(final_forms)}}
+   form,final=final_forms[0]
+   before=await body_text(page,3500) or ''
+   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_ON_CONFIRM_PAGE','evidence':{**cev,'confirm_navigation':True}}
+   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**cev,'control_recheck':True}}
   outcome,ev=await click_and_evidence(page,final[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
   return {**out,'outcome':outcome,'reason':'FINAL_CLICK_'+outcome,'evidence':ev}
  except Exception as e:
