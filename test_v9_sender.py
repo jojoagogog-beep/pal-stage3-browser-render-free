@@ -30,6 +30,36 @@ class V9SenderSafetyTests(unittest.TestCase):
             self.assertNotIn('task_url',snap)
         finally:
             app.V9_SEND_PENDING=old
+
+    def test_duplicate_wake_while_running_is_idempotent(self):
+        class Alive:
+            def is_alive(self): return True
+        old=(app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING)
+        try:
+            app.TOKEN='test-token';app.STAGE2_PRIMARY_ROLE=False;app.V9_SEND_THREAD=Alive();app.V9_SEND_PENDING=None
+            c=app.app.test_client()
+            r=c.post('/v9-send-wake',headers={'x-pal-token':'test-token'},json={
+                'task_url':'https://superjsonblob.com/api/jsonBlob/a',
+                'result_url':'https://superjsonblob.com/api/jsonBlob/b','mode':'SHADOW'})
+            self.assertEqual(r.status_code,202)
+            self.assertEqual(r.get_json().get('status'),'ALREADY_RUNNING')
+            self.assertIsNone(app.V9_SEND_PENDING)
+        finally:
+            app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING=old
+
+    def test_duplicate_queued_wake_does_not_replace_pending(self):
+        task='https://superjsonblob.com/api/jsonBlob/a';result='https://superjsonblob.com/api/jsonBlob/b'
+        pending={'task_url':task,'result_url':result,'mode':'SHADOW','queued_at':123}
+        old=(app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING)
+        try:
+            app.TOKEN='test-token';app.STAGE2_PRIMARY_ROLE=False;app.V9_SEND_THREAD=None;app.V9_SEND_PENDING=dict(pending)
+            c=app.app.test_client()
+            r=c.post('/v9-send-wake',headers={'x-pal-token':'test-token'},json={'task_url':task,'result_url':result,'mode':'SHADOW'})
+            self.assertEqual(r.status_code,202)
+            self.assertEqual(r.get_json().get('status'),'QUEUED')
+            self.assertEqual(app.V9_SEND_PENDING,pending)
+        finally:
+            app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING=old
     def test_production_waits_for_submit_barrier(self):
         src=Path('v9_send_worker.py').read_text()
         self.assertIn('await_submit_barrier',src)

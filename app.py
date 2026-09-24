@@ -921,6 +921,17 @@ def v9_send_wake():
         return jsonify(status='PRODUCTION_LOCKED'),403
     if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
         return jsonify(status='BAD_BLOB_URL'),400
+    # Idempotent wake: a retry while the same sender is already running must
+    # never enqueue a second sender turn for the same task blob.
+    if V9_SEND_THREAD and V9_SEND_THREAD.is_alive():
+        return jsonify(status='ALREADY_RUNNING',mode=mode,resource_owner=_resource_owner(),
+                       v9_send_state=_v9_send_snapshot()),202
+    with V9_SEND_PENDING_LOCK:
+        pending=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else None
+    if pending and pending.get('task_url')==task_url and pending.get('result_url')==result_url and pending.get('mode')==mode:
+        return jsonify(status='QUEUED',mode=mode,resource_owner=_resource_owner(),
+                       v9_sender_pending=_v9_send_pending_snapshot(),
+                       v9_send_state=_v9_send_snapshot(),state=_snapshot()),202
     _queue_v9_send(task_url,result_url,mode)
     if _start_pending_v9_send():
         return jsonify(status='STARTED',mode=mode,v9_send_state=_v9_send_snapshot()),202
