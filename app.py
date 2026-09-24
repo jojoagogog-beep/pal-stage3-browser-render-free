@@ -464,12 +464,14 @@ def _v9_send_pending_snapshot():
     if not p:
         return None
     # Blob URLs are intentionally not exposed in health/state.
-    return {'mode':p.get('mode'),'queued_at':p.get('queued_at')}
+    out={'mode':p.get('mode'),'queued_at':p.get('queued_at')}
+    if p.get('generation') is not None: out['generation']=p.get('generation')
+    return out
 
-def _queue_v9_send(task_url,result_url,mode):
+def _queue_v9_send(task_url,result_url,mode,generation=0,authority=''):
     global V9_SEND_PENDING
     with V9_SEND_PENDING_LOCK:
-        V9_SEND_PENDING={'task_url':task_url,'result_url':result_url,'mode':mode,'queued_at':int(time.time())}
+        V9_SEND_PENDING={'task_url':task_url,'result_url':result_url,'mode':mode,'generation':int(generation or 0),'authority':str(authority or ''),'queued_at':int(time.time())}
     with V9_SEND_STATE_LOCK:
         if not (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()):
             V9_SEND_STATE.update(status='QUEUED',at=int(time.time()))
@@ -482,6 +484,13 @@ def _start_pending_v9_send():
         pending=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else None
     if not pending or (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()):
         return False
+    if str(pending.get('mode') or '').upper()=='PRODUCTION':
+        if str(pending.get('authority') or '')!='GLOBAL_LEDGER_DO' or not _v9_production_authorized(int(pending.get('generation') or 0)):
+            with V9_SEND_PENDING_LOCK:
+                if V9_SEND_PENDING is not None: V9_SEND_PENDING=None
+            with V9_SEND_STATE_LOCK:
+                V9_SEND_STATE.update(status='CONTROL_REVOKED',at=int(time.time()),returncode=None)
+            return False
     if not RUN_LOCK.acquire(blocking=False):
         return False
     try:
@@ -493,7 +502,7 @@ def _start_pending_v9_send():
             V9_SEND_STATE.update(status='RUNNING',at=int(time.time()),returncode=None)
         V9_SEND_THREAD=threading.Thread(
             target=_v9_send_runner,
-            args=(pending['task_url'],pending['result_url'],pending['mode']),
+            args=(pending['task_url'],pending['result_url'],pending['mode'],int(pending.get('generation') or 0)),
             name='pal-v9-send',daemon=True)
         V9_SEND_THREAD.start()
         return True
@@ -505,12 +514,12 @@ def _start_pending_v9_send():
         except RuntimeError: pass
         raise
 
-def _v9_send_runner(task_url,result_url,mode):
+def _v9_send_runner(task_url,result_url,mode,generation=0):
     global V9_SEND_THREAD
     started=time.time()
     try:
         env=os.environ.copy()
-        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode})
+        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health')})
         cp=subprocess.run([sys.executable,str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=220)
         summary=_worker_summary(cp.stdout or '')
         completed={'status':'PASS' if cp.returncode==0 else 'ERROR','at':int(time.time()),
@@ -1029,9 +1038,8 @@ def v9_send_wake():
     if mode not in {'SHADOW','PRODUCTION'}:
         return jsonify(status='BAD_MODE'),400
     if mode=='PRODUCTION':
-        env_enabled=os.environ.get('PAL_V9_SEND_PRODUCTION_ENABLED','false').lower() in {'1','true','yes','on'}
         cloud_authorized=(str(payload.get('production_authority') or '')=='GLOBAL_LEDGER_DO' and _v9_production_authorized(generation))
-        if not (env_enabled or cloud_authorized):
+        if not cloud_authorized:
             return jsonify(status='PRODUCTION_LOCKED',cloud_authorized=False),403
     if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
         return jsonify(status='BAD_BLOB_URL'),400
@@ -1042,11 +1050,11 @@ def v9_send_wake():
                        v9_send_state=_v9_send_snapshot()),202
     with V9_SEND_PENDING_LOCK:
         pending=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else None
-    if pending and pending.get('task_url')==task_url and pending.get('result_url')==result_url and pending.get('mode')==mode:
+    if pending and pending.get('task_url')==task_url and pending.get('result_url')==result_url and pending.get('mode')==mode and int(pending.get('generation') or 0)==generation:
         return jsonify(status='QUEUED',mode=mode,resource_owner=_resource_owner(),
                        v9_sender_pending=_v9_send_pending_snapshot(),
                        v9_send_state=_v9_send_snapshot(),state=_snapshot()),202
-    _queue_v9_send(task_url,result_url,mode)
+    _queue_v9_send(task_url,result_url,mode,generation,str(payload.get('production_authority') or ''))
     if _start_pending_v9_send():
         return jsonify(status='STARTED',mode=mode,v9_send_state=_v9_send_snapshot()),202
     return jsonify(status='QUEUED',mode=mode,resource_owner=_resource_owner(),

@@ -8,6 +8,8 @@ from playwright.async_api import async_playwright
 TASK_URL=os.environ.get('PAL_V9_SEND_TASK_BLOB_URL','').strip()
 RESULT_URL=os.environ.get('PAL_V9_SEND_RESULT_BLOB_URL','').strip()
 MODE=os.environ.get('PAL_V9_SEND_MODE','SHADOW').strip().upper()
+CONTROL_URL=os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health').strip()
+CUTOVER_GENERATION=int(os.environ.get('PAL_V9_CUTOVER_GENERATION','0') or 0)
 UA='Practical-AI-Lab-V9-Sender/1.0'
 MAX_TASKS_PER_TURN=4
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
@@ -34,6 +36,13 @@ def _get(u):
  r=requests.get(u,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':int(time.time())},timeout=20);r.raise_for_status();return r.json()
 def _put(u,o):
  r=requests.put(u,json=o,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=20);r.raise_for_status()
+def _production_control_ok():
+ if MODE!='PRODUCTION':return True
+ if CUTOVER_GENERATION<=0:return False
+ try:
+  r=requests.get(CONTROL_URL,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=8);r.raise_for_status();d=r.json();cut=d.get('cutover') or {};led=cut.get('ledger') or {}
+  return bool(d.get('service')=='PAL_B2B_V9_PLANE' and d.get('authority')=='GLOBAL_LEDGER_DO' and d.get('mode')=='PRODUCTION' and d.get('ledger_mode')=='PRODUCTION' and d.get('external_send_enabled') is True and int(cut.get('generation') or 0)==CUTOVER_GENERATION and int(led.get('generation') or 0)==CUTOVER_GENERATION and led.get('mode')=='PRODUCTION' and led.get('history_sync_complete') is True and led.get('legacy_writer_disabled') is True and led.get('production_unlock') is True)
+ except Exception:return False
 def _payload_match(payload,message,email):
  if not payload:return False
  vals=[str(payload),unquote_plus(str(payload))]
@@ -173,6 +182,7 @@ async def process_task(browser,t):
  out={'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time())}
  if not out['token_id'] or not t.get('canonical_url') or not t.get('message_body'):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'INVALID_TASK','evidence':{'pre_submit':True}}
  if MODE=='PRODUCTION' and t.get('submit_started') is not True:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_BARRIER_MISSING','evidence':{'pre_submit':True}}
+ if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True,'control_recheck':True}}
  url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(url));ctx=None
  try:
   ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(8000)
@@ -193,6 +203,7 @@ async def process_task(browser,t):
   if final is None and confirm is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_CONTROL_NOT_FOUND','evidence':{'pre_submit':True}}
   if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'form_index':fi,'final_control':bool(final),'confirm_control':bool(confirm)}}
   before=txt
+  if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True,'control_recheck':True}}
   if confirm is not None:
    outcome,ev=await click_and_evidence(page,confirm[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
    if outcome=='SENT_CONFIRMED':return {**out,'outcome':outcome,'reason':'CONFIRM_CLICK_SENT','evidence':ev}
@@ -204,6 +215,7 @@ async def process_task(browser,t):
    if final is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'CONFIRM_NO_FINAL_CONTROL','evidence':ev}
    try:before=' '.join((await page.locator('body').inner_text(timeout=2000)).split())
    except:before=''
+   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**ev,'control_recheck':True}}
   outcome,ev=await click_and_evidence(page,final[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
   return {**out,'outcome':outcome,'reason':'FINAL_CLICK_'+outcome,'evidence':ev}
  except Exception as e:
