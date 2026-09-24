@@ -75,6 +75,16 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
                           return_value={'FAST_DOM':0,'DYNAMIC_JS':23,'IFRAME_DEEP':0,'DEEP':4}):
             self.assertEqual(m._next_lane(),'DYNAMIC_JS')
 
+    def test_fast_dom_cooldown_yields_to_live_dynamic_backlog(self):
+        old=float(m.LANE_SKIP_UNTIL.get('FAST_DOM') or 0)
+        try:
+            m.LANE_SKIP_UNTIL['FAST_DOM']=time.time()+120
+            with patch.object(m,'_browser_queue_lane_counts',
+                              return_value={'FAST_DOM':3,'DYNAMIC_JS':23,'IFRAME_DEEP':0,'DEEP':4}):
+                self.assertEqual(m._next_lane(),'DYNAMIC_JS')
+        finally:
+            m.LANE_SKIP_UNTIL['FAST_DOM']=old
+
     def test_dynamic_and_deep_backlog_get_priority_but_all_lanes_remain_represented(self):
         from pathlib import Path
         src=(Path(__file__).resolve().parent/'app.py').read_text()

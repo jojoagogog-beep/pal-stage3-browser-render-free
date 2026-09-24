@@ -78,11 +78,19 @@ def shard_accept(rec):
     except Exception: return False
     return rid>0 and route_shard(rid,SHARD_COUNT)==SHARD_INDEX
 
+def task_eligible_routes(task):
+    return [
+        rec for rec in (task.get('routes') or [])
+        if isinstance(rec,dict) and lane_accept(rec)
+    ]
+
+def task_has_shard_work(task):
+    return any(shard_accept(rec) and lane_accept(rec)
+               for rec in (task.get('routes') or []) if isinstance(rec,dict))
+
 def task_lane_quality(task):
     vals=[]
-    for rec in (task.get('routes') or []):
-        if not lane_accept(rec):
-            continue
+    for rec in task_eligible_routes(task):
         try:
             vals.append(int(rec.get('stage3_quality') or 0))
         except Exception:
@@ -90,20 +98,46 @@ def task_lane_quality(task):
     return max(vals) if vals else -1
 
 def task_admitted_count(task):
-    return sum(
-        int(rec.get('admitted_rank') or 0)
-        for rec in (task.get('routes') or [])
-        if lane_accept(rec)
-    )
+    return sum(int(rec.get('admitted_rank') or 0) for rec in task_eligible_routes(task))
+
+def route_yield_class(rec):
+    if bool(rec.get('prior_rendered_success')):
+        return 0
+    if int(rec.get('admitted_rank') or 0)>0:
+        return 1
+    rq=int(rec.get('stage2_route_quality') or 0)
+    sendq=int(rec.get('stage2_static_sendability') or 0)
+    if rq>=85 or sendq>=70:
+        return 2
+    static_status=str(rec.get('static_status') or '')
+    static_quality=int(rec.get('static_quality') or 0)
+    form_shape=int(rec.get('form_shape_signal') or 0)
+    expansion=int(rec.get('expansion_signal') or 0)
+    if (static_status=='STATIC_FORM_CANDIDATE'
+            or form_shape>0 or expansion>0 or static_quality>=60):
+        return 3
+    if int(rec.get('retry_rank') or 0)>=2:
+        return 4
+    return 5
 
 def route_work_rank(rec):
     return (
         market_rank(rec),
-        0 if bool(rec.get('prior_rendered_success')) else 1,
-        0 if int(rec.get('admitted_rank') or 0)>0 else 1,
+        route_yield_class(rec),
+        1 if bool(rec.get('force_rendered')) else 0,
+        -int(rec.get('stage2_route_quality') or 0),
+        -int(rec.get('stage2_static_sendability') or 0),
+        -int(rec.get('static_quality') or 0),
         -int(rec.get('stage3_quality') or 0),
         int(rec.get('route_id') or 0),
     )
+
+def task_best_route_rank(task):
+    rows=task_eligible_routes(task)
+    if not rows:
+        return (999,1,0,0,0,0,10**12)
+    # Market rank is handled by the round-robin outer scheduler.
+    return min(route_work_rank(r)[1:] for r in rows)
 
 def effective_work_deadline(deadline,route_timeout,now=None):
     if deadline is None:
@@ -146,17 +180,13 @@ def rank_pending_tasks(pending,priority_markets):
     other=[t for t in pending if _task_market(t) not in pset]
     other=[m for _,m in sorted(
         enumerate(other),
-        key=lambda im:(-task_lane_quality(im[1]),task_market_rank(im[1]),im[0]),
+        key=lambda im:(task_best_route_rank(im[1]),task_market_rank(im[1]),im[0]),
     )]
     by_market={}
     for idx,t in enumerate(priority):
         by_market.setdefault(_task_market(t),[]).append((idx,t))
     for m in by_market:
-        by_market[m].sort(key=lambda im:(
-            -task_admitted_count(im[1]),
-            -task_lane_quality(im[1]),
-            im[0],
-        ))
+        by_market[m].sort(key=lambda im:(task_best_route_rank(im[1]),im[0]))
     cycle=[m for m in priority_markets if m in by_market]
     cycle.extend(m for m in by_market if m not in cycle)
     lists=[[t for _,t in by_market[m]] for m in cycle]
@@ -1346,6 +1376,11 @@ async def amain():
     raw_tasks=task_messages()
     perf['task_fetch_ms']=round((time.monotonic()-perf_fetch)*1000,1)
     pending=[m for m in raw_tasks if str(m.get('task_id') or '') not in done]
+    # Remove tasks that have no route this exact shard/lane can execute. Ranking
+    # them ahead of real work caused primary/shard0 to spend whole Browser
+    # quanta returning tasks=0/routes=0 while shard1-owned work sat in the same
+    # shared task blob.
+    pending=[m for m in pending if task_has_shard_work(m)]
     # All PRIORITY_MARKETS are currently sendable and must not starve one
     # another within this worker's bounded lease -- see rank_pending_tasks().
     pending=rank_pending_tasks(pending,PRIORITY_MARKETS)

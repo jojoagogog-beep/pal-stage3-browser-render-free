@@ -140,6 +140,67 @@ class RankPendingTasksTests(unittest.TestCase):
         got=sorted([high,admitted],key=w.route_work_rank)
         self.assertEqual(got[0]['route_id'],174,got)
 
+    def test_static_evidence_outranks_generic_fresh_route(self):
+        static={'route_id':3018,'market':'JP-JA','admitted_rank':0,
+                'stage3_quality':100,'prior_rendered_success':False,
+                'retry_rank':1,'stage2_route_quality':75,
+                'stage2_static_sendability':0,'static_status':'STATIC_FORM_CANDIDATE',
+                'static_quality':70,'form_shape_signal':1,'expansion_signal':0,
+                'force_rendered':False}
+        fresh={'route_id':12642,'market':'JP-JA','admitted_rank':0,
+               'stage3_quality':99999,'prior_rendered_success':False,
+               'retry_rank':2,'stage2_route_quality':75,
+               'stage2_static_sendability':0,'static_status':'DYNAMIC_HINT_CANDIDATE',
+               'static_quality':0,'form_shape_signal':0,'expansion_signal':0,
+               'force_rendered':False}
+        got=sorted([fresh,static],key=w.route_work_rank)
+        self.assertEqual(got[0]['route_id'],3018,got)
+
+    def test_task_has_shard_work_filters_foreign_shard_only_task(self):
+        old_count,old_index,old_lane=w.SHARD_COUNT,w.SHARD_INDEX,w.LANE_MODE
+        try:
+            w.SHARD_COUNT=2
+            w.SHARD_INDEX=0
+            w.LANE_MODE='DYNAMIC_JS'
+            owned=next(r for r in range(100,400) if w.route_shard(r,2)==0)
+            foreign=next(r for r in range(100,400) if w.route_shard(r,2)==1)
+            base={'market':'JP-JA','static_status':'DYNAMIC_HINT_CANDIDATE',
+                  'stage3_quality':1,'admitted_rank':0}
+            self.assertTrue(w.task_has_shard_work({'routes':[dict(base,route_id=owned)]}))
+            self.assertFalse(w.task_has_shard_work({'routes':[dict(base,route_id=foreign)]}))
+        finally:
+            w.SHARD_COUNT=old_count
+            w.SHARD_INDEX=old_index
+            w.LANE_MODE=old_lane
+
+    def test_route_yield_class_orders_admitted_before_generic_high_signal(self):
+        admitted={'route_id':174,'admitted_rank':1,'stage2_route_quality':0,
+                  'stage2_static_sendability':0,'retry_rank':1,
+                  'static_status':'DYNAMIC_HINT_CANDIDATE'}
+        high={'route_id':677,'admitted_rank':0,'stage2_route_quality':90,
+              'stage2_static_sendability':80,'retry_rank':2,
+              'static_status':'DYNAMIC_HINT_CANDIDATE'}
+        generic={'route_id':999,'admitted_rank':0,'stage2_route_quality':75,
+                 'stage2_static_sendability':0,'retry_rank':2,
+                 'static_status':'DYNAMIC_HINT_CANDIDATE'}
+        self.assertLess(w.route_yield_class(admitted),w.route_yield_class(high))
+        self.assertLess(w.route_yield_class(high),w.route_yield_class(generic))
+
+    def test_task_has_shard_work_filters_other_shard_and_other_lane(self):
+        old_count,old_index,old_lane=w.SHARD_COUNT,w.SHARD_INDEX,w.LANE_MODE
+        try:
+            w.SHARD_COUNT=2; w.SHARD_INDEX=1; w.LANE_MODE='DYNAMIC_JS'
+            own=next(r for r in range(1,500) if w.route_shard(r,2)==1)
+            other=next(r for r in range(1,500) if w.route_shard(r,2)==0)
+            self.assertTrue(w.task_has_shard_work({'routes':[
+                {'route_id':own,'static_status':'DYNAMIC_HINT_CANDIDATE'}]}))
+            self.assertFalse(w.task_has_shard_work({'routes':[
+                {'route_id':other,'static_status':'DYNAMIC_HINT_CANDIDATE'}]}))
+            self.assertFalse(w.task_has_shard_work({'routes':[
+                {'route_id':own,'static_status':'STATIC_FORM_CANDIDATE'}]}))
+        finally:
+            w.SHARD_COUNT=old_count; w.SHARD_INDEX=old_index; w.LANE_MODE=old_lane
+
     def test_priority_order_still_wins_the_first_pick_each_round(self):
         pending=[_task('SG-EN',i) for i in range(2)]+[_task('GB-EN',i) for i in range(2)]
         ranked=w.rank_pending_tasks(pending,['SG-EN','GB-EN'])

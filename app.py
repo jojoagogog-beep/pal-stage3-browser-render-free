@@ -396,12 +396,13 @@ def _next_lane():
         # routes serially per Chromium launch. Give any queued FAST_DOM work one
         # quantum before falling back to backlog size; this prevents a large
         # low-yield DYNAMIC_JS backlog from starving a small high-value lane.
-        if int(counts.get('FAST_DOM') or 0)>0:
+        if (int(counts.get('FAST_DOM') or 0)>0
+                and float(LANE_SKIP_UNTIL.get('FAST_DOM') or 0)<=now):
             lane='FAST_DOM'
             LANE_EMPTY_STREAK[lane]=0
-            LANE_SKIP_UNTIL[lane]=0.0
             return lane
-        live=[(int(n or 0),lane) for lane,n in counts.items() if int(n or 0)>0]
+        live=[(int(n or 0),lane) for lane,n in counts.items()
+              if int(n or 0)>0 and float(LANE_SKIP_UNTIL.get(lane) or 0)<=now]
         if live:
             live.sort(key=lambda x:(-x[0],x[1]))
             lane=live[0][1]
