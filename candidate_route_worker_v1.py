@@ -3,7 +3,7 @@
 # blob512 e2e trigger 1789695148758
 # stage2-stage3 queue refresh 2026-09-19 v2
 from __future__ import annotations
-import concurrent.futures, html, json, os, re, subprocess, time, urllib.request
+import concurrent.futures, hashlib, html, json, os, re, subprocess, time, urllib.request
 try:
     import requests
 except Exception:
@@ -108,6 +108,72 @@ def static_sendability_score(doc):
         if re.search(r'(contact|inquir|enquir|お問い合わせ|問合せ|相談|business|sales)',form,re.I):score+=10
         best=max(best,score)
     return min(90,best)
+
+def _html_attr(tag,name):
+    m=re.search(r'\b'+re.escape(name)+r'\s*=\s*(?:["\']([^"\']*)["\']|([^\s>]+))',str(tag or ''),re.I)
+    return html.unescape((m.group(1) if m and m.group(1) is not None else (m.group(2) if m else '')) or '').strip()
+
+def strict_static_form_proof(doc,page_url,contact_intent=False):
+    """Return V9 FULL static proof only for deterministic, directly sendable forms.
+
+    This deliberately rejects uncertain required controls. The live sender still
+    re-checks domain, prohibition text, CAPTCHA and field requirements before any
+    click, so this proof removes redundant Browser preflight rather than safety.
+    """
+    raw=str(doc or '')
+    if not contact_intent or not raw or CAPTCHA.search(raw) or PROHIBIT.search(clean(raw)[:160000]):
+        return None
+    page_host=host(page_url)
+    if not page_host:return None
+    for form in re.findall(r'<form\b.*?</form>',raw,re.I|re.S)[:12]:
+        if re.search(r'(search|newsletter|subscribe|login|career|recruit|comment|review)',form,re.I):continue
+        opener=re.search(r'<form\b[^>]*>',form,re.I|re.S)
+        if not opener or not re.search(r"\bmethod\s*=\s*[\"']?post\b",opener.group(0),re.I):continue
+        action=_html_attr(opener.group(0),'action')
+        if action:
+            try:
+                ah=host(urljoin(page_url,action))
+            except Exception:ah=''
+            if not ah or ah!=page_host:continue
+        # Direct send only. A pure confirmation/next control stays on Browser.
+        controls=[]
+        for m in re.finditer(r'<button\b([^>]*)>(.*?)</button>|<input\b([^>]*)>',form,re.I|re.S):
+            tag=m.group(0); typ=_html_attr(tag,'type').lower(); txt=clean((m.group(2) or '')+' '+_html_attr(tag,'value')+' '+_html_attr(tag,'aria-label'))
+            if (tag.lower().startswith('<button') and typ in ('','submit')) or (tag.lower().startswith('<input') and typ=='submit'):
+                controls.append(txt)
+        direct=[x for x in controls if re.search(r'(send|submit|送信(?:する)?|問い合わせ(?:る)?|問合せ(?:る)?)',x,re.I) and not re.search(r'^(確認|confirm|review|next|次へ)$',x,re.I)]
+        if len(direct)!=1:continue
+        schema=[]; has_email=False;has_message=False;required_sensitive=False;required_unfillable=False
+        for m in re.finditer(r'<(input|textarea|select)\b[^>]*>',form,re.I|re.S):
+            tag=m.group(0); kind=m.group(1).lower(); typ=(_html_attr(tag,'type') or kind).lower();
+            if typ in {'hidden','submit','button','image','reset'}:continue
+            name=_html_attr(tag,'name');fid=_html_attr(tag,'id');ph=_html_attr(tag,'placeholder');aria=_html_attr(tag,'aria-label')
+            desc=' '.join(x for x in (name,fid,ph,aria) if x).strip(); req=bool(re.search(r'\brequired\b',tag,re.I) or _html_attr(tag,'aria-required').lower()=='true')
+            role=''
+            if typ=='email' or re.search(r'(e-?mail|メール)',desc,re.I):role='email';has_email=True
+            elif kind=='textarea' or re.search(r'(message|inquir|enquir|comment|description|内容|詳細|用件)',desc,re.I):role='message';has_message=True
+            elif re.search(r'(company|organization|organisation|会社|法人|企業)',desc,re.I):role='company'
+            elif re.search(r'(full.?name|contact.?name|your.?name|氏名|お名前|担当者|(^|[_-])name($|[_-]))',desc,re.I):role='name'
+            elif re.search(r'(subject|件名|title)',desc,re.I):role='subject'
+            elif typ=='url' or re.search(r'(website|web.?site|url|サイト)',desc,re.I):role='url'
+            sensitive=bool(SENSITIVE_FIELD.search(desc) or typ in {'tel','file','password','date','datetime-local'})
+            if req and sensitive:required_sensitive=True
+            if req and not sensitive:
+                if typ=='checkbox':
+                    if not re.search(r'(privacy|terms|policy|consent|agree|同意|個人情報|プライバシ|規約)',desc,re.I):required_unfillable=True
+                elif typ=='radio' or kind=='select':required_unfillable=True
+                elif role not in {'email','message','company','name','subject','url'}:required_unfillable=True
+            schema.append({'id':fid,'name':name,'tag':kind,'type':typ,'required':req,'role':role,'desc':desc[:240]})
+        if not has_email or not has_message or required_sensitive or required_unfillable:continue
+        normalized=re.sub(r'\s+',' ',form).strip()
+        return {
+            'proof_contract':'V9_STATIC_FULL_SEND_READY_V1','proof_version':'STAGE3_FULL_SEND_READY_V3','proof_source':'RENDER_STAGE2_STATIC_DOM_V9',
+            'stage3_send_ready':True,'send_ready_proof_v2':True,'required_fillable':True,'business_contact_form':True,
+            'required_sensitive':False,'required_unfillable':False,'captcha_present':False,'sales_prohibited':False,'control_kind':'DIRECT_SUBMIT',
+            'form_fingerprint':hashlib.sha256(normalized.encode('utf-8','ignore')).hexdigest(),'field_schema':schema,'form_action':action or page_url,
+            'final_url':page_url,'submit_text':direct[0][:120]
+        }
+    return None
 
 def fetch(u,timeout=4,max_bytes=600000):
     marker='__PAL_HTTP_META__'
@@ -439,6 +505,9 @@ def inspect(rec):
                                  'contact_intent':initial_contact,'captcha_absent':True,'sales_prohibited_absent':True,
                                  'sendability_score':initial_sendability},
               'trusted_source_id':'PAL_CANDIDATE_ROUTE_OFFLOAD_V13_CONTACT_ROUTE'}
+            if initial_static and initial_sendability>=70:
+                strict_proof=strict_static_form_proof(doc,root,initial_contact)
+                if strict_proof:initial_hint['strict_static_proof']=strict_proof
             initial_hint_score=qscore
             # Stop early only when the start URL already has a strong static
             # form. A dynamic contact/business page is valid Stage2 evidence, but
