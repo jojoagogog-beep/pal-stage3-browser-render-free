@@ -14,6 +14,11 @@ class RoleSeparationTests(unittest.TestCase):
         self.assertNotIn("status='STAGE2_PRIMARY_RESERVED'",s)
         self.assertIn('start_or_extend',s)
 
+    def test_primary_cron_wake_uses_shared_stage3_path(self):
+        s=function_source('cron_wake')
+        self.assertNotIn("status='STAGE2_PRIMARY_IDLE'",s)
+        self.assertIn("start_or_extend('EXTERNAL_CRON')",s)
+
     def test_primary_rejects_stage3_sync_tick(self):
         s=function_source('tick')
         self.assertIn('if STAGE2_PRIMARY_ROLE',s)

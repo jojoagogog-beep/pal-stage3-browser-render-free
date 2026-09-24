@@ -776,9 +776,6 @@ def state():
 
 @app.post('/cron-wake-v1')
 def cron_wake():
-    if STAGE2_PRIMARY_ROLE:
-        return jsonify(status='STAGE2_PRIMARY_IDLE',
-                       service_role='STAGE2_PRIMARY'),200
     body,code=start_or_extend('EXTERNAL_CRON')
     return jsonify(body),code
 
