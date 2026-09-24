@@ -15,7 +15,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Primary is dual-role under one heavy-resource lock: Stage2 route verification
 # and Stage3 Browser never overlap. Shard1 remains dedicated Stage3 capacity.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
-SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V6'
+SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V7'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -39,8 +39,8 @@ STAGE2_TURN_SECONDS=max(10,min(60,int(os.environ.get('PAL_RENDER_STAGE2_TURN_SEC
 # Chromium-safe heavy slot to Stage2 after every Browser quantum. Stage2 still
 # has Cloudflare/remote/fallback lanes and regains this Render slot as soon as
 # Browser backlog drains to the bounded low-water mark.
-STAGE2_YIELD_MAX_BROWSER_BACKLOG=max(0,min(32,int(
-    os.environ.get('PAL_RENDER_STAGE2_YIELD_MAX_BROWSER_BACKLOG','8') or 8)))
+STAGE2_YIELD_MAX_BROWSER_BACKLOG=max(0,min(4096,int(
+    os.environ.get('PAL_RENDER_STAGE2_YIELD_MAX_BROWSER_BACKLOG','1024') or 1024)))
 STAGE2_THREAD=None
 STAGE2_STATE={'status':'IDLE','at':0,'started_at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None,'workers':0,'batch':0,'priority_markets':[]}
 STATE_LOCK=threading.Lock()
