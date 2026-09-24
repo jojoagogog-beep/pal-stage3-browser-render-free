@@ -51,5 +51,14 @@ class RequiredIconRegressionTests(unittest.TestCase):
         self.assertIsNone(w.safe_consent_radio_choice(marketing))
         self.assertIsNone(w.safe_consent_radio_choice(negative))
 
+    def test_hidden_custom_choice_proxy_contract_is_present(self):
+        src=pathlib.Path(__file__).with_name("stage3_send_ready_worker_v1.py").read_text()
+        self.assertIn("choiceProxyVisible",src)
+        self.assertIn("vis(x.e)||choiceProxyVisible(x.e)",src)
+        self.assertIn("async def safe_choice_check",src)
+        self.assertIn("ancestor::label[1]",src)
+        self.assertIn("await safe_choice_check(form,choice_loc,pick)",src)
+        self.assertIn("await safe_choice_check(form,loc,row)",src)
+
 if __name__=="__main__":
     unittest.main()
