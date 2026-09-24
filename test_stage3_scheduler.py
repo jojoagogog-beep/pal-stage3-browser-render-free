@@ -155,6 +155,18 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
             m.STAGE2_TURN_UNTIL=old_turn
             m.STAGE2_DEMAND_UNTIL=old_stage2
 
+    def test_idle_primary_is_not_blocked_by_queued_browser_backlog_alone(self):
+        old_turn=m.STAGE2_TURN_UNTIL
+        old_stage2=m.STAGE2_DEMAND_UNTIL
+        try:
+            m.STAGE2_TURN_UNTIL=0.0
+            m.STAGE2_DEMAND_UNTIL=time.time()+120
+            with patch.object(m,'_primary_browser_backlog',return_value=min(48,m.STAGE2_YIELD_MAX_BROWSER_BACKLOG)):
+                self.assertFalse(m._stage2_blocked_by_browser(0,True,False))
+        finally:
+            m.STAGE2_TURN_UNTIL=old_turn
+            m.STAGE2_DEMAND_UNTIL=old_stage2
+
     def test_browser_keeps_priority_without_fairness_grant(self):
         old_turn=m.STAGE2_TURN_UNTIL
         old_stage2=m.STAGE2_DEMAND_UNTIL

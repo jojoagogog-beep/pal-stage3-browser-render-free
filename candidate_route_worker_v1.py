@@ -1,3 +1,5 @@
+# PAL_REPAIR_OWNER=RENDER_BROWSER | Cross-lane edits prohibited; use published interfaces/contracts.
+# PAL_REPAIR_PROTOCOL_V2=GLOBAL_SINGLE_WRITER | CLAIM_LANE=RENDER_BROWSER before edit; ACCEPT_LANE after tests.
 # blob512 e2e trigger 1789695148758
 # stage2-stage3 queue refresh 2026-09-19 v2
 from __future__ import annotations
@@ -27,6 +29,7 @@ SITEMAP_ROOT_LIMIT=max(1,min(5,int(os.environ.get('PAL_CANDIDATE_ROUTE_SITEMAP_R
 SITEMAP_CHILD_LIMIT=max(0,min(8,int(os.environ.get('PAL_CANDIDATE_ROUTE_SITEMAP_CHILDREN','8') or 8)))
 UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140 Safari/537.36'
 BLOB_TIMEOUT_SECONDS=12
+CHECKPOINT_ROWS=max(8,min(32,int(os.environ.get('PAL_CANDIDATE_ROUTE_CHECKPOINT_ROWS','16') or 16)))
 CONTACT=re.compile(r'(contact|inquir|enquir|get.{0,4}in.{0,4}touch|request.{0,8}(?:a.{0,3})?quote|quotation|sales|commercial|vendor|supplier|procurement|partnership|proposal|お問い合わせ|問合せ|相談)',re.I)
 ROUTE_CONTACT=re.compile(r'(?:^|[\s/_-])(contact(?:[\s/_-]*us)?|contactus|inquiry|enquiry|get[\s_-]*in[\s_-]*touch|request[\s_-]*(?:a[\s_-]*)?quote|rfq|business[\s_-]*contact|sales[\s_-]*contact|commercial[\s_-]*contact)(?:$|[\s/_-])',re.I)
 VENDOR_ONLY=re.compile(r'(?:^|[\s/_-])(vendor|vendors|supplier|suppliers|procurement|partnership|partnerships)(?:$|[\s/_-])',re.I)
@@ -619,18 +622,18 @@ def main():
     transport=('SUPERJSONBLOB_V1' if RESULT_BLOB else 'NO_RESULTS')
     publish_ok=True;durable_results=0;incremental_enabled=True
     if rows:
-        # Persist completed inspections every 32 rows instead of waiting for the
-        # slowest site in the entire 128-row batch. The parent Render process has
-        # a hard runtime ceiling; without incremental durability a timeout after
-        # 100+ successful inspections discarded every result from that run.
+        # Persist completed inspections in small bounded chunks instead of
+        # waiting for the slowest site in the whole batch. Sixteen rows keeps
+        # result visibility smooth while remaining cheap enough for the blob
+        # transport and parent Render runtime ceiling.
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(LANE_WORKERS,len(rows))) as ex:
             futures=[ex.submit(safe_inspect,rec) for rec in rows]
             for fut in concurrent.futures.as_completed(futures):
                 results.append(fut.result())
-                if incremental_enabled and len(results)-durable_results>=32:
-                    chunk=results[durable_results:durable_results+32]
+                if incremental_enabled and len(results)-durable_results>=CHECKPOINT_ROWS:
+                    chunk=results[durable_results:durable_results+CHECKPOINT_ROWS]
                     msg={'kind':'PAL_CANDIDATE_ROUTE_BATCH_V2','run_id':run_id,
-                         'batch_index':durable_results//32,'items':chunk,
+                         'batch_index':durable_results//CHECKPOINT_ROWS,'items':chunk,
                          'task_ids':task_ids,'last_seen_epoch':int(time.time())}
                     transport,ok=publish_messages([msg])
                     if ok:
@@ -640,9 +643,9 @@ def main():
                         # final publish. Never checkpoint tasks on a failed write.
                         incremental_enabled=False;publish_ok=False
     final_msgs=[]
-    for i in range(durable_results,len(results),32):
+    for i in range(durable_results,len(results),CHECKPOINT_ROWS):
         final_msgs.append({'kind':'PAL_CANDIDATE_ROUTE_BATCH_V2','run_id':run_id,
-              'batch_index':i//32,'items':results[i:i+32],
+              'batch_index':i//CHECKPOINT_ROWS,'items':results[i:i+CHECKPOINT_ROWS],
               'task_ids':task_ids,'last_seen_epoch':int(time.time())})
     # DONE is emitted only for tasks fully represented inside this run's batch.
     # A truncated final task remains retryable, preventing silent candidate loss.

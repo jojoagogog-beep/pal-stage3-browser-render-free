@@ -1,3 +1,5 @@
+# PAL_REPAIR_OWNER=RENDER_BROWSER | Cross-lane edits prohibited; use published interfaces/contracts.
+# PAL_REPAIR_PROTOCOL_V2=GLOBAL_SINGLE_WRITER | CLAIM_LANE=RENDER_BROWSER before edit; ACCEPT_LANE after tests.
 from __future__ import annotations
 import hashlib, itertools, json, os, subprocess, sys, threading, time, urllib.request
 from pathlib import Path
@@ -15,7 +17,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Primary is dual-role under one heavy-resource lock: Stage2 route verification
 # and Stage3 Browser never overlap. Shard1 remains dedicated Stage3 capacity.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
-SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V8'
+SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V9'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -167,7 +169,10 @@ def _stage2_blocked_by_browser(browser_wait,browser_queued,pump_alive):
         return True
     if _stage2_turn_remaining()>0 and _stage2_demand_remaining()>0:
         return False
-    return bool(float(browser_wait or 0)>0 or pump_alive or browser_queued is True)
+    # A queued Browser backlog alone must not reserve the shared primary slot
+    # while Browser is idle. Active Browser demand/pump gets priority; otherwise
+    # Stage2 may use the idle slot and Stage3 reclaims it on the next wake.
+    return bool(float(browser_wait or 0)>0 or pump_alive)
 
 def _resource_owner():
     t=PUMP_THREAD

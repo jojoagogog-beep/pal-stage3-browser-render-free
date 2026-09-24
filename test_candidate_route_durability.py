@@ -1,3 +1,5 @@
+# PAL_REPAIR_OWNER=RENDER_BROWSER | Cross-lane edits prohibited; use published interfaces/contracts.
+# PAL_REPAIR_PROTOCOL_V2=GLOBAL_SINGLE_WRITER | CLAIM_LANE=RENDER_BROWSER before edit; ACCEPT_LANE after tests.
 import json, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -64,7 +66,8 @@ class CandidateRouteDurabilityTests(unittest.TestCase):
         self.assertNotIn('task-1',out['processed_task_ids'])
         self.assertEqual(out['committed_tasks'],0)
 
-    def test_32_results_are_persisted_before_done_checkpoint(self):
+    def test_checkpoint_results_are_persisted_before_done_checkpoint(self):
+        self.assertEqual(w.CHECKPOINT_ROWS,16)
         candidates=[{'candidate_id':i,'domain':f'c{i}.example.com','market':'GB-EN','country':'GB'}
                     for i in range(33)]
         task=dict(TASK,candidates=candidates)
