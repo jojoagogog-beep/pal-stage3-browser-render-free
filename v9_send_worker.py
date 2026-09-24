@@ -1,0 +1,218 @@
+from __future__ import annotations
+import asyncio,json,os,re,time,hashlib
+from urllib.parse import urlsplit,unquote_plus
+from pathlib import Path
+import requests
+from playwright.async_api import async_playwright
+
+TASK_URL=os.environ.get('PAL_V9_SEND_TASK_BLOB_URL','').strip()
+RESULT_URL=os.environ.get('PAL_V9_SEND_RESULT_BLOB_URL','').strip()
+MODE=os.environ.get('PAL_V9_SEND_MODE','SHADOW').strip().upper()
+UA='Practical-AI-Lab-V9-Sender/1.0'
+PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
+SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
+EMAIL=re.compile(r'(e-?mail|メール)',re.I)
+MESSAGE=re.compile(r'(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)',re.I)
+COMPANY=re.compile(r'(company|organization|organisation|会社|法人|企業)',re.I)
+NAME=re.compile(r'(full.?name|your.?name|contact.?name|お名前|氏名|\bname\b)',re.I)
+SUBJECT=re.compile(r'(subject|件名|title)',re.I)
+URLRX=re.compile(r'(website|web.?site|url|サイト)',re.I)
+CAPTCHA_SEL='.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey],iframe[src*="recaptcha"],iframe[src*="hcaptcha"]'
+SUCCESS=re.compile(r'(送信が完了|送信完了|お問い合わせ.{0,30}(?:ありがとう|受け付け|受付)|thank\s+you.{0,80}(?:message|inquir|contact)|(?:message|inquir(?:y|ies)|request).{0,80}(?:sent|received|submitted)|successfully\s+(?:sent|submitted))',re.I)
+FAIL=re.compile(r'(入力してください|未入力|required field|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid)',re.I)
+FINAL=re.compile(r'(この内容で送信|内容を送信|確認して送信|送信する|^送信$|send\s*(?:message|inquiry|enquiry)?$|submit\s*(?:message|inquiry|enquiry|form)?$)',re.I)
+CONFIRM=re.compile(r'(確認画面へ|入力内容を確認|内容を確認|確認する|confirm|review|next|次へ)',re.I)
+REJECT_CONTROL=re.compile(r'(戻る|back|cancel|修正|reset|clear|クリア)',re.I)
+SAFE_CHOICE=re.compile(r'(general|other|business|partnership|collaboration|inquiry|enquiry|contact|その他|一般|法人|協業|提携|ご相談)',re.I)
+UNSAFE_CHOICE=re.compile(r'(job|career|employment|採用|求人|support|customer service|technical support|newsletter|marketing|subscribe|個人|患者|student)',re.I)
+CONSENT_OK=re.compile(r'(privacy|terms|policy|個人情報|プライバシー|規約|同意)',re.I)
+CONSENT_BAD=re.compile(r'(newsletter|marketing|promotional|メルマガ|広告|案内を受け取|subscribe)',re.I)
+
+def host(u):return (urlsplit(str(u or '')).hostname or '').lower().removeprefix('www.')
+def _get(u):
+ r=requests.get(u,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':int(time.time())},timeout=20);r.raise_for_status();return r.json()
+def _put(u,o):
+ r=requests.put(u,json=o,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=20);r.raise_for_status()
+def _payload_match(payload,message,email):
+ if not payload:return False
+ vals=[str(payload),unquote_plus(str(payload))]
+ try:
+  o=json.loads(payload)
+  def walk(x):
+   if isinstance(x,str):return [x]
+   if isinstance(x,dict):return sum((walk(v) for v in x.values()),[])
+   if isinstance(x,list):return sum((walk(v) for v in x),[])
+   return []
+  vals+=walk(o)
+ except Exception:pass
+ msg=' '.join(str(message or '').split()); em=str(email or '').strip()
+ return any(msg and len(msg)>=40 and msg in ' '.join(v.split()) for v in vals) or any(em and em in v for v in vals)
+async def desc(loc):
+ try:return ' '.join(str(await loc.evaluate("e=>[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ')" ) or '').split())[:500]
+ except:return ''
+async def visible_captcha(page):
+ try:
+  xs=page.locator(CAPTCHA_SEL)
+  for i in range(min(await xs.count(),12)):
+   if await xs.nth(i).is_visible():return True
+ except:pass
+ return False
+async def choose_form(page):
+ best=None
+ for fi in range(min(await page.locator('form').count(),20)):
+  f=page.locator('form').nth(fi)
+  try:
+   if not await f.is_visible():continue
+   rows=f.locator('input,textarea,select'); has_e=False;has_m=False
+   for i in range(min(await rows.count(),80)):
+    e=rows.nth(i);d=(await desc(e)).lower();typ=(await e.get_attribute('type') or '').lower();tag=await e.evaluate('e=>e.tagName.toLowerCase()')
+    has_e=has_e or typ=='email' or bool(EMAIL.search(d));has_m=has_m or tag=='textarea' or bool(MESSAGE.search(d))
+   txt=' '.join((await f.inner_text(timeout=1500)).split())[:5000]
+   score=(5 if has_e else 0)+(5 if has_m else 0)+(3 if re.search(r'(contact|inquiry|enquiry|お問い合わせ|お問合せ|ご相談)',txt,re.I) else 0)
+   if has_e and has_m and (best is None or score>best[0]):best=(score,fi,f)
+  except:continue
+ return best
+async def fill_form(page,form,message,email,market):
+ company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
+ fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False}
+ for i in range(min(await fields.count(),100)):
+  e=fields.nth(i)
+  try:
+   if not await e.is_visible() or not await e.is_enabled():continue
+   tag=await e.evaluate('e=>e.tagName.toLowerCase()'); typ=(await e.get_attribute('type') or tag).lower(); d=await desc(e); req=bool(await e.evaluate("e=>!!e.required||e.getAttribute('aria-required')==='true'"))
+   if typ in {'hidden','submit','button','image','reset','password','file'}:
+    if req and typ=='file':required_unknown.append(d or 'file')
+    continue
+   if SENSITIVE.search(d):
+    if req:sensitive.append(d[:160]);continue
+   if typ in {'checkbox','radio'}:
+    if not req:continue
+    text=d
+    if typ=='checkbox' and CONSENT_OK.search(text) and not CONSENT_BAD.search(text):await e.check(timeout=2000);continue
+    if typ=='radio' and SAFE_CHOICE.search(text) and not UNSAFE_CHOICE.search(text):await e.check(timeout=2000);continue
+    required_unknown.append(text[:160] or typ);continue
+   if tag=='select':
+    if not req:continue
+    opts=await e.locator('option').all_text_contents();pick=None
+    for idx,t in enumerate(opts):
+     if idx and SAFE_CHOICE.search(t) and not UNSAFE_CHOICE.search(t):pick=idx;break
+    if pick is None:required_unknown.append(d[:160] or 'select');continue
+    await e.select_option(index=pick);continue
+   value=None
+   if typ=='email' or EMAIL.search(d):value=email;filled['email']=True
+   elif tag=='textarea' or MESSAGE.search(d):value=message;filled['message']=True
+   elif COMPANY.search(d):value=company
+   elif NAME.search(d):value=name
+   elif typ=='url' or URLRX.search(d):value=site
+   elif SUBJECT.search(d):value='AI workflow fit check' if market!='JP-JA' else 'AI業務改善のご相談'
+   elif req:required_unknown.append(d[:160] or typ);continue
+   if value is not None:await e.fill(value);await e.dispatch_event('input');await e.dispatch_event('change')
+  except Exception as ex:
+   if req:required_unknown.append((d if 'd' in locals() else type(ex).__name__)[:160])
+ return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}
+async def control(form,kind='final'):
+ xs=form.locator('button,input[type=submit],input[type=button],input[type=image]');hits=[]
+ for i in range(min(await xs.count(),40)):
+  e=xs.nth(i)
+  try:
+   if not await e.is_visible() or not await e.is_enabled():continue
+   d=await desc(e)
+   if REJECT_CONTROL.search(d):continue
+   if kind=='final' and FINAL.search(d) and not (CONFIRM.search(d) and not re.search(r'(送信|send|submit)',d,re.I)):hits.append((i,e,d))
+   if kind=='confirm' and CONFIRM.search(d) and not re.search(r'(送信|send|submit)',d,re.I):hits.append((i,e,d))
+  except:continue
+ return hits[0] if len(hits)==1 else None
+async def click_and_evidence(page,loc,message,email,before_text):
+ mutations=[];responses=[];resp_objs=[]
+ def on_req(req):
+  try:
+   if str(req.method).upper() not in {'GET','HEAD','OPTIONS'}:mutations.append({'method':req.method,'url':req.url[:500],'matches_form_payload':_payload_match(req.post_data or '',message,email)})
+  except:pass
+ def on_resp(resp):
+  try:
+   req=resp.request
+   if str(req.method).upper() not in {'GET','HEAD','OPTIONS'}:
+    m=_payload_match(req.post_data or '',message,email);responses.append({'method':req.method,'url':req.url[:500],'status':int(resp.status),'matches_form_payload':m});
+    if m:resp_objs.append(resp)
+  except:pass
+ page.on('request',on_req);page.on('response',on_resp);click_error=''
+ try:await loc.click(timeout=5000);await page.wait_for_timeout(1800)
+ except Exception as e:click_error=type(e).__name__+':'+str(e)[:180]
+ finally:
+  try:page.remove_listener('request',on_req);page.remove_listener('response',on_resp)
+  except:pass
+ provider_success=False;provider_fail=False;bodies=[]
+ for resp in resp_objs[:6]:
+  try:
+   raw=(await asyncio.wait_for(resp.text(),1.5))[:65536];o=json.loads(raw);st=str(o.get('status') or '').lower() if isinstance(o,dict) else ''
+   provider_success|=st in {'mail_sent','sent','success','1'};provider_fail|=st in {'validation_failed','spam','mail_failed','aborted','acceptance_missing','failed','error'};bodies.append({'status':int(resp.status),'app_status':st[:80]})
+  except:pass
+ try:after=' '.join((await page.locator('body').inner_text(timeout=2500)).split())
+ except:after=''
+ new_success=bool(SUCCESS.search(after) and (not SUCCESS.search(before_text) or SUCCESS.search(after).group(0)!=SUCCESS.search(before_text).group(0)))
+ validation=bool(FAIL.search(after))
+ corr2xx=any(x['matches_form_payload'] and 200<=x['status']<300 for x in responses);corr4xx=any(x['matches_form_payload'] and x['status'] in {400,401,403,404,405,410,415,422} for x in responses)
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ if corr2xx and (provider_success or new_success) and not ev['server_not_sent']:return 'SENT_CONFIRMED',ev
+ if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
+ return 'AMBIGUOUS_HOLD',ev
+async def process_task(browser,t):
+ out={'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time())}
+ if not out['token_id'] or not t.get('canonical_url') or not t.get('message_body'):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'INVALID_TASK','evidence':{'pre_submit':True}}
+ if MODE=='PRODUCTION' and t.get('submit_started') is not True:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_BARRIER_MISSING','evidence':{'pre_submit':True}}
+ url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(url));ctx=None
+ try:
+  ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(8000)
+  await page.route('**/*',lambda route: route.abort() if route.request.resource_type in {'image','media','font'} else route.continue_())
+  await page.goto(url,wait_until='domcontentloaded',timeout=14000);await page.wait_for_timeout(800 if str(t.get('proof_lane') or '')=='FAST_DOM' else 1600)
+  if host(page.url)!=domain:return {**out,'outcome':'SAFETY_BLOCKED','reason':'DOMAIN_CHANGED','evidence':{'final_url':page.url[:500]}}
+  txt=' '.join((await page.locator('body').inner_text(timeout=2500)).split())
+  if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
+  if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
+  chosen=await choose_form(page)
+  if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True}}
+  _,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
+  if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
+  if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':fill}
+  await page.wait_for_timeout(250)
+  if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_AFTER_FILL','evidence':{'pre_submit':True}}
+  final=await control(form,'final');confirm=await control(form,'confirm') if final is None else None
+  if final is None and confirm is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_CONTROL_NOT_FOUND','evidence':{'pre_submit':True}}
+  if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'form_index':fi,'final_control':bool(final),'confirm_control':bool(confirm)}}
+  before=txt
+  if confirm is not None:
+   outcome,ev=await click_and_evidence(page,confirm[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
+   if outcome=='SENT_CONFIRMED':return {**out,'outcome':outcome,'reason':'CONFIRM_CLICK_SENT','evidence':ev}
+   if outcome=='AMBIGUOUS_HOLD':return {**out,'outcome':outcome,'reason':'CONFIRM_AMBIGUOUS','evidence':ev}
+   # confirmed not sent: allow exactly one final click only if a unique final control now exists.
+   try:form=page.locator('form').nth(fi)
+   except:return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'FORM_GONE_AFTER_CONFIRM','evidence':ev}
+   final=await control(form,'final')
+   if final is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'CONFIRM_NO_FINAL_CONTROL','evidence':ev}
+   try:before=' '.join((await page.locator('body').inner_text(timeout=2000)).split())
+   except:before=''
+  outcome,ev=await click_and_evidence(page,final[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
+  return {**out,'outcome':outcome,'reason':'FINAL_CLICK_'+outcome,'evidence':ev}
+ except Exception as e:
+  return {**out,'outcome':('AMBIGUOUS_HOLD' if MODE=='PRODUCTION' else 'SHADOW_PREPARED'),'reason':'WORKER_EXCEPTION_'+type(e).__name__.upper(),'evidence':{'detail':str(e)[:240]}}
+ finally:
+  if ctx:
+   try:await ctx.close()
+   except:pass
+async def main():
+ q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1'][:2];results=[]
+ if not tasks:
+  print(json.dumps({'status':'PASS','mode':MODE,'tasks':0,'results':[]},ensure_ascii=False));return
+ async with async_playwright() as p:
+  chromium_path=(os.environ.get('PAL_CHROMIUM_PATH','').strip() or ('/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else ('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' if Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome').exists() else '')))
+  launch_kw={'headless':True,'args':['--disable-dev-shm-usage','--no-sandbox']}
+  if chromium_path: launch_kw['executable_path']=chromium_path
+  browser=await p.chromium.launch(**launch_kw)
+  try:
+   for t in tasks:results.append(await process_task(browser,t))
+  finally:await browser.close()
+ try:r=_get(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
+ except:prior=[]
+ keys={x.get('token_id') for x in results};prior=[x for x in prior if x.get('token_id') not in keys];_put(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
+ print(json.dumps({'status':'PASS','mode':MODE,'tasks':len(tasks),'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False))
+if __name__=='__main__':asyncio.run(main())

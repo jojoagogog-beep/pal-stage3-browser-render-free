@@ -8,6 +8,7 @@ from flask import Flask, jsonify, request
 HERE=Path(__file__).resolve().parent
 WORKER=HERE/'stage3_send_ready_worker_v1.py'
 STAGE2_WORKER=HERE/'candidate_route_worker_v1.py'
+V9_SEND_WORKER=HERE/'v9_send_worker.py'
 def _secret_text(path):
     try:return Path(path).read_text().strip()
     except Exception:return ''
@@ -45,6 +46,9 @@ STAGE2_YIELD_MAX_BROWSER_BACKLOG=max(0,min(4096,int(
     os.environ.get('PAL_RENDER_STAGE2_YIELD_MAX_BROWSER_BACKLOG','256') or 256)))
 STAGE2_THREAD=None
 STAGE2_STATE={'status':'IDLE','at':0,'started_at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None,'workers':0,'batch':0,'priority_markets':[]}
+V9_SEND_STATE_LOCK=threading.Lock()
+V9_SEND_THREAD=None
+V9_SEND_STATE={'status':'IDLE','at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None}
 STATE_LOCK=threading.Lock()
 LEASE_LOCK=threading.Lock()
 STATE={
@@ -373,6 +377,44 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
         except RuntimeError: pass
         try: RUN_LOCK.release()
         except RuntimeError: pass
+
+def _v9_send_runner(task_url,result_url,mode):
+    global V9_SEND_THREAD
+    started=time.time()
+    try:
+        env=os.environ.copy()
+        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode})
+        cp=subprocess.run([sys.executable,str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=220)
+        summary=_worker_summary(cp.stdout or '')
+        completed={'status':'PASS' if cp.returncode==0 else 'ERROR','at':int(time.time()),
+                   'duration_seconds':round(time.time()-started,2),'returncode':cp.returncode,
+                   'summary':summary,'stderr_tail':(cp.stderr or '')[-1600:],'stdout_tail':(cp.stdout or '')[-1600:],
+                   'mode':mode}
+        with V9_SEND_STATE_LOCK:
+            V9_SEND_STATE.update(status=completed['status'],at=completed['at'],duration_seconds=completed['duration_seconds'],
+                                 returncode=cp.returncode,run_count=int(V9_SEND_STATE.get('run_count') or 0)+1,
+                                 last_summary=summary,last_completed=completed)
+    except subprocess.TimeoutExpired:
+        completed={'status':'TIMEOUT','at':int(time.time()),'duration_seconds':round(time.time()-started,2),
+                   'returncode':None,'summary':{},'mode':mode}
+        with V9_SEND_STATE_LOCK:
+            V9_SEND_STATE.update(status='TIMEOUT',at=completed['at'],duration_seconds=completed['duration_seconds'],
+                                 returncode=None,run_count=int(V9_SEND_STATE.get('run_count') or 0)+1,last_summary={},last_completed=completed)
+    except Exception as e:
+        with V9_SEND_STATE_LOCK:
+            V9_SEND_STATE.update(status='ERROR',at=int(time.time()),duration_seconds=round(time.time()-started,2),
+                                 returncode=None,run_count=int(V9_SEND_STATE.get('run_count') or 0)+1,last_summary={'error':type(e).__name__})
+    finally:
+        V9_SEND_THREAD=None
+        try: RUN_LOCK.release()
+        except RuntimeError: pass
+
+def _v9_send_snapshot():
+    with V9_SEND_STATE_LOCK:
+        out=dict(V9_SEND_STATE)
+    t=V9_SEND_THREAD
+    out['thread_alive']=bool(t and t.is_alive())
+    return out
 
 def _snapshot():
     with STATE_LOCK:
@@ -767,6 +809,7 @@ def health():
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
                    lane_empty_streak=LANE_EMPTY_STREAK,
                    lane_skip_until=LANE_SKIP_UNTIL,
+                   v9_send_state=_v9_send_snapshot(),
                    worker_state=_snapshot())
 
 @app.get('/state')
@@ -794,6 +837,35 @@ def wake():
     result_url=payload.get('result_url') if isinstance(payload,dict) else None
     body,code=start_or_extend('MAC_WAKE',pm,task_url,result_url)
     return jsonify(body),code
+
+
+@app.post('/v9-send-wake')
+def v9_send_wake():
+    global V9_SEND_THREAD
+    if not allowed():
+        return ('unauthorized',401)
+    if STAGE2_PRIMARY_ROLE:
+        return jsonify(status='V9_SEND_SHARD1_ONLY'),409
+    payload=request.get_json(silent=True) or {}
+    task_url=str(payload.get('task_url') or '')
+    result_url=str(payload.get('result_url') or '')
+    mode=str(payload.get('mode') or 'SHADOW').upper()
+    if mode not in {'SHADOW','PRODUCTION'}:
+        return jsonify(status='BAD_MODE'),400
+    if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
+        return jsonify(status='BAD_BLOB_URL'),400
+    if not RUN_LOCK.acquire(blocking=False):
+        return jsonify(status='BUSY',v9_send_state=_v9_send_snapshot(),state=_snapshot()),202
+    try:
+        with V9_SEND_STATE_LOCK:
+            V9_SEND_STATE.update(status='RUNNING',at=int(time.time()),returncode=None)
+        V9_SEND_THREAD=threading.Thread(target=_v9_send_runner,args=(task_url,result_url,mode),name='pal-v9-send',daemon=True)
+        V9_SEND_THREAD.start()
+        return jsonify(status='STARTED',mode=mode,v9_send_state=_v9_send_snapshot()),202
+    except Exception:
+        try: RUN_LOCK.release()
+        except RuntimeError: pass
+        raise
 
 @app.post('/tick')
 def tick():
