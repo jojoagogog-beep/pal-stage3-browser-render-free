@@ -561,6 +561,9 @@ def inspect(rec):
                                      'contact_intent':strong_contact,'captcha_absent':True,'sales_prohibited_absent':True,
                                      'sendability_score':sendability},
                   'trusted_source_id':'PAL_CANDIDATE_ROUTE_OFFLOAD_V13_CONTACT_ROUTE'}
+            if static_hint and sendability>=70:
+                strict_proof=strict_static_form_proof(fd,fu,strong_contact)
+                if strict_proof:hint['strict_static_proof']=strict_proof
             if qscore>best_score:
                 best_score=qscore;best_hint=hint
             # A dynamic route is useful fallback evidence, but live measurements
