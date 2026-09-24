@@ -47,6 +47,8 @@ STAGE2_YIELD_MAX_BROWSER_BACKLOG=max(0,min(4096,int(
     os.environ.get('PAL_RENDER_STAGE2_YIELD_MAX_BROWSER_BACKLOG','256') or 256)))
 STAGE2_THREAD=None
 STAGE2_STATE={'status':'IDLE','at':0,'started_at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None,'workers':0,'batch':0,'priority_markets':[]}
+V9_STAGE2_PENDING_LOCK=threading.Lock()
+V9_STAGE2_PENDING=None
 V9_SEND_STATE_LOCK=threading.Lock()
 V9_SEND_PENDING_LOCK=threading.Lock()
 V9_SEND_THREAD=None
@@ -384,6 +386,53 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
         try: RUN_LOCK.release()
         except RuntimeError: pass
 
+def _v9_stage2_pending_snapshot():
+    with V9_STAGE2_PENDING_LOCK:
+        p=dict(V9_STAGE2_PENDING) if isinstance(V9_STAGE2_PENDING,dict) else None
+    if not p:return None
+    return {'queued_at':p.get('queued_at'),'workers':p.get('workers'),'batch':p.get('batch'),'priority_markets':list(p.get('priority_markets') or [])}
+
+def _queue_v9_stage2(task_url,result_url,priority_markets,workers,batch):
+    global V9_STAGE2_PENDING
+    with V9_STAGE2_PENDING_LOCK:
+        V9_STAGE2_PENDING={'task_url':task_url,'result_url':result_url,'priority_markets':list(priority_markets or [])[:8],
+                           'workers':int(workers),'batch':int(batch),'queued_at':int(time.time())}
+    with STAGE2_STATE_LOCK:
+        if not (STAGE2_THREAD and STAGE2_THREAD.is_alive()):
+            STAGE2_STATE.update(status='QUEUED',at=int(time.time()),priority_markets=list(priority_markets or [])[:8],workers=int(workers),batch=int(batch))
+
+def _start_pending_v9_stage2():
+    global V9_STAGE2_PENDING,STAGE2_THREAD
+    if STAGE2_PRIMARY_ROLE:return False
+    if (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()) or _v9_send_pending_snapshot() is not None:return False
+    with V9_STAGE2_PENDING_LOCK:
+        pending=dict(V9_STAGE2_PENDING) if isinstance(V9_STAGE2_PENDING,dict) else None
+    if not pending or (STAGE2_THREAD and STAGE2_THREAD.is_alive()):return False
+    if not STAGE2_LOCK.acquire(blocking=False):return False
+    if not RUN_LOCK.acquire(blocking=False):
+        try:STAGE2_LOCK.release()
+        except RuntimeError:pass
+        return False
+    try:
+        with V9_STAGE2_PENDING_LOCK:
+            pending=dict(V9_STAGE2_PENDING) if isinstance(V9_STAGE2_PENDING,dict) else pending
+            V9_STAGE2_PENDING=None
+        with STAGE2_STATE_LOCK:
+            STAGE2_STATE.update(status='RUNNING',at=int(time.time()),started_at=int(time.time()),duration_seconds=0,returncode=None,
+                                workers=int(pending['workers']),batch=int(pending['batch']),priority_markets=list(pending['priority_markets']))
+        STAGE2_THREAD=threading.Thread(target=_stage2_runner,
+            args=(pending['task_url'],pending['result_url'],pending['priority_markets'],pending['workers'],pending['batch']),
+            name='pal-v9-stage2-shard1',daemon=True)
+        STAGE2_THREAD.start();return True
+    except Exception:
+        with V9_STAGE2_PENDING_LOCK:
+            if V9_STAGE2_PENDING is None:V9_STAGE2_PENDING=pending
+        try:STAGE2_LOCK.release()
+        except RuntimeError:pass
+        try:RUN_LOCK.release()
+        except RuntimeError:pass
+        raise
+
 def _v9_send_pending_snapshot():
     with V9_SEND_PENDING_LOCK:
         p=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else None
@@ -676,6 +725,11 @@ def background_pump():
                 with STATE_LOCK:
                     STATE['idle_exit_reason']='YIELD_TO_WAITING_V9_SENDER'
                 break
+            if not STAGE2_PRIMARY_ROLE and _v9_stage2_pending_snapshot() is not None:
+                _release_idle_browser_priority()
+                with STATE_LOCK:
+                    STATE['idle_exit_reason']='YIELD_TO_WAITING_V9_STAGE2'
+                break
             # Primary shares one memory-safe heavy slot with Stage2. Once a
             # valid Stage2 request has waited through one complete Browser
             # quantum, yield the lock so the next controller tick can drain a
@@ -729,7 +783,8 @@ def background_pump():
         except RuntimeError:
             pass
         sender_started=_start_pending_v9_send()
-        print(json.dumps({'event':'PUMP_STOPPED','reason':'CRASH' if crash else 'LEASE_EXPIRED','v9_sender_started':bool(sender_started)},separators=(',',':')),flush=True)
+        stage2_started=False if sender_started else _start_pending_v9_stage2()
+        print(json.dumps({'event':'PUMP_STOPPED','reason':'CRASH' if crash else 'LEASE_EXPIRED','v9_sender_started':bool(sender_started),'v9_stage2_started':bool(stage2_started)},separators=(',',':')),flush=True)
 
 def start_or_extend(source,priority_markets=None,task_url=None,result_url=None):
     global PUMP_THREAD,ACTIVE_PRIORITY_MARKETS,ACTIVE_TASK_BLOB_URL,ACTIVE_RESULT_BLOB_URL
@@ -853,55 +908,31 @@ def stage2_state():
 
 @app.post('/v9-stage2-wake')
 def v9_stage2_wake():
-    """Use shard1 for V9 Stage2 only while Browser/Sender are fully idle.
-
-    This is a bounded migration/supply lane. It never preempts Stage3 Browser or
-    the sole V9 sender, and it uses the same RUN_LOCK so Chromium and Stage2 HTTP
-    probing cannot overlap on Render Free.
-    """
-    global STAGE2_THREAD
-    if not allowed():
-        return ('unauthorized',401)
-    if STAGE2_PRIMARY_ROLE:
-        return jsonify(status='V9_STAGE2_SHARD1_ONLY'),409
-    payload=request.get_json(silent=True) or {}
-    task_url=str(payload.get('task_url') or '')
-    result_url=str(payload.get('result_url') or '')
-    if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
-        return jsonify(status='BAD_BLOB_URL'),400
-    if (PUMP_THREAD and PUMP_THREAD.is_alive()) or (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()) or _v9_send_pending_snapshot() is not None:
-        return jsonify(status='BUSY_HIGHER_PRIORITY',resource_owner=_resource_owner(),state=_snapshot(),v9_send_state=_v9_send_snapshot()),202
+    """Queue one bounded Stage2 turn on shard1 without preempting Browser/Sender."""
+    if not allowed():return ('unauthorized',401)
+    if STAGE2_PRIMARY_ROLE:return jsonify(status='V9_STAGE2_SHARD1_ONLY'),409
+    payload=request.get_json(silent=True) or {};task_url=str(payload.get('task_url') or '');result_url=str(payload.get('result_url') or '')
+    if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):return jsonify(status='BAD_BLOB_URL'),400
     markets=[]
     for x in payload.get('priority_markets') or []:
         x=str(x or '').strip()
         if x and x not in markets:markets.append(x)
-    workers=max(4,min(24,int(payload.get('workers') or 8)))
-    batch=max(16,min(128,int(payload.get('batch') or 64)))
-    if not STAGE2_LOCK.acquire(blocking=False):
-        return jsonify(status='BUSY_STAGE2',state=_stage2_snapshot()),202
-    if not RUN_LOCK.acquire(blocking=False):
-        try:STAGE2_LOCK.release()
-        except RuntimeError:pass
-        return jsonify(status='BUSY_HIGHER_PRIORITY',resource_owner=_resource_owner()),202
-    try:
-        with STAGE2_STATE_LOCK:
-            STAGE2_STATE.update(status='RUNNING',at=int(time.time()),started_at=int(time.time()),duration_seconds=0,returncode=None,workers=workers,batch=batch,priority_markets=list(markets))
-        STAGE2_THREAD=threading.Thread(target=_stage2_runner,args=(task_url,result_url,markets,workers,batch),name='pal-v9-stage2-shard1',daemon=True)
-        STAGE2_THREAD.start()
+    workers=max(4,min(24,int(payload.get('workers') or 8)));batch=max(16,min(128,int(payload.get('batch') or 64)))
+    _queue_v9_stage2(task_url,result_url,markets,workers,batch)
+    if (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()) or _v9_send_pending_snapshot() is not None:
+        return jsonify(status='QUEUED_BEHIND_SENDER',revision=V9_STAGE2_SHARD1_REVISION,v9_stage2_pending=_v9_stage2_pending_snapshot()),202
+    if PUMP_THREAD and PUMP_THREAD.is_alive():
+        return jsonify(status='QUEUED_AFTER_BROWSER_QUANTUM',revision=V9_STAGE2_SHARD1_REVISION,state=_snapshot(),v9_stage2_pending=_v9_stage2_pending_snapshot()),202
+    if _start_pending_v9_stage2():
         return jsonify(status='STARTED',revision=V9_STAGE2_SHARD1_REVISION,state=_stage2_snapshot()),202
-    except Exception:
-        STAGE2_THREAD=None
-        try:STAGE2_LOCK.release()
-        except RuntimeError:pass
-        try:RUN_LOCK.release()
-        except RuntimeError:pass
-        raise
+    return jsonify(status='QUEUED_LOCK_BUSY',revision=V9_STAGE2_SHARD1_REVISION,resource_owner=_resource_owner(),v9_stage2_pending=_v9_stage2_pending_snapshot()),202
 
 @app.get('/health')
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    scheduler_revision=SCHEDULER_REVISION,
                    v9_stage2_shard1_revision=(V9_STAGE2_SHARD1_REVISION if not STAGE2_PRIMARY_ROLE else None),
+                   v9_stage2_pending=(_v9_stage2_pending_snapshot() if not STAGE2_PRIMARY_ROLE else None),
                    external_cron_primary_enabled=True,
                    service_name=SERVICE_NAME,
                    service_role=('STAGE2_STAGE3_DUAL' if STAGE2_PRIMARY_ROLE else 'STAGE3_BROWSER'),
