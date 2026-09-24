@@ -750,6 +750,7 @@ def stage2_state():
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    scheduler_revision=SCHEDULER_REVISION,
+                   external_cron_primary_enabled=True,
                    service_name=SERVICE_NAME,
                    service_role=('STAGE2_STAGE3_DUAL' if STAGE2_PRIMARY_ROLE else 'STAGE3_BROWSER'),
                    worker_protocol='AWAITED_ROUTE_HANDLER_V1',
