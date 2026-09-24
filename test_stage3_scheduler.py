@@ -124,6 +124,9 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         finally:
             m.BROWSER_DEMAND_UNTIL=old
 
+    def test_stage2_turn_survives_slowest_controller_cadence(self):
+        self.assertGreaterEqual(m.STAGE2_TURN_SECONDS,120)
+
     def test_granted_stage2_turn_survives_new_browser_demand_at_low_water(self):
         old_turn=m.STAGE2_TURN_UNTIL
         old_stage2=m.STAGE2_DEMAND_UNTIL

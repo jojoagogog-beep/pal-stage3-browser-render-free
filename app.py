@@ -15,7 +15,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Primary is dual-role under one heavy-resource lock: Stage2 route verification
 # and Stage3 Browser never overlap. Shard1 remains dedicated Stage3 capacity.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
-SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V7'
+SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V8'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -33,7 +33,7 @@ STAGE2_DEMAND_UNTIL=0.0
 STAGE2_DEMAND_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_STAGE2_DEMAND_SECONDS','300') or 300)))
 STAGE2_TURN_LOCK=threading.Lock()
 STAGE2_TURN_UNTIL=0.0
-STAGE2_TURN_SECONDS=max(10,min(60,int(os.environ.get('PAL_RENDER_STAGE2_TURN_SECONDS','30') or 30)))
+STAGE2_TURN_SECONDS=max(60,min(180,int(os.environ.get('PAL_RENDER_STAGE2_TURN_SECONDS','120') or 120)))
 # Primary Render is dual-role, but Stage3 Browser is the measured revenue
 # bottleneck. When shard-0 Browser backlog is deep, do not hand the only
 # Chromium-safe heavy slot to Stage2 after every Browser quantum. Stage2 still
