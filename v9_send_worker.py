@@ -121,30 +121,39 @@ async def fill_form(page,form,message,email,market):
    if typ=='email' or EMAIL.search(d):value=email;filled['email']=True
    elif tag=='textarea' or MESSAGE.search(d):value=message;filled['message']=True
    elif COMPANY.search(d):value=company
+   elif re.search(r'(ふりがな|ひらがな)',d,re.I):value='ぷらくてぃかるえーあいらぼ'
+   elif re.search(r'(フリガナ|カナ|kana)',d,re.I):value='プラクティカルエーアイラボ'
    elif FIRST_NAME.search(d):value='Practical AI'
    elif LAST_NAME.search(d):value='Lab'
    elif NAME.search(d):value=name
+   elif re.search(r'(部署|部門|department|designation)',d,re.I):value='Operations'
    elif typ=='url' or URLRX.search(d):value=site
    elif SUBJECT.search(d):value='AI workflow fit check' if market!='JP-JA' else 'AI業務改善のご相談'
+   elif req and typ in {'text','search'}:value=company
    elif req:required_unknown.append(d[:160] or typ);continue
    if value is not None:await e.fill(value);await e.dispatch_event('input');await e.dispatch_event('change')
   except Exception as ex:
    if req:required_unknown.append((d if 'd' in locals() else type(ex).__name__)[:160])
  return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}
 async def control(form,kind='final'):
- xs=form.locator('button,input[type=submit],input[type=button],input[type=image]');hits=[]
+ xs=form.locator('button,input[type=submit],input[type=button],input[type=image]');semantic=[];fallback=[]
  for i in range(min(await xs.count(),40)):
   e=xs.nth(i)
   try:
    if not await e.is_visible() or not await e.is_enabled():continue
    d=await desc(e); compact=re.sub(r'\\s+','',d); typ=(await e.get_attribute('type') or '').lower()
    if REJECT_CONTROL.search(d):continue
-   is_final=bool(FINAL.search(d) or re.fullmatch(r'送信',compact,re.I) or typ=='submit')
    is_confirm=bool(CONFIRM.search(d) and not re.search(r'(送\\s*信|send|submit)',d,re.I))
-   if kind=='final' and is_final and not is_confirm:hits.append((i,e,d))
-   if kind=='confirm' and is_confirm:hits.append((i,e,d))
+   if kind=='confirm':
+    if is_confirm:semantic.append((i,e,d))
+    continue
+   explicit_final=bool(FINAL.search(d) or re.fullmatch(r'送信',compact,re.I))
+   if explicit_final and not is_confirm:semantic.append((i,e,d))
+   elif typ=='submit' and not is_confirm:fallback.append((i,e,d))
   except:continue
- return hits[0] if len(hits)==1 else None
+ if len(semantic)==1:return semantic[0]
+ if not semantic and len(fallback)==1:return fallback[0]
+ return None
 async def click_and_evidence(page,loc,message,email,before_text):
  mutations=[];responses=[];resp_objs=[]
  def on_req(req):
