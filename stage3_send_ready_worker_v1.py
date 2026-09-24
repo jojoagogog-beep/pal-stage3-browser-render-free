@@ -360,11 +360,24 @@ def strong_main_form_candidate(cand,frame_index):
             or (kind=='CONFIRM_STEP' and score>=12))
 
 def lane_accept(rec):
+    # Dispatcher emits lane-pure Browser tasks and stamps every route with the
+    # authoritative lane_hint. Respect it first instead of re-deriving the lane
+    # from static_status: high-sendability DYNAMIC_HINT routes are intentionally
+    # promoted to FAST_DOM, while force-rendered work is intentionally pinned to
+    # DYNAMIC_JS. Re-deriving here previously made those routes unexecutable.
+    hinted=str(rec.get('lane_hint') or '').upper()
+    if hinted in {'FAST_DOM','DYNAMIC_JS','IFRAME_DEEP','DEEP'}:
+        return hinted==LANE_MODE
+    # Legacy/fallback tasks without lane_hint retain the historical inference.
     st=str(rec.get('static_status') or '')
     try: rid=int(rec.get('route_id') or 0)
     except Exception: rid=0
+    try: sendq=int(rec.get('stage2_static_sendability') or 0)
+    except Exception: sendq=0
+    if rec.get('force_rendered') is True:
+        return LANE_MODE=='DYNAMIC_JS'
     if LANE_MODE=='FAST_DOM':
-        return st=='STATIC_FORM_CANDIDATE'
+        return st=='STATIC_FORM_CANDIDATE' or sendq>=70
     if LANE_MODE=='DYNAMIC_JS':
         return st=='DYNAMIC_HINT_CANDIDATE'
     if LANE_MODE=='IFRAME_DEEP':

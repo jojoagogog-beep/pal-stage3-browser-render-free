@@ -27,6 +27,24 @@ class Stage3WorkerSchedulingTests(unittest.TestCase):
     def tearDown(self):
         w.LANE_MODE=self.old_lane
 
+    def test_lane_accept_respects_explicit_fast_dom_promotion(self):
+        rec={'route_id':814,'static_status':'DYNAMIC_HINT_CANDIDATE',
+             'stage2_static_sendability':80,'lane_hint':'FAST_DOM',
+             'force_rendered':False}
+        w.LANE_MODE='FAST_DOM'
+        self.assertTrue(w.lane_accept(rec))
+        w.LANE_MODE='DYNAMIC_JS'
+        self.assertFalse(w.lane_accept(rec))
+
+    def test_lane_accept_respects_explicit_force_dynamic_lane(self):
+        rec={'route_id':999,'static_status':'STATIC_FORM_CANDIDATE',
+             'stage2_static_sendability':90,'lane_hint':'DYNAMIC_JS',
+             'force_rendered':True}
+        w.LANE_MODE='DYNAMIC_JS'
+        self.assertTrue(w.lane_accept(rec))
+        w.LANE_MODE='FAST_DOM'
+        self.assertFalse(w.lane_accept(rec))
+
     def test_task_lane_quality_uses_best_eligible_route(self):
         w.LANE_MODE='DEEP'
         task={'routes':[
