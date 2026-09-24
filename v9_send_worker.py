@@ -3,7 +3,7 @@ import asyncio,json,os,re,time,hashlib
 from urllib.parse import urlsplit,unquote_plus
 from pathlib import Path
 import requests
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 TASK_URL=os.environ.get('PAL_V9_SEND_TASK_BLOB_URL','').strip()
 RESULT_URL=os.environ.get('PAL_V9_SEND_RESULT_BLOB_URL','').strip()
@@ -67,6 +67,13 @@ async def visible_captcha(page):
    if await xs.nth(i).is_visible():return True
  except:pass
  return False
+async def body_text(page,timeout=3500):
+ try:return ' '.join((await page.locator('body').inner_text(timeout=timeout)).split())
+ except PlaywrightTimeoutError:
+  try:return ' '.join(str(await page.evaluate("() => document.body ? document.body.innerText : ''") or '').split())
+  except:return None
+ except:return None
+
 async def choose_form(page):
  best=None
  for fi in range(min(await page.locator('form').count(),20)):
@@ -187,9 +194,17 @@ async def process_task(browser,t):
  try:
   ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(8000)
   await page.route('**/*',lambda route: route.abort() if route.request.resource_type in {'image','media','font'} else route.continue_())
-  await page.goto(url,wait_until='domcontentloaded',timeout=14000);await page.wait_for_timeout(800 if str(t.get('proof_lane') or '')=='FAST_DOM' else 1600)
+  nav_timeout=False
+  try:await page.goto(url,wait_until='domcontentloaded',timeout=14000)
+  except PlaywrightTimeoutError:nav_timeout=True
+  await page.wait_for_timeout(600 if nav_timeout else (800 if str(t.get('proof_lane') or '')=='FAST_DOM' else 1600))
   if host(page.url)!=domain:return {**out,'outcome':'SAFETY_BLOCKED','reason':'DOMAIN_CHANGED','evidence':{'final_url':page.url[:500]}}
-  txt=' '.join((await page.locator('body').inner_text(timeout=2500)).split())
+  txt=await body_text(page,3500)
+  if txt is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BODY_UNREADABLE_PRE_SUBMIT','evidence':{'pre_submit':True,'navigation_timeout':nav_timeout,'final_url':page.url[:500]}}
+  if nav_timeout:
+   try:has_form=await page.locator('form').count()>0
+   except:has_form=False
+   if not has_form:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500]}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
   chosen=await choose_form(page)
