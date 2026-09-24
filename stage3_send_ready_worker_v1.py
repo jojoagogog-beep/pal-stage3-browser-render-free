@@ -105,26 +105,28 @@ def route_yield_class(rec):
         return 0
     if int(rec.get('admitted_rank') or 0)>0:
         return 1
+    if bool(rec.get('force_rendered')):
+        return 2
     rq=int(rec.get('stage2_route_quality') or 0)
     sendq=int(rec.get('stage2_static_sendability') or 0)
     if rq>=85 or sendq>=70:
-        return 2
+        return 3
     static_status=str(rec.get('static_status') or '')
     static_quality=int(rec.get('static_quality') or 0)
     form_shape=int(rec.get('form_shape_signal') or 0)
     expansion=int(rec.get('expansion_signal') or 0)
     if (static_status=='STATIC_FORM_CANDIDATE'
             or form_shape>0 or expansion>0 or static_quality>=60):
-        return 3
-    if int(rec.get('retry_rank') or 0)>=2:
         return 4
-    return 5
+    if int(rec.get('retry_rank') or 0)>=2:
+        return 5
+    return 6
 
 def route_work_rank(rec):
     return (
         market_rank(rec),
         route_yield_class(rec),
-        1 if bool(rec.get('force_rendered')) else 0,
+        -int(bool(rec.get('force_rendered'))),
         -int(rec.get('stage2_route_quality') or 0),
         -int(rec.get('stage2_static_sendability') or 0),
         -int(rec.get('static_quality') or 0),
