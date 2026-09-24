@@ -89,6 +89,22 @@ def task_lane_quality(task):
             vals.append(0)
     return max(vals) if vals else -1
 
+def task_admitted_count(task):
+    return sum(
+        int(rec.get('admitted_rank') or 0)
+        for rec in (task.get('routes') or [])
+        if lane_accept(rec)
+    )
+
+def route_work_rank(rec):
+    return (
+        market_rank(rec),
+        0 if bool(rec.get('prior_rendered_success')) else 1,
+        0 if int(rec.get('admitted_rank') or 0)>0 else 1,
+        -int(rec.get('stage3_quality') or 0),
+        int(rec.get('route_id') or 0),
+    )
+
 def effective_work_deadline(deadline,route_timeout,now=None):
     if deadline is None:
         return None
@@ -136,7 +152,11 @@ def rank_pending_tasks(pending,priority_markets):
     for idx,t in enumerate(priority):
         by_market.setdefault(_task_market(t),[]).append((idx,t))
     for m in by_market:
-        by_market[m].sort(key=lambda im:(-task_lane_quality(im[1]),im[0]))
+        by_market[m].sort(key=lambda im:(
+            -task_admitted_count(im[1]),
+            -task_lane_quality(im[1]),
+            im[0],
+        ))
     cycle=[m for m in priority_markets if m in by_market]
     cycle.extend(m for m in by_market if m not in cycle)
     lists=[[t for _,t in by_market[m]] for m in cycle]
@@ -1356,7 +1376,7 @@ async def amain():
         if task_lane and task_lane!=LANE_MODE:
             continue
         part=[];part_ids=set()
-        ranked=sorted(list(m.get('routes') or [])[:12],key=lambda r:(market_rank(r),-int(r.get('stage3_quality') or 0)))
+        ranked=sorted(list(m.get('routes') or [])[:12],key=route_work_rank)
         for rec in ranked:
             try: rid=int(rec.get('route_id') or 0)
             except Exception: rid=0

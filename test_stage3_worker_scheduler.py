@@ -85,10 +85,10 @@ class Stage3WorkerSchedulingTests(unittest.TestCase):
             importlib.reload(w)
 
 
-def _task(market,n,quality=0):
+def _task(market,n,quality=0,admitted=0):
     return {'task_id':f'{market}-{n}','routes':[
         {'market':market,'stage3_quality':quality,'route_id':abs(hash((market,n)))%1000,
-         'static_status':'STATIC_FORM_CANDIDATE'}]}
+         'static_status':'STATIC_FORM_CANDIDATE','admitted_rank':int(admitted)}]}
 
 
 class RankPendingTasksTests(unittest.TestCase):
@@ -123,6 +123,22 @@ class RankPendingTasksTests(unittest.TestCase):
         pending=[_task('GB-EN','low',quality=0),_task('GB-EN','high',quality=9999)]
         ranked=w.rank_pending_tasks(pending,['GB-EN'])
         self.assertEqual([t['task_id'] for t in ranked],['GB-EN-high','GB-EN-low'])
+
+    def test_admitted_task_outranks_higher_quality_nonadmitted_in_same_market(self):
+        pending=[
+            _task('JP-JA','high',quality=99999,admitted=0),
+            _task('JP-JA','admit',quality=100,admitted=1),
+        ]
+        ranked=w.rank_pending_tasks(pending,['JP-JA'])
+        self.assertEqual(ranked[0]['task_id'],'JP-JA-admit',ranked)
+
+    def test_route_work_rank_puts_admitted_before_high_quality_generic(self):
+        admitted={'route_id':174,'market':'JP-JA','admitted_rank':1,
+                  'stage3_quality':100,'prior_rendered_success':False}
+        high={'route_id':677,'market':'JP-JA','admitted_rank':0,
+              'stage3_quality':99999,'prior_rendered_success':False}
+        got=sorted([high,admitted],key=w.route_work_rank)
+        self.assertEqual(got[0]['route_id'],174,got)
 
     def test_priority_order_still_wins_the_first_pick_each_round(self):
         pending=[_task('SG-EN',i) for i in range(2)]+[_task('GB-EN',i) for i in range(2)]
