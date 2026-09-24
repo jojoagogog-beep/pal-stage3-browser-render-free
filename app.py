@@ -992,7 +992,7 @@ def health():
                    lane_skip_until=LANE_SKIP_UNTIL,
                    v9_sender_enabled=not STAGE2_PRIMARY_ROLE,
                    v9_sender_control_revision='CLOUDFLARE_LEDGER_HEALTH_V1',
-                   v9_sender_worker_revision='V9_SENDER_PRE_SUBMIT_TIMEOUT_V2',
+                   v9_sender_worker_revision='V9_SENDER_FORM_COMPAT_V3',
                    v9_sender_production_enabled=os.environ.get('PAL_V9_SEND_PRODUCTION_ENABLED','false').lower() in {'1','true','yes','on'},
                    v9_sender_pending=_v9_send_pending_snapshot(),
                    v9_send_state=_v9_send_snapshot(),

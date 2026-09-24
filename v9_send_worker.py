@@ -17,6 +17,8 @@ SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\b
 EMAIL=re.compile(r'(e-?mail|メール)',re.I)
 MESSAGE=re.compile(r'(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)',re.I)
 COMPANY=re.compile(r'(company|organization|organisation|会社|法人|企業)',re.I)
+FIRST_NAME=re.compile(r'(first.?name|given.?name|名(?:前)?$)',re.I)
+LAST_NAME=re.compile(r'(last.?name|family.?name|sur.?name|姓$)',re.I)
 NAME=re.compile(r'(full.?name|your.?name|contact.?name|お名前|氏名|\bname\b)',re.I)
 SUBJECT=re.compile(r'(subject|件名|title)',re.I)
 URLRX=re.compile(r'(website|web.?site|url|サイト)',re.I)
@@ -119,6 +121,8 @@ async def fill_form(page,form,message,email,market):
    if typ=='email' or EMAIL.search(d):value=email;filled['email']=True
    elif tag=='textarea' or MESSAGE.search(d):value=message;filled['message']=True
    elif COMPANY.search(d):value=company
+   elif FIRST_NAME.search(d):value='Practical AI'
+   elif LAST_NAME.search(d):value='Lab'
    elif NAME.search(d):value=name
    elif typ=='url' or URLRX.search(d):value=site
    elif SUBJECT.search(d):value='AI workflow fit check' if market!='JP-JA' else 'AI業務改善のご相談'
@@ -133,10 +137,12 @@ async def control(form,kind='final'):
   e=xs.nth(i)
   try:
    if not await e.is_visible() or not await e.is_enabled():continue
-   d=await desc(e)
+   d=await desc(e); compact=re.sub(r'\\s+','',d); typ=(await e.get_attribute('type') or '').lower()
    if REJECT_CONTROL.search(d):continue
-   if kind=='final' and FINAL.search(d) and not (CONFIRM.search(d) and not re.search(r'(送信|send|submit)',d,re.I)):hits.append((i,e,d))
-   if kind=='confirm' and CONFIRM.search(d) and not re.search(r'(送信|send|submit)',d,re.I):hits.append((i,e,d))
+   is_final=bool(FINAL.search(d) or re.fullmatch(r'送信',compact,re.I) or typ=='submit')
+   is_confirm=bool(CONFIRM.search(d) and not re.search(r'(送\\s*信|send|submit)',d,re.I))
+   if kind=='final' and is_final and not is_confirm:hits.append((i,e,d))
+   if kind=='confirm' and is_confirm:hits.append((i,e,d))
   except:continue
  return hits[0] if len(hits)==1 else None
 async def click_and_evidence(page,loc,message,email,before_text):
