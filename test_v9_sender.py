@@ -60,6 +60,13 @@ class V9SenderSafetyTests(unittest.TestCase):
             self.assertEqual(app.V9_SEND_PENDING,pending)
         finally:
             app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING=old
+    def test_sender_turn_capacity_is_four_sequential_tasks(self):
+        src=Path('v9_send_worker.py').read_text()
+        self.assertIn('MAX_TASKS_PER_TURN=4',src)
+        self.assertIn('[:MAX_TASKS_PER_TURN]',src)
+        self.assertIn('for t in tasks:',src)
+        self.assertEqual(w.MAX_TASKS_PER_TURN,4)
+
     def test_production_waits_for_submit_barrier(self):
         src=Path('v9_send_worker.py').read_text()
         self.assertIn('await_submit_barrier',src)

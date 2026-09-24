@@ -9,6 +9,7 @@ TASK_URL=os.environ.get('PAL_V9_SEND_TASK_BLOB_URL','').strip()
 RESULT_URL=os.environ.get('PAL_V9_SEND_RESULT_BLOB_URL','').strip()
 MODE=os.environ.get('PAL_V9_SEND_MODE','SHADOW').strip().upper()
 UA='Practical-AI-Lab-V9-Sender/1.0'
+MAX_TASKS_PER_TURN=4
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
 SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
 EMAIL=re.compile(r'(e-?mail|メール)',re.I)
@@ -212,7 +213,7 @@ async def process_task(browser,t):
    try:await ctx.close()
    except:pass
 async def main():
- q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1'][:2];results=[]
+ q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1'][:MAX_TASKS_PER_TURN];results=[]
  if not tasks:
   print(json.dumps({'status':'PASS','mode':MODE,'tasks':0,'results':[]},ensure_ascii=False));return
  async with async_playwright() as p:
