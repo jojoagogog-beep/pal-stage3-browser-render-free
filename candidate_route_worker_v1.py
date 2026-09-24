@@ -26,6 +26,7 @@ LANE_DEPTH=max(2,min(8,int(os.environ.get('PAL_CANDIDATE_ROUTE_DEPTH','4') or 4)
 SITEMAP_ROOT_LIMIT=max(1,min(5,int(os.environ.get('PAL_CANDIDATE_ROUTE_SITEMAP_ROOTS','5') or 5)))
 SITEMAP_CHILD_LIMIT=max(0,min(8,int(os.environ.get('PAL_CANDIDATE_ROUTE_SITEMAP_CHILDREN','8') or 8)))
 UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140 Safari/537.36'
+BLOB_TIMEOUT_SECONDS=12
 CONTACT=re.compile(r'(contact|inquir|enquir|get.{0,4}in.{0,4}touch|request.{0,8}(?:a.{0,3})?quote|quotation|sales|commercial|vendor|supplier|procurement|partnership|proposal|お問い合わせ|問合せ|相談)',re.I)
 ROUTE_CONTACT=re.compile(r'(?:^|[\s/_-])(contact(?:[\s/_-]*us)?|contactus|inquiry|enquiry|get[\s_-]*in[\s_-]*touch|request[\s_-]*(?:a[\s_-]*)?quote|rfq|business[\s_-]*contact|sales[\s_-]*contact|commercial[\s_-]*contact)(?:$|[\s/_-])',re.I)
 VENDOR_ONLY=re.compile(r'(?:^|[\s/_-])(vendor|vendors|supplier|suppliers|procurement|partnership|partnerships)(?:$|[\s/_-])',re.I)
@@ -139,16 +140,16 @@ def _blob_get(url):
     headers={'User-Agent':UA,'Accept':'application/json',
              'Cache-Control':'no-cache, no-store','Pragma':'no-cache'}
     if requests is not None:
-        rr=requests.get(fresh,headers=headers,timeout=60)
+        rr=requests.get(fresh,headers=headers,timeout=BLOB_TIMEOUT_SECONDS)
         rr.raise_for_status()
         raw=rr.content
     else:
         cp=subprocess.run([
-            'curl','-fsS','--connect-timeout','5','--max-time','60',
+            'curl','-fsS','--connect-timeout','3','--max-time',str(BLOB_TIMEOUT_SECONDS),
             '-A',UA,'-H','Accept: application/json',
             '-H','Cache-Control: no-cache, no-store','-H','Pragma: no-cache',
             fresh
-        ],capture_output=True,timeout=65)
+        ],capture_output=True,timeout=BLOB_TIMEOUT_SECONDS+3)
         if cp.returncode!=0:
             raise RuntimeError('BLOB_GET_CURL_'+str(cp.returncode))
         raw=cp.stdout or b''
@@ -160,14 +161,14 @@ def _blob_put(url,obj):
     data=json.dumps(obj,ensure_ascii=False,separators=(',',':')).encode()
     headers={'Content-Type':'application/json','User-Agent':UA}
     if requests is not None:
-        rr=requests.put(url,data=data,headers=headers,timeout=60)
+        rr=requests.put(url,data=data,headers=headers,timeout=BLOB_TIMEOUT_SECONDS)
         rr.raise_for_status()
         return True
     cp=subprocess.run([
-        'curl','-fsS','--connect-timeout','5','--max-time','60',
+        'curl','-fsS','--connect-timeout','3','--max-time',str(BLOB_TIMEOUT_SECONDS),
         '-X','PUT','-A',UA,'-H','Content-Type: application/json',
         '--data-binary','@-',url
-    ],input=data,capture_output=True,timeout=65)
+    ],input=data,capture_output=True,timeout=BLOB_TIMEOUT_SECONDS+3)
     if cp.returncode!=0:
         raise RuntimeError('BLOB_PUT_CURL_'+str(cp.returncode))
     return True

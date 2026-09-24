@@ -7,6 +7,9 @@ TASK={'kind':'PAL_CANDIDATE_ROUTE_TASK_V1','task_id':'task-1',
       'candidates':[{'candidate_id':1,'domain':'example.com','market':'GB-EN','country':'GB'}]}
 
 class CandidateRouteDurabilityTests(unittest.TestCase):
+    def test_blob_io_is_fail_fast_under_parent_runtime_ceiling(self):
+        self.assertLessEqual(w.BLOB_TIMEOUT_SECONDS,12)
+
     def run_main(self, initial_state, publish_result, remote_done):
         with tempfile.TemporaryDirectory() as td:
             state=Path(td)/'state.json'
