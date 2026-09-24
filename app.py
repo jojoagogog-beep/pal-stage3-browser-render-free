@@ -20,6 +20,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
 SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V10_STAGE3_LOW_WATER'
 V9_STAGE2_SHARD1_REVISION='V9_STAGE2_SHARD1_IDLE_ONLY_V1'
+V9_STRICT_STATIC_REVISION='V9_STAGE2_STRICT_STATIC_FULL_V1'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -932,6 +933,7 @@ def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    scheduler_revision=SCHEDULER_REVISION,
                    v9_stage2_shard1_revision=(V9_STAGE2_SHARD1_REVISION if not STAGE2_PRIMARY_ROLE else None),
+                   v9_strict_static_revision=V9_STRICT_STATIC_REVISION,
                    v9_stage2_pending=(_v9_stage2_pending_snapshot() if not STAGE2_PRIMARY_ROLE else None),
                    external_cron_primary_enabled=True,
                    service_name=SERVICE_NAME,
