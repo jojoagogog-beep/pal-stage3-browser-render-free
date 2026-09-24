@@ -47,7 +47,9 @@ STAGE2_YIELD_MAX_BROWSER_BACKLOG=max(0,min(4096,int(
 STAGE2_THREAD=None
 STAGE2_STATE={'status':'IDLE','at':0,'started_at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None,'workers':0,'batch':0,'priority_markets':[]}
 V9_SEND_STATE_LOCK=threading.Lock()
+V9_SEND_PENDING_LOCK=threading.Lock()
 V9_SEND_THREAD=None
+V9_SEND_PENDING=None
 V9_SEND_STATE={'status':'IDLE','at':0,'duration_seconds':0,'returncode':None,'run_count':0,'last_summary':{},'last_completed':None}
 STATE_LOCK=threading.Lock()
 LEASE_LOCK=threading.Lock()
@@ -381,6 +383,53 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
         try: RUN_LOCK.release()
         except RuntimeError: pass
 
+def _v9_send_pending_snapshot():
+    with V9_SEND_PENDING_LOCK:
+        p=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else None
+    if not p:
+        return None
+    # Blob URLs are intentionally not exposed in health/state.
+    return {'mode':p.get('mode'),'queued_at':p.get('queued_at')}
+
+def _queue_v9_send(task_url,result_url,mode):
+    global V9_SEND_PENDING
+    with V9_SEND_PENDING_LOCK:
+        V9_SEND_PENDING={'task_url':task_url,'result_url':result_url,'mode':mode,'queued_at':int(time.time())}
+    with V9_SEND_STATE_LOCK:
+        if not (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()):
+            V9_SEND_STATE.update(status='QUEUED',at=int(time.time()))
+
+def _start_pending_v9_send():
+    global V9_SEND_PENDING,V9_SEND_THREAD
+    if STAGE2_PRIMARY_ROLE:
+        return False
+    with V9_SEND_PENDING_LOCK:
+        pending=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else None
+    if not pending or (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()):
+        return False
+    if not RUN_LOCK.acquire(blocking=False):
+        return False
+    try:
+        with V9_SEND_PENDING_LOCK:
+            # Another request may have replaced the pending payload. Take the newest.
+            pending=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else pending
+            V9_SEND_PENDING=None
+        with V9_SEND_STATE_LOCK:
+            V9_SEND_STATE.update(status='RUNNING',at=int(time.time()),returncode=None)
+        V9_SEND_THREAD=threading.Thread(
+            target=_v9_send_runner,
+            args=(pending['task_url'],pending['result_url'],pending['mode']),
+            name='pal-v9-send',daemon=True)
+        V9_SEND_THREAD.start()
+        return True
+    except Exception:
+        with V9_SEND_PENDING_LOCK:
+            if V9_SEND_PENDING is None:
+                V9_SEND_PENDING=pending
+        try: RUN_LOCK.release()
+        except RuntimeError: pass
+        raise
+
 def _v9_send_runner(task_url,result_url,mode):
     global V9_SEND_THREAD
     started=time.time()
@@ -617,6 +666,15 @@ def background_pump():
             body,code=execute_lane(lane)
             summary=body.get('worker_summary') or {}
             _record_lane_result(lane,summary,code)
+            # Shard1 must not starve the revenue sender behind an indefinitely
+            # renewed Browser lease. A queued sender gets the next heavy slot
+            # after exactly one completed Browser quantum. RUN_LOCK still
+            # guarantees Browser and sender can never overlap.
+            if not STAGE2_PRIMARY_ROLE and _v9_send_pending_snapshot() is not None:
+                _release_idle_browser_priority()
+                with STATE_LOCK:
+                    STATE['idle_exit_reason']='YIELD_TO_WAITING_V9_SENDER'
+                break
             # Primary shares one memory-safe heavy slot with Stage2. Once a
             # valid Stage2 request has waited through one complete Browser
             # quantum, yield the lock so the next controller tick can drain a
@@ -669,7 +727,8 @@ def background_pump():
             RUN_LOCK.release()
         except RuntimeError:
             pass
-        print(json.dumps({'event':'PUMP_STOPPED','reason':'CRASH' if crash else 'LEASE_EXPIRED'},separators=(',',':')),flush=True)
+        sender_started=_start_pending_v9_send()
+        print(json.dumps({'event':'PUMP_STOPPED','reason':'CRASH' if crash else 'LEASE_EXPIRED','v9_sender_started':bool(sender_started)},separators=(',',':')),flush=True)
 
 def start_or_extend(source,priority_markets=None,task_url=None,result_url=None):
     global PUMP_THREAD,ACTIVE_PRIORITY_MARKETS,ACTIVE_TASK_BLOB_URL,ACTIVE_RESULT_BLOB_URL
@@ -814,6 +873,7 @@ def health():
                    lane_skip_until=LANE_SKIP_UNTIL,
                    v9_sender_enabled=not STAGE2_PRIMARY_ROLE,
                    v9_sender_production_enabled=os.environ.get('PAL_V9_SEND_PRODUCTION_ENABLED','false').lower() in {'1','true','yes','on'},
+                   v9_sender_pending=_v9_send_pending_snapshot(),
                    v9_send_state=_v9_send_snapshot(),
                    worker_state=_snapshot())
 
@@ -861,24 +921,18 @@ def v9_send_wake():
         return jsonify(status='PRODUCTION_LOCKED'),403
     if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
         return jsonify(status='BAD_BLOB_URL'),400
-    if not RUN_LOCK.acquire(blocking=False):
-        return jsonify(status='BUSY',v9_send_state=_v9_send_snapshot(),state=_snapshot()),202
-    try:
-        with V9_SEND_STATE_LOCK:
-            V9_SEND_STATE.update(status='RUNNING',at=int(time.time()),returncode=None)
-        V9_SEND_THREAD=threading.Thread(target=_v9_send_runner,args=(task_url,result_url,mode),name='pal-v9-send',daemon=True)
-        V9_SEND_THREAD.start()
+    _queue_v9_send(task_url,result_url,mode)
+    if _start_pending_v9_send():
         return jsonify(status='STARTED',mode=mode,v9_send_state=_v9_send_snapshot()),202
-    except Exception:
-        try: RUN_LOCK.release()
-        except RuntimeError: pass
-        raise
+    return jsonify(status='QUEUED',mode=mode,resource_owner=_resource_owner(),
+                   v9_sender_pending=_v9_send_pending_snapshot(),
+                   v9_send_state=_v9_send_snapshot(),state=_snapshot()),202
 
 @app.get('/v9-send-state')
 def v9_send_state():
     if not allowed():
         return ('unauthorized',401)
-    return jsonify(_v9_send_snapshot())
+    return jsonify(state=_v9_send_snapshot(),pending=_v9_send_pending_snapshot(),resource_owner=_resource_owner())
 
 @app.post('/tick')
 def tick():

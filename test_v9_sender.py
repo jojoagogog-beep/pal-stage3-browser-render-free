@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 import v9_send_worker as w
+import app
 class V9SenderSafetyTests(unittest.TestCase):
     def test_message_is_not_sensitive(self):
         self.assertIsNone(w.SENSITIVE.search('message'))
@@ -18,6 +19,17 @@ class V9SenderSafetyTests(unittest.TestCase):
         self.assertIn("V9_SEND_SHARD1_ONLY",src)
         self.assertIn("PRODUCTION_LOCKED",src)
         self.assertIn("return 'V9_SENDER'",src)
+        self.assertIn("YIELD_TO_WAITING_V9_SENDER",src)
+        self.assertIn("status='QUEUED'",src)
+    def test_sender_pending_snapshot_hides_blob_urls(self):
+        old=app.V9_SEND_PENDING
+        try:
+            app.V9_SEND_PENDING={'task_url':'https://superjsonblob.com/api/jsonBlob/a','result_url':'https://superjsonblob.com/api/jsonBlob/b','mode':'SHADOW','queued_at':123}
+            snap=app._v9_send_pending_snapshot()
+            self.assertEqual(snap,{'mode':'SHADOW','queued_at':123})
+            self.assertNotIn('task_url',snap)
+        finally:
+            app.V9_SEND_PENDING=old
     def test_production_waits_for_submit_barrier(self):
         src=Path('v9_send_worker.py').read_text()
         self.assertIn('await_submit_barrier',src)
