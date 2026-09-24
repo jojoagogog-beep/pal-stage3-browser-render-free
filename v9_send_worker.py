@@ -156,6 +156,18 @@ async def click_and_evidence(page,loc,message,email,before_text):
  if corr2xx and (provider_success or new_success) and not ev['server_not_sent']:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
+async def await_submit_barrier(task,timeout=10.0):
+ if MODE!='PRODUCTION' or task.get('submit_started') is True:return task
+ token=str(task.get('token_id') or '');deadline=time.monotonic()+max(1.0,float(timeout))
+ while time.monotonic()<deadline:
+  try:q=await asyncio.to_thread(_get,TASK_URL)
+  except Exception:
+   await asyncio.sleep(.5);continue
+  for x in (q.get('tasks') or []):
+   if isinstance(x,dict) and str(x.get('token_id') or '')==token and x.get('submit_started') is True:return x
+  await asyncio.sleep(.5)
+ return None
+
 async def process_task(browser,t):
  out={'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time())}
  if not out['token_id'] or not t.get('canonical_url') or not t.get('message_body'):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'INVALID_TASK','evidence':{'pre_submit':True}}
@@ -208,11 +220,17 @@ async def main():
   launch_kw={'headless':True,'args':['--disable-dev-shm-usage','--no-sandbox']}
   if chromium_path: launch_kw['executable_path']=chromium_path
   browser=await p.chromium.launch(**launch_kw)
+  deferred=0
   try:
-   for t in tasks:results.append(await process_task(browser,t))
+   for t in tasks:
+    armed=await await_submit_barrier(t,10.0)
+    if armed is None:
+     deferred+=1
+     continue
+    results.append(await process_task(browser,armed))
   finally:await browser.close()
  try:r=_get(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
  except:prior=[]
  keys={x.get('token_id') for x in results};prior=[x for x in prior if x.get('token_id') not in keys];_put(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
- print(json.dumps({'status':'PASS','mode':MODE,'tasks':len(tasks),'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False))
+ print(json.dumps({'status':'PASS','mode':MODE,'tasks':len(tasks),'deferred_unarmed':deferred,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False))
 if __name__=='__main__':asyncio.run(main())

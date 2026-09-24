@@ -16,4 +16,10 @@ class V9SenderSafetyTests(unittest.TestCase):
         self.assertIn("@app.post('/v9-send-wake')",src)
         self.assertIn("RUN_LOCK.acquire(blocking=False)",src)
         self.assertIn("V9_SEND_SHARD1_ONLY",src)
+        self.assertIn("PRODUCTION_LOCKED",src)
+        self.assertIn("return 'V9_SENDER'",src)
+    def test_production_waits_for_submit_barrier(self):
+        src=Path('v9_send_worker.py').read_text()
+        self.assertIn('await_submit_barrier',src)
+        self.assertIn('deferred_unarmed',src)
 if __name__=='__main__': unittest.main()

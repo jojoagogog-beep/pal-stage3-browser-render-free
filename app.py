@@ -179,6 +179,9 @@ def _stage2_blocked_by_browser(browser_wait,browser_queued,pump_alive):
     return bool(float(browser_wait or 0)>0 or pump_alive)
 
 def _resource_owner():
+    vt=V9_SEND_THREAD
+    if vt and vt.is_alive():
+        return 'V9_SENDER'
     t=PUMP_THREAD
     if t and t.is_alive():
         return 'STAGE3_BROWSER'
@@ -809,6 +812,8 @@ def health():
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
                    lane_empty_streak=LANE_EMPTY_STREAK,
                    lane_skip_until=LANE_SKIP_UNTIL,
+                   v9_sender_enabled=not STAGE2_PRIMARY_ROLE,
+                   v9_sender_production_enabled=os.environ.get('PAL_V9_SEND_PRODUCTION_ENABLED','false').lower() in {'1','true','yes','on'},
                    v9_send_state=_v9_send_snapshot(),
                    worker_state=_snapshot())
 
@@ -852,6 +857,8 @@ def v9_send_wake():
     mode=str(payload.get('mode') or 'SHADOW').upper()
     if mode not in {'SHADOW','PRODUCTION'}:
         return jsonify(status='BAD_MODE'),400
+    if mode=='PRODUCTION' and os.environ.get('PAL_V9_SEND_PRODUCTION_ENABLED','false').lower() not in {'1','true','yes','on'}:
+        return jsonify(status='PRODUCTION_LOCKED'),403
     if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
         return jsonify(status='BAD_BLOB_URL'),400
     if not RUN_LOCK.acquire(blocking=False):
@@ -866,6 +873,12 @@ def v9_send_wake():
         try: RUN_LOCK.release()
         except RuntimeError: pass
         raise
+
+@app.get('/v9-send-state')
+def v9_send_state():
+    if not allowed():
+        return ('unauthorized',401)
+    return jsonify(_v9_send_snapshot())
 
 @app.post('/tick')
 def tick():
