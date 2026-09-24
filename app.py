@@ -13,6 +13,24 @@ def _secret_text(path):
     try:return Path(path).read_text().strip()
     except Exception:return ''
 
+def _v9_production_authorized(generation):
+    try:
+        g=int(generation or 0)
+        if g<=0:return False
+        url=os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health')
+        req=urllib.request.Request(url,headers={'User-Agent':'PAL-Render-V9-Control/1.0','Cache-Control':'no-cache'})
+        with urllib.request.urlopen(req,timeout=8) as r:
+            d=json.loads(r.read().decode('utf-8'))
+        cut=d.get('cutover') or {}; led=cut.get('ledger') or {}
+        return bool(d.get('service')=='PAL_B2B_V9_PLANE' and d.get('authority')=='GLOBAL_LEDGER_DO'
+                    and d.get('mode')=='PRODUCTION' and d.get('ledger_mode')=='PRODUCTION'
+                    and d.get('external_send_enabled') is True
+                    and int(cut.get('generation') or 0)==g and int(led.get('generation') or 0)==g
+                    and led.get('mode')=='PRODUCTION' and led.get('history_sync_complete') is True
+                    and led.get('legacy_writer_disabled') is True and led.get('production_unlock') is True)
+    except Exception:
+        return False
+
 TOKEN=(os.environ.get('PAL_RENDER_TOKEN','') or _secret_text('/etc/secrets/stage3_token'))
 SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Primary is dual-role under one heavy-resource lock: Stage2 route verification
@@ -1006,11 +1024,14 @@ def v9_send_wake():
     payload=request.get_json(silent=True) or {}
     task_url=str(payload.get('task_url') or '')
     result_url=str(payload.get('result_url') or '')
-    mode=str(payload.get('mode') or 'SHADOW').upper()
+    mode=str(payload.get('mode') or 'SHADOW').upper();generation=int(payload.get('cutover_generation') or 0)
     if mode not in {'SHADOW','PRODUCTION'}:
         return jsonify(status='BAD_MODE'),400
-    if mode=='PRODUCTION' and os.environ.get('PAL_V9_SEND_PRODUCTION_ENABLED','false').lower() not in {'1','true','yes','on'}:
-        return jsonify(status='PRODUCTION_LOCKED'),403
+    if mode=='PRODUCTION':
+        env_enabled=os.environ.get('PAL_V9_SEND_PRODUCTION_ENABLED','false').lower() in {'1','true','yes','on'}
+        cloud_authorized=(str(payload.get('production_authority') or '')=='GLOBAL_LEDGER_DO' and _v9_production_authorized(generation))
+        if not (env_enabled or cloud_authorized):
+            return jsonify(status='PRODUCTION_LOCKED',cloud_authorized=False),403
     if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
         return jsonify(status='BAD_BLOB_URL'),400
     # Idempotent wake: a retry while the same sender is already running must
