@@ -16,9 +16,10 @@ def _secret_text(path):
 TOKEN=(os.environ.get('PAL_RENDER_TOKEN','') or _secret_text('/etc/secrets/stage3_token'))
 SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Primary is dual-role under one heavy-resource lock: Stage2 route verification
-# and Stage3 Browser never overlap. Shard1 remains dedicated Stage3 capacity.
+# and Stage3 Browser never overlap. Shard1 keeps Stage3/Sender priority and may use idle time for bounded V9 Stage2.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
 SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V10_STAGE3_LOW_WATER'
+V9_STAGE2_SHARD1_REVISION='V9_STAGE2_SHARD1_IDLE_ONLY_V1'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
@@ -850,10 +851,57 @@ def stage2_state():
         return ('unauthorized',401)
     return jsonify(_stage2_snapshot())
 
+@app.post('/v9-stage2-wake')
+def v9_stage2_wake():
+    """Use shard1 for V9 Stage2 only while Browser/Sender are fully idle.
+
+    This is a bounded migration/supply lane. It never preempts Stage3 Browser or
+    the sole V9 sender, and it uses the same RUN_LOCK so Chromium and Stage2 HTTP
+    probing cannot overlap on Render Free.
+    """
+    global STAGE2_THREAD
+    if not allowed():
+        return ('unauthorized',401)
+    if STAGE2_PRIMARY_ROLE:
+        return jsonify(status='V9_STAGE2_SHARD1_ONLY'),409
+    payload=request.get_json(silent=True) or {}
+    task_url=str(payload.get('task_url') or '')
+    result_url=str(payload.get('result_url') or '')
+    if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
+        return jsonify(status='BAD_BLOB_URL'),400
+    if (PUMP_THREAD and PUMP_THREAD.is_alive()) or (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()) or _v9_send_pending_snapshot() is not None:
+        return jsonify(status='BUSY_HIGHER_PRIORITY',resource_owner=_resource_owner(),state=_snapshot(),v9_send_state=_v9_send_snapshot()),202
+    markets=[]
+    for x in payload.get('priority_markets') or []:
+        x=str(x or '').strip()
+        if x and x not in markets:markets.append(x)
+    workers=max(4,min(24,int(payload.get('workers') or 8)))
+    batch=max(16,min(128,int(payload.get('batch') or 64)))
+    if not STAGE2_LOCK.acquire(blocking=False):
+        return jsonify(status='BUSY_STAGE2',state=_stage2_snapshot()),202
+    if not RUN_LOCK.acquire(blocking=False):
+        try:STAGE2_LOCK.release()
+        except RuntimeError:pass
+        return jsonify(status='BUSY_HIGHER_PRIORITY',resource_owner=_resource_owner()),202
+    try:
+        with STAGE2_STATE_LOCK:
+            STAGE2_STATE.update(status='RUNNING',at=int(time.time()),started_at=int(time.time()),duration_seconds=0,returncode=None,workers=workers,batch=batch,priority_markets=list(markets))
+        STAGE2_THREAD=threading.Thread(target=_stage2_runner,args=(task_url,result_url,markets,workers,batch),name='pal-v9-stage2-shard1',daemon=True)
+        STAGE2_THREAD.start()
+        return jsonify(status='STARTED',revision=V9_STAGE2_SHARD1_REVISION,state=_stage2_snapshot()),202
+    except Exception:
+        STAGE2_THREAD=None
+        try:STAGE2_LOCK.release()
+        except RuntimeError:pass
+        try:RUN_LOCK.release()
+        except RuntimeError:pass
+        raise
+
 @app.get('/health')
 def health():
     return jsonify(service='PAL_RENDER_STAGE3_BROWSER_V1',status='PASS',
                    scheduler_revision=SCHEDULER_REVISION,
+                   v9_stage2_shard1_revision=(V9_STAGE2_SHARD1_REVISION if not STAGE2_PRIMARY_ROLE else None),
                    external_cron_primary_enabled=True,
                    service_name=SERVICE_NAME,
                    service_role=('STAGE2_STAGE3_DUAL' if STAGE2_PRIMARY_ROLE else 'STAGE3_BROWSER'),
