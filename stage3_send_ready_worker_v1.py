@@ -291,6 +291,15 @@ def final_control_candidates(controls):
             fallback.append(x)
     return fallback if len(fallback)==1 else []
 
+def retryable_confirm_control(target,control,frame_index):
+    if not isinstance(control,dict):
+        return False
+    return bool(
+        str(control.get('type') or '')=='submit'
+        and int(control.get('frame_index') or 0)==int(frame_index or 0)
+        and confirm_control_matches(target,control_semantic_text(control))
+    )
+
 
 def strong_main_form_candidate(cand,frame_index):
     if not isinstance(cand,dict) or int(frame_index)!=0:
@@ -497,6 +506,51 @@ async def sticky_fill(loc,value):
     except Exception:
         pass
     raise RuntimeError('STICKY_FILL_FAILED')
+
+async def safe_choice_check(form,loc,row):
+    """Select an already-approved radio/checkbox through its visible label proxy.
+
+    Custom form themes often make the native input 0x0/hidden and style the
+    associated <label>. Never select arbitrary hidden inputs: the caller has
+    already limited this helper to a safe required category/consent choice.
+    """
+    try:
+        await loc.check(timeout=2200)
+        if await loc.is_checked():
+            return True
+    except Exception:
+        pass
+    # Common custom-control pattern: <label><input ...><span>...</span></label>.
+    try:
+        lab=loc.locator('xpath=ancestor::label[1]')
+        if await lab.count()>0 and await lab.first.is_visible():
+            await lab.first.click(timeout=3500)
+            if await loc.is_checked():
+                return True
+    except Exception:
+        pass
+    # Also support <label for="field-id">...</label> without constructing a CSS
+    # selector from an untrusted id. Locate the matching visible label by index.
+    field_id=str((row or {}).get('id') or '')
+    if field_id:
+        try:
+            labels=form.locator('label')
+            indexes=await labels.evaluate_all(
+                """(els,id)=>els.map((e,i)=>({i,forId:e.htmlFor||'',s:getComputedStyle(e),r:e.getBoundingClientRect()}))
+                   .filter(x=>x.forId===id&&x.s.display!=='none'&&x.s.visibility!=='hidden'&&x.r.width>0&&x.r.height>0)
+                   .map(x=>x.i)""",
+                field_id,
+            )
+            for idx in indexes[:3]:
+                try:
+                    await labels.nth(int(idx)).click(timeout=3500)
+                    if await loc.is_checked():
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+    return False
 
 async def visible_captcha(root):
     """Block only an actually rendered captcha/challenge, not a dormant script."""
@@ -707,6 +761,12 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 try:
                     metas=await asyncio.wait_for(root.evaluate("""() => {
                       const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.disabled&&e.type!=='hidden'&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
+                      const choiceProxyVisible=e=>{
+                        const typ=String(e.type||'').toLowerCase();
+                        if(e.disabled||!(typ==='radio'||typ==='checkbox'))return false;
+                        const labs=e.labels?[...e.labels]:[];
+                        return labs.some(l=>{const s=getComputedStyle(l),r=l.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0});
+                      };
                       const desc=e=>{const id=e.id||'',lab=id?document.querySelector('label[for="'+CSS.escape(id)+'"]'):null;
                         const labels=e.labels?[...e.labels].map(x=>x.innerText||'').join(' '):'';
                         const tr=e.closest('tr'),cell=e.closest('th,td');let rowLabel='',rowRequiredIcon=false,rowRequiredClass=false;
@@ -746,7 +806,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                       };
                       return [...document.forms].slice(0,12).map((f,index)=>{
                         const allFields=[...f.querySelectorAll('input,textarea,select')];
-                        const fs=allFields.map((e,all_i)=>({e,all_i})).filter(x=>vis(x.e)).map(({e,all_i})=>{const d=desc(e);
+                        const fs=allFields.map((e,all_i)=>({e,all_i})).filter(x=>vis(x.e)||choiceProxyVisible(x.e)).map(({e,all_i})=>{const d=desc(e);
                           const reqText=(d.self+' '+d.rowLabel+' '+d.local);
                           const req=!!e.required||e.getAttribute('aria-required')==='true'||d.rowRequiredIcon===true||/(?:^|\\s)required(?:\\s|$)/i.test(String(e.className||''))||(/[※＊*]/.test(d.rowLabel+' '+d.local)&&!/(任意|optional)/i.test(reqText))||(/(必須|required|mandatory)/i.test(reqText)&&!/(任意|optional)/i.test(reqText));
                           return {i:all_i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),name:e.name||'',id:e.id||'',required:req,
@@ -923,7 +983,9 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     unfillable.append(str(members[0].get('desc') or 'required_radio')[:120])
                 else:
                     try:
-                        await form.locator('input,textarea,select').nth(int(pick['i'])).check()
+                        choice_loc=form.locator('input,textarea,select').nth(int(pick['i']))
+                        if not await safe_choice_check(form,choice_loc,pick):
+                            unfillable.append(str(pick.get('desc') or 'required_radio')[:120])
                     except Exception:
                         unfillable.append(str(pick.get('desc') or 'required_radio')[:120])
             for row in best['fields']:
@@ -945,7 +1007,9 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     is_marketing=bool(MARKETING.search(desc))
                     is_consent=bool(CONSENT.search(desc))
                     if is_consent and not is_marketing:
-                        try:await loc.check()
+                        try:
+                            if not await safe_choice_check(form,loc,row):
+                                if req or is_consent:unfillable.append(desc[:120] or 'consent_checkbox')
                         except Exception:
                             if req or is_consent:unfillable.append(desc[:120] or 'consent_checkbox')
                     elif req:
@@ -1126,9 +1190,77 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 if captcha_after:
                     return {**base,'status':'CAPTCHA','code':'VISIBLE_CAPTCHA_AFTER_CONFIRM','final_url':final_url,'stage3_send_ready':False}
                 finals=final_control_candidates(all_ctrls)
+                # Some server-backed/Javascript forms ignore a synthetic click
+                # even though the exact safe confirmation submitter is visible.
+                # If the SAME non-final confirm control is still present and no
+                # final send control appeared, retry exactly once with the same
+                # element as requestSubmit(submitter). This preserves the button
+                # name/value used by backends to select the confirmation branch.
+                # Never use this on any control whose visible semantics are send/
+                # submit/final, and never fall back to form.submit().
+                confirm_retry_used=False
+                if not finals:
+                    same_confirm=[
+                        x for x in all_ctrls
+                        if retryable_confirm_control(target,x,int(best.get('frame_index') or 0))
+                    ]
+                    if same_confirm:
+                        try:
+                            retry_loc=None
+                            retry_controls=form.locator('button,input[type=submit],input[type=button],input[type=image]')
+                            for ci in range(min(await retry_controls.count(),40)):
+                                loc2=retry_controls.nth(ci)
+                                if not await loc2.is_visible() or await loc2.is_disabled():
+                                    continue
+                                tx=await loc2.evaluate("e=>((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.name||'')+' '+(e.id||'')).trim()")
+                                if confirm_control_matches(target,tx):
+                                    retry_loc=loc2
+                                    break
+                            if retry_loc is not None:
+                                await retry_loc.evaluate("""e=>{
+                                  if(!e.form || typeof e.form.requestSubmit!=='function') throw new Error('NO_REQUEST_SUBMIT');
+                                  e.form.requestSubmit(e);
+                                }""")
+                                confirm_retry_used=True
+                                try:
+                                    await page.wait_for_load_state('domcontentloaded',timeout=5000)
+                                except Exception:
+                                    pass
+                                await page.wait_for_timeout(900)
+                                final_url=page.url
+                                if host(final_url)!=domain:
+                                    return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED_AFTER_CONFIRM_RETRY','final_url':final_url,'stage3_send_ready':False}
+                                current_roots=list(page.frames)[:frame_cap]
+                                all_ctrls=[]; prohibited=False; captcha_after=False
+                                for fi,root2 in enumerate(current_roots):
+                                    try:
+                                        if await visible_captcha(root2): captcha_after=True
+                                    except Exception: pass
+                                    try:
+                                        text3=(await root2.locator('body').inner_text())[:180000]
+                                        if PROHIBIT.search(text3): prohibited=True
+                                    except Exception: pass
+                                    try:
+                                        xs=await root2.locator('button,input[type=submit],input[type=button],input[type=image]').evaluate_all(r"""els=>els.map((e,i)=>{
+                                          const s=getComputedStyle(e),r=e.getBoundingClientRect(); const visible=!e.disabled&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;
+                                          const label=((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')).trim();
+                                          return {i,visible,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),label,
+                                            text:(label+' '+(e.name||'')+' '+(e.id||'')).trim()};
+                                        }).filter(x=>x.visible)""")
+                                        for x in xs: x['frame_index']=fi
+                                        all_ctrls.extend(xs)
+                                    except Exception: pass
+                                if prohibited:
+                                    return {**base,'status':'SALES_PROHIBITED','code':'SALES_PROHIBITED_AFTER_CONFIRM_RETRY','final_url':final_url,'stage3_send_ready':False}
+                                if captcha_after:
+                                    return {**base,'status':'CAPTCHA','code':'VISIBLE_CAPTCHA_AFTER_CONFIRM_RETRY','final_url':final_url,'stage3_send_ready':False}
+                                finals=final_control_candidates(all_ctrls)
+                        except Exception:
+                            confirm_retry_used=False
                 if not finals:
                     return {**base,'status':'TECH_DEFER','code':'FINAL_SUBMIT_CONTROL_NOT_FOUND_AFTER_CONFIRM',
                             'final_url':final_url,'stage3_send_ready':False,
+                            'confirm_request_submit_retry':confirm_retry_used,
                             'final_control_samples':[
                                 {k:x.get(k) for k in ('frame_index','tag','type','label','text')}
                                 for x in all_ctrls[:16]

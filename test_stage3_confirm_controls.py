@@ -26,6 +26,21 @@ class ConfirmControlTests(unittest.TestCase):
         xs=[{"tag":"button","type":"submit","text":"Continue"}]
         self.assertEqual(w.final_control_candidates(xs),xs)
 
+    def test_retryable_confirm_accepts_same_safe_submitter(self):
+        x={"tag":"input","type":"submit","label":"確認画面へ",
+           "text":"確認画面へ submitConfirm","frame_index":0}
+        self.assertTrue(w.retryable_confirm_control("確認画面へ",x,0))
+
+    def test_retryable_confirm_rejects_final_send_submitter(self):
+        x={"tag":"input","type":"submit","label":"この内容で送信",
+           "text":"この内容で送信 submitConfirm","frame_index":0}
+        self.assertFalse(w.retryable_confirm_control("確認画面へ",x,0))
+
+    def test_retryable_confirm_rejects_other_frame(self):
+        x={"tag":"input","type":"submit","label":"確認画面へ",
+           "text":"確認画面へ submitConfirm","frame_index":1}
+        self.assertFalse(w.retryable_confirm_control("確認画面へ",x,0))
+
 class SemanticLabelTests(unittest.TestCase):
     def test_visible_send_label_wins_over_internal_confirm_name(self):
         x={"tag":"input","type":"button","label":"送信する","text":"送信する submitConfirm confirmButton"}
