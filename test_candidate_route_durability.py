@@ -42,5 +42,48 @@ class CandidateRouteDurabilityTests(unittest.TestCase):
         self.assertEqual(state['last_tasks'],0)
         self.assertEqual(state['last_candidates'],0)
 
+    def test_truncated_task_is_not_checkpointed(self):
+        candidates=[{'candidate_id':i,'domain':f'c{i}.example.com','market':'GB-EN','country':'GB'}
+                    for i in range(20)]
+        task=dict(TASK,candidates=candidates)
+        with tempfile.TemporaryDirectory() as td:
+            state=Path(td)/'state.json';state.write_text(json.dumps({'processed_task_ids':[]}))
+            result={'candidate_id':1,'domain':'example.com','market':'GB-EN','verified':True,'pages':1,'errors':0}
+            with patch.object(w,'STATE',state), patch.object(w,'messages',return_value=[task]), \
+                 patch.object(w,'durable_done_task_ids',return_value=set()), \
+                 patch.object(w,'publish_messages',return_value=('SUPERJSONBLOB_V1',True)), \
+                 patch.object(w,'safe_inspect',return_value=result), patch.object(w,'PRIORITY_MARKETS',set()), \
+                 patch.object(w,'PRIORITY_STRICT',False), patch.object(w,'LANE_COUNT',1), \
+                 patch.object(w,'LANE_INDEX',0), patch.object(w,'LANE_WORKERS',4), patch.object(w,'LANE_BATCH',16):
+                w.main()
+            out=json.loads(state.read_text())
+        self.assertEqual(out['last_candidates'],16)
+        self.assertNotIn('task-1',out['processed_task_ids'])
+        self.assertEqual(out['committed_tasks'],0)
+
+    def test_32_results_are_persisted_before_done_checkpoint(self):
+        candidates=[{'candidate_id':i,'domain':f'c{i}.example.com','market':'GB-EN','country':'GB'}
+                    for i in range(33)]
+        task=dict(TASK,candidates=candidates)
+        calls=[]
+        def publish(msgs):
+            calls.append(msgs)
+            return ('SUPERJSONBLOB_V1',True)
+        with tempfile.TemporaryDirectory() as td:
+            state=Path(td)/'state.json';state.write_text(json.dumps({'processed_task_ids':[]}))
+            result={'candidate_id':1,'domain':'example.com','market':'GB-EN','verified':True,'pages':1,'errors':0}
+            with patch.object(w,'STATE',state), patch.object(w,'messages',return_value=[task]), \
+                 patch.object(w,'durable_done_task_ids',return_value=set()), \
+                 patch.object(w,'publish_messages',side_effect=publish), \
+                 patch.object(w,'safe_inspect',return_value=result), patch.object(w,'PRIORITY_MARKETS',set()), \
+                 patch.object(w,'PRIORITY_STRICT',False), patch.object(w,'LANE_COUNT',1), \
+                 patch.object(w,'LANE_INDEX',0), patch.object(w,'LANE_WORKERS',8), patch.object(w,'LANE_BATCH',64):
+                w.main()
+            out=json.loads(state.read_text())
+        self.assertGreaterEqual(len(calls),2)
+        self.assertTrue(all(m.get('kind')!='PAL_CANDIDATE_ROUTE_TASK_DONE_V1' for m in calls[0]))
+        self.assertTrue(any(m.get('kind')=='PAL_CANDIDATE_ROUTE_TASK_DONE_V1' for m in calls[-1]))
+        self.assertIn('task-1',out['processed_task_ids'])
+
 if __name__=='__main__':
     unittest.main()

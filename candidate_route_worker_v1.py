@@ -593,38 +593,70 @@ def main():
     # first, then fresh route work for the currently open market. Preserve that order
     # here instead of re-sorting by timestamp and starving the active market.
     ordered=pending[:32]
-    selected=[];rows=[];seen_tasks=set();seen_domains=set()
+    selected=[];rows=[];seen_tasks=set();seen_domains=set();complete_task_ids=[]
     for task in ordered:
         tid=str(task.get('task_id') or '')
         if not tid or tid in seen_tasks:continue
+        room=max(0,LANE_BATCH-len(rows))
+        if room<=0:break
         seen_tasks.add(tid)
         part=[]
         for rec in list(task.get('candidates') or []):
             domain=str(rec.get('domain') or '').lower().removeprefix('www.')
             if not domain or domain in seen_domains:continue
             seen_domains.add(domain);part.append(rec)
-        selected.append(task)
-        room=max(0,LANE_BATCH-len(rows))
-        if room:rows.extend(part[:room])
-        if len(rows)>=LANE_BATCH:
-            break
+        taken=part[:room]
+        selected.append(task);rows.extend(taken)
+        # Never emit TASK_DONE for a task whose unique candidate slice was
+        # truncated by the global batch cap. That task remains retryable and
+        # its already-published route results are idempotent on the next pass.
+        if len(taken)==len(part):complete_task_ids.append(tid)
+        if len(rows)>=LANE_BATCH:break
     pending=selected;results=[]
-    if rows:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(LANE_WORKERS,len(rows))) as ex:
-            for x in ex.map(safe_inspect,rows):results.append(x)
     task_ids=[str(t.get('task_id') or '') for t in pending if t.get('task_id')]
-    run_id=str(int(time.time()))+'-'+str(os.getpid());out_msgs=[]
-    for i in range(0,len(results),32):
-        out_msgs.append({'kind':'PAL_CANDIDATE_ROUTE_BATCH_V2','run_id':run_id,'batch_index':i//32,
-              'items':results[i:i+32],'task_ids':task_ids,'last_seen_epoch':int(time.time())})
-    for tid in task_ids:
-        out_msgs.append({'kind':'PAL_CANDIDATE_ROUTE_TASK_DONE_V1','task_id':tid,'run_id':run_id,'last_seen_epoch':int(time.time())})
-    if out_msgs:
-        transport,publish_ok=publish_messages(out_msgs)
+    run_id=str(int(time.time()))+'-'+str(os.getpid())
+    transport=('SUPERJSONBLOB_V1' if RESULT_BLOB else 'NO_RESULTS')
+    publish_ok=True;durable_results=0;incremental_enabled=True
+    if rows:
+        # Persist completed inspections every 32 rows instead of waiting for the
+        # slowest site in the entire 128-row batch. The parent Render process has
+        # a hard runtime ceiling; without incremental durability a timeout after
+        # 100+ successful inspections discarded every result from that run.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(LANE_WORKERS,len(rows))) as ex:
+            futures=[ex.submit(safe_inspect,rec) for rec in rows]
+            for fut in concurrent.futures.as_completed(futures):
+                results.append(fut.result())
+                if incremental_enabled and len(results)-durable_results>=32:
+                    chunk=results[durable_results:durable_results+32]
+                    msg={'kind':'PAL_CANDIDATE_ROUTE_BATCH_V2','run_id':run_id,
+                         'batch_index':durable_results//32,'items':chunk,
+                         'task_ids':task_ids,'last_seen_epoch':int(time.time())}
+                    transport,ok=publish_messages([msg])
+                    if ok:
+                        durable_results+=len(chunk)
+                    else:
+                        # Keep processing, then retry the undurable suffix in one
+                        # final publish. Never checkpoint tasks on a failed write.
+                        incremental_enabled=False;publish_ok=False
+    final_msgs=[]
+    for i in range(durable_results,len(results),32):
+        final_msgs.append({'kind':'PAL_CANDIDATE_ROUTE_BATCH_V2','run_id':run_id,
+              'batch_index':i//32,'items':results[i:i+32],
+              'task_ids':task_ids,'last_seen_epoch':int(time.time())})
+    # DONE is emitted only for tasks fully represented inside this run's batch.
+    # A truncated final task remains retryable, preventing silent candidate loss.
+    for tid in complete_task_ids:
+        final_msgs.append({'kind':'PAL_CANDIDATE_ROUTE_TASK_DONE_V1','task_id':tid,
+                           'run_id':run_id,'last_seen_epoch':int(time.time())})
+    if final_msgs:
+        transport,final_ok=publish_messages(final_msgs)
+        publish_ok=bool(final_ok)
+        if final_ok:durable_results=len(results)
+    elif results:
+        publish_ok=(durable_results==len(results))
     else:
-        transport=('SUPERJSONBLOB_V1' if RESULT_BLOB else 'NO_RESULTS')
         publish_ok=True
-    committed_task_ids=task_ids if publish_ok else []
+    committed_task_ids=complete_task_ids if publish_ok and durable_results==len(results) else []
     processed=(processed+committed_task_ids)[-1600:]
     state={'updated_at_epoch':int(time.time()),'processed_task_ids':processed,'last_tasks':len(pending),
            'last_candidates':len(rows),'last_pages_checked':sum(int(x.get('pages') or 0) for x in results),
