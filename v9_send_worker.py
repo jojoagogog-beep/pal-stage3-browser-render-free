@@ -188,7 +188,7 @@ async def click_and_evidence(page,loc,message,email,before_text):
  if corr2xx and (provider_success or new_success) and not ev['server_not_sent']:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
-async def await_submit_barrier(task,timeout=10.0):
+async def await_submit_barrier(task,timeout=65.0):
  if MODE!='PRODUCTION' or task.get('submit_started') is True:return task
  token=str(task.get('token_id') or '');deadline=time.monotonic()+max(1.0,float(timeout))
  while time.monotonic()<deadline:
@@ -266,7 +266,7 @@ async def main():
   deferred=0
   try:
    for t in tasks:
-    armed=await await_submit_barrier(t,10.0)
+    armed=await await_submit_barrier(t,65.0)
     if armed is None:
      deferred+=1
      continue
