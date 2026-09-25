@@ -307,6 +307,19 @@ def safe_consent_radio_choice(members):
             return rows[0]
     return None
 
+def safe_select_value(options):
+    rows=[x for x in (options or []) if isinstance(x,dict)]
+    safe=[]
+    for x in rows:
+        value=str(x.get('v') or '').strip()
+        text=str(x.get('t') or '').strip()
+        if not value:
+            continue
+        if re.search(r'(その他|一般|お問い合わせ|ご相談|法人|business|other|general|partnership|new inquiry|service inquiry|request information|no preference|not applicable)',text,re.I):
+            if not re.search(r'(newsletter|marketing|メルマガ|広告|採用|求人|career|job|support|technical support|個人|患者|student)',text,re.I):
+                safe.append(value)
+    return safe[0] if len(safe)==1 else None
+
 def normalized_control_text(value):
     return re.sub(r'\s+','',str(value or '')).strip().casefold()
 
@@ -1296,15 +1309,19 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 if typ=='radio':
                     continue
                 if tag=='select':
-                    if not req:continue
                     try:
+                        try: current=str(await loc.input_value(timeout=1200) or '').strip()
+                        except Exception: current=''
+                        if current:
+                            continue
                         opts=await loc.locator('option').evaluate_all("os=>os.map(o=>({v:o.value||'',t:(o.innerText||'').trim()}))")
-                        pick=next((o['v'] for o in opts if o.get('v') and re.search(
-                            r'(お問い合わせ|その他|一般|法人|ご提案|協業|business|other|general|partnership|new inquiry|service inquiry|request information|no preference|not applicable)',
-                            str(o.get('t') or ''),re.I)),None)
-                        if pick:await loc.select_option(value=pick,timeout=2500)
-                        else:unfillable.append(desc[:120] or 'required_select')
-                    except Exception:unfillable.append(desc[:120] or 'required_select')
+                        pick=safe_select_value(opts)
+                        if pick:
+                            await loc.select_option(value=pick,timeout=2500)
+                        elif req:
+                            unfillable.append(desc[:120] or 'required_select')
+                    except Exception:
+                        if req:unfillable.append(desc[:120] or 'required_select')
                     continue
                 value=None
                 if tag=='textarea' or re.search(r'(message|inquir|enquir|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細|description)',desc,re.I):value='Business inquiry validation'
