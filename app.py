@@ -112,19 +112,19 @@ BROWSER_LANES=('FAST_DOM','DYNAMIC_JS','IFRAME_DEEP','DEEP')
 LANE_EMPTY_STREAK={lane:0 for lane in BROWSER_LANES}
 LANE_SKIP_UNTIL={lane:0.0 for lane in LANE_EMPTY_STREAK}
 LANE_EMPTY_BASE_COOLDOWN_SECONDS=max(10,min(120,int(os.environ.get('PAL_RENDER_EMPTY_LANE_COOLDOWN_SECONDS','30') or 30)))
-LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180') or 180)))
+LEASE_SECONDS=max(180,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','240') or 240)))
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
 # Render Free is memory-bound: even two concurrent Browser inspections OOM-killed
 # the gunicorn worker. Keep exactly one live Browser inspection / renderer.
 # FAST_DOM may process up to four routes *serially inside the same Chromium
 # process* so high-confidence send-reproof candidates amortize browser launch
 # overhead without increasing concurrent memory pressure. Proof/safety gates are unchanged.
-LANE_MAX_ROWS={'DYNAMIC_JS':3,'IFRAME_DEEP':1,'DEEP':2,'FAST_DOM':4}
+LANE_MAX_ROWS={'DYNAMIC_JS':4,'IFRAME_DEEP':2,'DEEP':3,'FAST_DOM':6}
 LANE_CONCURRENCY={'DYNAMIC_JS':1,'IFRAME_DEEP':1,'DEEP':1,'FAST_DOM':1}
 # The per-route budget must exceed the internal navigation + render budget.
 # Previously 16-18s wrapped a page.goto() that could itself wait 30s, making
 # OVERALL_ROUTE_TIMEOUT_OR_ERROR inevitable on otherwise valid slower sites.
-LANE_DEADLINE_SECONDS={'DYNAMIC_JS':96,'IFRAME_DEEP':58,'DEEP':90,'FAST_DOM':108}
+LANE_DEADLINE_SECONDS={'DYNAMIC_JS':165,'IFRAME_DEEP':110,'DEEP':150,'FAST_DOM':165}
 LANE_ROUTE_TIMEOUT_SECONDS={'DYNAMIC_JS':42,'IFRAME_DEEP':42,'DEEP':38,'FAST_DOM':22}
 LANE_RETRY_TIMEOUT_SECONDS={'DYNAMIC_JS':42,'IFRAME_DEEP':42,'DEEP':38,'FAST_DOM':22}
 app=Flask(__name__)
@@ -727,7 +727,7 @@ def execute_lane(lane):
             # A lane must release the single free Render service promptly even
             # if Chromium/Playwright teardown misbehaves. Worker-level route
             # budgets are already <=42s and results stream durably per batch.
-            capture_output=True,timeout=140,
+            capture_output=True,timeout=190,
         )
         out=(cp.stdout or '')[-7000:]
         err=(cp.stderr or '')[-2000:]
