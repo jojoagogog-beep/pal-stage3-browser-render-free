@@ -237,6 +237,7 @@ async def unique_final_on_page(page):
   except:continue
  return hits[0] if len(hits)==1 else None
 async def click_and_evidence(page,loc,message,email,before_text):
+ before_url=str(page.url or '')
  mutations=[];responses=[];resp_objs=[]
  def on_req(req):
   try:
@@ -295,8 +296,12 @@ async def click_and_evidence(page,loc,message,email,before_text):
  redirect_confirm=any(pathmatch(CONFIRM_PATH,x.get('location')) for x in corr3xx)
  final_completion=pathmatch(COMPLETION_PATH,page.url)
  final_success_query=bool(SUCCESS_QUERY.search(str(page.url or '')))
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
- if (provider_success or new_success or corr204 or redirect_completion or redirect_success_query or final_completion or final_success_query) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
+ try:
+  bu=urlsplit(before_url);au=urlsplit(str(page.url or ''));path_changed=(bu.netloc==au.netloc and (bu.path.rstrip('/') or '/')!=(au.path.rstrip('/') or '/'))
+ except:path_changed=False
+ correlated_2xx_navigation=bool(corr2xx and path_changed and not pathmatch(CONFIRM_PATH,page.url))
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'correlated_2xx_navigation':correlated_2xx_navigation,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ if (provider_success or new_success or corr204 or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):
