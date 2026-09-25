@@ -573,16 +573,12 @@ def _v9_send_runner(task_url,result_url,mode,generation=0,authority='',failover_
         V9_SEND_THREAD=None
         try: RUN_LOCK.release()
         except RuntimeError: pass
-        # After a send, resume Browser proof before Stage2 supply.
-        browser_started=False
-        if _browser_demand_remaining()>0:
-            try:
-                body,_=start_or_extend('SENDER_HANDOFF')
-                browser_started=str(body.get('status') or '')=='STARTED'
-            except Exception:
-                browser_started=False
-        stage2_started=False if browser_started else _start_pending_v9_stage2()
-        print(json.dumps({'event':'V9_SEND_STOPPED','browser_started':bool(browser_started),'v9_stage2_started':bool(stage2_started)},separators=(',',':')),flush=True)
+        # Do not immediately give the scarce shard1 heavy slot back to Browser.
+        # The external controller decides the next owner on its next tick and
+        # always evaluates safe send inventory before replenishment work.
+        # This removes the ~60s Browser quantum from every send batch while
+        # preserving RUN_LOCK single-owner safety.
+        print(json.dumps({'event':'V9_SEND_STOPPED','handoff':'CONTROLLER_PRIORITY'},separators=(',',':')),flush=True)
 
 def _v9_send_snapshot():
     with V9_SEND_STATE_LOCK:
@@ -1028,7 +1024,7 @@ def health():
                    lane_skip_until=LANE_SKIP_UNTIL,
                    v9_sender_enabled=not STAGE2_PRIMARY_ROLE,
                    v9_sender_control_revision='DUAL_AUTHORITY_FAILOVER_V1',
-                   v9_sender_worker_revision='V9_SENDER_FORM_COMPAT_V3',
+                   v9_sender_worker_revision='V9_SENDER_PARALLEL_V4',
                    v9_sender_production_enabled=not STAGE2_PRIMARY_ROLE,
                    v9_sender_pending=_v9_send_pending_snapshot(),
                    v9_send_state=_v9_send_snapshot(),

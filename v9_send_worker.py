@@ -366,5 +366,5 @@ async def main():
  try:r=_get(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
  except:prior=[]
  keys={x.get('token_id') for x in results};prior=[x for x in prior if x.get('token_id') not in keys];_put(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
- print(json.dumps({'status':'PASS','mode':MODE,'tasks':len(tasks),'deferred_unarmed':deferred,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False))
+ print(json.dumps({'status':'PASS','mode':MODE,'tasks':len(tasks),'max_tasks':MAX_TASKS_PER_TURN,'concurrency':SEND_CONCURRENCY,'deferred_unarmed':deferred,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False))
 if __name__=='__main__':asyncio.run(main())
