@@ -450,7 +450,15 @@ async def process_task(browser,t):
   if txt is None:return {**out,'outcome':'TECH_RETRY','reason':'BODY_UNREADABLE_PRE_SUBMIT','evidence':{'pre_submit':True,'navigation_timeout':nav_timeout,'final_url':page.url[:500]}}
   if nav_timeout:
    has_form=await has_any_form(page)
-   if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500]}}
+   if not has_form:
+    # A navigation timeout can still leave a usable page that finishes
+    # hydrating the contact form a moment later. Re-check the live DOM/frames
+    # before declaring a technical retry; never click or submit in this wait.
+    for delay_ms in (1200,1800):
+     await page.wait_for_timeout(delay_ms)
+     if await has_any_form(page):
+      has_form=True;break
+   if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500],'late_form_wait_ms':3000}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'))
