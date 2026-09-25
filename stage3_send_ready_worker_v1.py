@@ -708,6 +708,7 @@ def publish(msgs):
 
 def base_result(rec):
     return {'kind':'PAL_BROWSER_PREFLIGHT_V1','route_id':int(rec.get('route_id') or 0),
+      'task_id':str(rec.get('_task_id') or rec.get('task_id') or ''),
       'market':str(rec.get('market') or ''),'official_domain':str(rec.get('official_domain') or '').lower().removeprefix('www.'),
       'last_seen_epoch':int(time.time()),'pages_checked':1,'proof_version':PROOF_VERSION,'lane_mode':LANE_MODE,
       'producer':PRODUCER}
@@ -1682,7 +1683,7 @@ async def amain():
         remaining=max(0,MAX_ROWS-len(rows))
         if remaining<=0:
             break
-        selected=part[:remaining]
+        selected=[{**rec,'_task_id':tid} for rec in part[:remaining]]
         for rec in selected:
             seen_routes.add(int(rec.get('route_id') or 0))
         seen.add(tid);chosen.append(m);rows.extend(selected)
