@@ -494,6 +494,13 @@ async def control(form,kind='final'):
  if len(semantic)==1:return semantic[0]
  if not semantic and len(fallback)==1:return fallback[0]
  return None
+async def control_actionable(item):
+ if item is None:return False
+ try:
+  loc=item[1] if isinstance(item,(tuple,list)) and len(item)>1 else item
+  return bool(await loc.is_visible() and await loc.is_enabled())
+ except Exception:return False
+
 async def final_control_matching_text(form,expected_text=''):
  expected=' '.join(str(expected_text or '').split()).lower()
  if not expected:return await control(form,'final')
@@ -761,6 +768,7 @@ async def process_task(browser,t):
   if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_CLICK','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True,'control_recheck':True}}
   if confirm is not None:
+   if MODE=='PRODUCTION' and not await control_actionable(confirm):return {**out,'outcome':'TECH_RETRY','reason':'CONFIRM_CONTROL_STALE_PRE_CLICK','evidence':{'pre_submit':True,'resend_safe':True}}
    if MODE=='PRODUCTION' and not await asyncio.to_thread(_mark_click_started,t):return {**out,'outcome':'TECH_RETRY','reason':'CLICK_BARRIER_WRITE_FAILED','evidence':{'pre_submit':True}}
    click_barrier=True
    outcome,cev=await click_and_evidence(page,confirm[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
@@ -805,6 +813,7 @@ async def process_task(browser,t):
    if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PROOF_EXPIRED_BEFORE_FINAL','evidence':{**cev,'proof_expires_at':t.get('proof_expires_at')}}
    if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**cev,'control_recheck':True}}
   if MODE=='PRODUCTION' and not click_barrier:
+   if not await control_actionable(final):return {**out,'outcome':'TECH_RETRY','reason':'SUBMIT_CONTROL_STALE_PRE_CLICK','evidence':{'pre_submit':True,'resend_safe':True}}
    if not await asyncio.to_thread(_mark_click_started,t):return {**out,'outcome':'TECH_RETRY','reason':'CLICK_BARRIER_WRITE_FAILED','evidence':{'pre_submit':True}}
    click_barrier=True
   outcome,ev=await click_and_evidence(page,final[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
