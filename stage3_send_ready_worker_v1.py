@@ -78,6 +78,14 @@ def shard_accept(rec):
     except Exception: return False
     return rid>0 and route_shard(rid,SHARD_COUNT)==SHARD_INDEX
 
+def stage3_navigation_timeout_ms(route_timeout_seconds,lane_mode,slow=False):
+    budget=max(8000,int(float(route_timeout_seconds)*1000))
+    lane=str(lane_mode or 'FAST_DOM').upper()
+    cap={'FAST_DOM':10000,'DYNAMIC_JS':13000,'IFRAME_DEEP':15000,'DEEP':18000}.get(lane,12000)
+    fraction={'FAST_DOM':0.25,'DYNAMIC_JS':0.30,'IFRAME_DEEP':0.33,'DEEP':0.38}.get(lane,0.30)
+    if slow:cap=max(cap,15000)
+    return max(6000,min(cap,int(budget*fraction)))
+
 def task_eligible_routes(task):
     return [
         rec for rec in (task.get('routes') or [])
@@ -809,7 +817,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             # one bounded apex->www retry. This prevents the outer asyncio.wait_for
             # from expiring before Playwright can return a meaningful verdict.
             route_budget_ms=max(8000,int(ROUTE_TIMEOUT_SECONDS*1000))
-            nav_timeout=max(7000,min(18000,int(route_budget_ms*0.38)))
+            nav_timeout=stage3_navigation_timeout_ms(ROUTE_TIMEOUT_SECONDS,LANE_MODE,slow)
             async def navigate_ready(target):
                 # A committed main document is enough to enter the bounded render
                 # wait below. Requiring <body> immediately after commit caused
@@ -1402,7 +1410,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                         if await visible_captcha(root2): captcha_after=True
                     except Exception: pass
                     try:
-                        text3=(await root2.locator('body').inner_text())[:180000]
+                        text3=str(await asyncio.wait_for(root2.evaluate("() => ((document.body && document.body.textContent) || '')"),timeout=1.5) or '')[:180000]
                         if PROHIBIT.search(text3): prohibited=True
                     except Exception: pass
                     try:
@@ -1467,7 +1475,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                                         if await visible_captcha(root2): captcha_after=True
                                     except Exception: pass
                                     try:
-                                        text3=(await root2.locator('body').inner_text())[:180000]
+                                        text3=str(await asyncio.wait_for(root2.evaluate("() => ((document.body && document.body.textContent) || '')"),timeout=1.5) or '')[:180000]
                                         if PROHIBIT.search(text3): prohibited=True
                                     except Exception: pass
                                     try:
