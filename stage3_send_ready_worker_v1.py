@@ -209,6 +209,8 @@ def route_cache_key(rec):
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
 def recent_route_blocked(rec,recent,now_epoch=None):
+    if rec.get('force_reproof') is True:
+        return False
     entry=(recent or {}).get(route_cache_key(rec))
     if not isinstance(entry,dict):return False
     now_epoch=int(now_epoch or time.time())
