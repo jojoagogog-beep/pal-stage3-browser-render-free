@@ -1341,6 +1341,11 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 field_schema.append({k:row.get(k) for k in ('id','name','tag','type','required','desc') if k in row})
             schema_has_email=any(str(x.get('type') or '')=='email' or re.search(r'(e-?mail|メール)',str(x.get('desc') or ''),re.I) for x in field_schema)
             schema_has_message=any(str(x.get('tag') or '')=='textarea' or re.search(r'(message|inquir|enquir|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)',str(x.get('desc') or ''),re.I) for x in field_schema)
+            schema_has_captcha=any(CAPTCHA.search(' '.join(str(x.get(k) or '') for k in ('id','name','desc'))) for x in field_schema)
+            if schema_has_captcha:
+                return {**base,'status':'CAPTCHA','code':'CAPTCHA_FIELD_PRESENT','final_url':final_url,
+                        'captcha_present':True,'stage3_send_ready':False,'send_ready_proof_v2':False,
+                        'field_schema':field_schema,'lane_mode':LANE_MODE}
             if not field_schema or not schema_has_email or not schema_has_message:
                 return {**base,'status':'TECH_DEFER','code':'INCOMPLETE_FIELD_SCHEMA','final_url':final_url,
                         'stage3_send_ready':False,'send_ready_proof_v2':False}
