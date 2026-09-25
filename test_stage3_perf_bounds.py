@@ -21,5 +21,10 @@ class Stage3PerfBoundsTests(unittest.TestCase):
         self.assertIn('timeout=3.0',src)
         self.assertIn("per_root_timeout=3.75 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else 3.5",src)
 
+    def test_fast_dom_is_shallow_and_skips_multistep_expansion(self):
+        src=Path('stage3_send_ready_worker_v1.py').read_text()
+        self.assertIn("frame_cap=8 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else (6 if LANE_MODE=='DYNAMIC_JS' else 2)",src)
+        self.assertIn("if not best and LANE_MODE!='FAST_DOM':",src)
+
 if __name__=='__main__':
     unittest.main()

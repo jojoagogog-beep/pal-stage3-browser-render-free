@@ -1251,7 +1251,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     provider.append(fr)
                 else:
                     other.append(fr)
-            frame_cap=8 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else (6 if LANE_MODE=='DYNAMIC_JS' else 4)
+            frame_cap=8 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else (6 if LANE_MODE=='DYNAMIC_JS' else 2)
             if LANE_MODE in {'IFRAME_DEEP','DEEP'}:
                 roots=([main]+same_origin+provider+other)[:frame_cap]
             else:
@@ -1281,7 +1281,10 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 if strong_main_form_candidate(best,frame_index):
                     break
             multistep_steps=0
-            if not best:
+            # FAST_DOM is intentionally a shallow first pass. Wizard/iframe
+            # expansion belongs to DYNAMIC_JS/DEEP after an explicit retry,
+            # otherwise one cheap lane can consume the full route budget.
+            if not best and LANE_MODE!='FAST_DOM':
                 phase('safe_multistep')
                 multistep_steps=await advance_safe_multistep_roots(roots,3)
                 if multistep_steps:
