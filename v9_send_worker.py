@@ -21,6 +21,7 @@ SENDER_SHARD=0 if str(os.environ.get('PAL_V9_SENDER_SHARD','1')).strip()=='0' el
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
 SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
 EMAIL=re.compile(r'(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)',re.I)
+EMAIL_EXAMPLE=re.compile(r'[^\s@]+@[^\s@]+\.[^\s@]+',re.I)
 MESSAGE=re.compile(r'(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)',re.I)
 COMPANY=re.compile(r'(company|organization|organisation|会社|法人|企業)',re.I)
 FIRST_NAME=re.compile(r'(first.?name|given.?name|名(?:前)?$)',re.I)
@@ -39,6 +40,7 @@ SAFE_CHOICE=re.compile(r'(general|other|business|partnership|collaboration|inqui
 UNSAFE_CHOICE=re.compile(r'(job|career|employment|採用|求人|support|customer service|technical support|newsletter|marketing|subscribe|個人|患者|student)',re.I)
 CONSENT_OK=re.compile(r'(privacy|terms|policy|consent|agree(?:ment)?|個人情報|プライバシー|規約|同意)',re.I)
 CONSENT_BAD=re.compile(r'(newsletter|marketing|promotional|メルマガ|広告|案内を受け取|subscribe)',re.I)
+SUBMIT_CONFIRM_CHECK=re.compile(r'(上記の内容でよろしければ|チェック.{0,40}(?:送信|send)|(?:送信|send).{0,40}(?:チェック|check)|confirm.{0,30}(?:submit|send))',re.I)
 COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
 CONFIRM_PATH=re.compile(r'/(?:confirm|confirmation|review|check)(?:/|$)',re.I)
 CONFIRM_QUERY=re.compile(r'(?:[?&](?:mode|step|action)=)(?:check|confirm|confirmation|review)(?:&|#|$)',re.I)
@@ -180,7 +182,7 @@ async def choose_form(page):
         if(!vis(e)) continue;
         const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,...[...(e.labels||[])].map(l=>l.innerText||'')].filter(Boolean).join(' ');
         const typ=(e.getAttribute('type')||'').toLowerCase();
-        hasE=hasE||typ==='email'||email.test(d);hasM=hasM||e.tagName==='TEXTAREA'||msg.test(d);
+        hasE=hasE||typ==='email'||email.test(d)||d.includes('@');hasM=hasM||e.tagName==='TEXTAREA'||msg.test(d);
       }
       const txt=(f.innerText||'').slice(0,5000);
       return {fi,hasE,hasM,score:(hasE?5:0)+(hasM?5:0)+(contact.test(txt)?3:0)};
@@ -207,7 +209,7 @@ def post_submit_validation(new_validation_text,invalid_control_count,provider_su
  return bool(new_validation_text or (int(invalid_control_count or 0)>0 and not ((provider_success or new_success) and payload_cleared)))
 async def proof_form_shape_ok(form,proof_submit_text=''):
  try:
-  ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,...[...(e.labels||[])].map(l=>l.innerText||'')].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d);M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
+  ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,...[...(e.labels||[])].map(l=>l.innerText||'')].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d)||d.includes('@');M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
   if not ok:return False
   expected=normalize_proof_submit_text(proof_submit_text)
   if not expected:return True
@@ -253,6 +255,29 @@ async def has_any_form(page):
   except Exception:pass
  return False
 
+async def reveal_candidate_forms(page,proof_frame_index=None,proof_form_index=None):
+ frames=ordered_form_frames(page,host(page.url));targets=[]
+ try:pfr=int(proof_frame_index);pfi=int(proof_form_index)
+ except Exception:pfr=pfi=-1
+ if 0<=pfr<len(frames):
+  try:
+   forms=frames[pfr].locator('form')
+   if 0<=pfi<await forms.count():targets.append(forms.nth(pfi))
+  except Exception:pass
+ if not targets:
+  for root in frames[:6]:
+   try:
+    forms=root.locator('form')
+    for i in range(min(await forms.count(),3)):targets.append(forms.nth(i))
+   except Exception:pass
+ moved=False
+ for f in targets[:8]:
+  try:
+   await f.scroll_into_view_if_needed(timeout=2500);moved=True
+  except Exception:pass
+ if moved:await page.wait_for_timeout(1200)
+ return moved
+
 async def fill_form(page,form,message,email,market):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
  fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False};fill_deadline=time.monotonic()+25.0
@@ -261,7 +286,7 @@ async def fill_form(page,form,message,email,market):
     const s=getComputedStyle(e),r=e.getBoundingClientRect();
     return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
       enabled:!e.disabled,name:e.name||'',id:e.id||'',tag:e.tagName.toLowerCase(),typ:(e.getAttribute('type')||e.tagName).toLowerCase(),
-      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
+      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,e.closest('.contactConfirmWrap')?.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
       cls:String(e.className||''),required:!!e.required||e.getAttribute('aria-required')==='true',
       options:e.tagName==='SELECT'?[...e.options].map(o=>o.textContent||''):[]};
   })""")
@@ -275,24 +300,29 @@ async def fill_form(page,form,message,email,market):
    class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in cls.split())
    req=bool(m.get('required') or class_required or (re.search(r'(必須|required|mandatory)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
    if time.monotonic()>fill_deadline:return {'ok':False,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'timed_out':True}
-   core=bool(typ in {'email','url'} or EMAIL.search(d) or tag=='textarea' or MESSAGE.search(d)
+   core=bool(typ in {'email','url'} or EMAIL.search(d) or EMAIL_EXAMPLE.search(d) or tag=='textarea' or MESSAGE.search(d)
              or COMPANY.search(d) or FIRST_NAME.search(d) or LAST_NAME.search(d)
              or NAME.search(d) or SUBJECT.search(d) or URLRX.search(d))
    if typ in {'hidden','submit','button','image','reset','password','file'}:
     if req and typ=='file':required_unknown.append(d or 'file')
     continue
-   if not req and not core:continue
    if BOT_HINT.search(d):
     if req:required_unknown.append(('human_challenge:'+d)[:160])
     continue
-   if SENSITIVE.search(d) and not EMAIL.search(d):
+   if typ=='checkbox':
+    safe_check=bool((CONSENT_OK.search(d) and not CONSENT_BAD.search(d)) or SUBMIT_CONFIRM_CHECK.search(d))
+    if safe_check:
+     await e.check(timeout=1500);continue
+    if not req:continue
+    required_unknown.append(d[:160] or typ);continue
+   if typ=='radio':
+    if not req:continue
+    if SAFE_CHOICE.search(d) and not UNSAFE_CHOICE.search(d):await e.check(timeout=1500);continue
+    required_unknown.append(d[:160] or typ);continue
+   if not req and not core:continue
+   if SENSITIVE.search(d) and not EMAIL.search(d) and not EMAIL_EXAMPLE.search(d):
     if req:sensitive.append(d[:160])
     continue
-   if typ in {'checkbox','radio'}:
-    if not req:continue
-    if typ=='checkbox' and CONSENT_OK.search(d) and not CONSENT_BAD.search(d):await e.check(timeout=1500);continue
-    if typ=='radio' and SAFE_CHOICE.search(d) and not UNSAFE_CHOICE.search(d):await e.check(timeout=1500);continue
-    required_unknown.append(d[:160] or typ);continue
    if tag=='select':
     if not req:continue
     pick=None
@@ -301,7 +331,7 @@ async def fill_form(page,form,message,email,market):
     if pick is None:required_unknown.append(d[:160] or 'select');continue
     await e.select_option(index=pick,timeout=1500);continue
    value=None
-   if typ=='email' or EMAIL.search(d):value=email;filled['email']=True
+   if typ=='email' or EMAIL.search(d) or EMAIL_EXAMPLE.search(d):value=email;filled['email']=True
    elif tag=='textarea' or MESSAGE.search(d):value=message;filled['message']=True
    elif COMPANY.search(d):value=company
    elif re.search(r'(ふりがな|ひらがな)',d,re.I):value='ぷらくてぃかるえーあいらぼ'
@@ -556,8 +586,11 @@ async def process_task(browser,t):
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
   if not chosen:
-   await page.wait_for_timeout(1800)
+   await reveal_candidate_forms(page,t.get('proof_frame_index'),t.get('proof_form_index'))
    if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'late_render':True}}
+   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+  if not chosen:
+   await page.wait_for_timeout(900)
    chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
   if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True}}
   _,frame_i,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
