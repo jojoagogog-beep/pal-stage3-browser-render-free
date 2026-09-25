@@ -6,6 +6,10 @@ import types
 import unittest
 from unittest.mock import patch
 
+import importlib.util
+from pathlib import Path
+
+_flask_stubbed=False
 try:
     import flask  # noqa: F401
 except ModuleNotFoundError:
@@ -20,8 +24,13 @@ except ModuleNotFoundError:
         jsonify=lambda *a,**k: (a[0] if len(a)==1 else (a or k)),
         request=types.SimpleNamespace(headers={},get_json=lambda **k:{}),
     )
+    _flask_stubbed=True
 
-import app as m
+_spec=importlib.util.spec_from_file_location('app_stage3_scheduler_under_test',Path(__file__).with_name('app.py'))
+m=importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(m)
+if _flask_stubbed:
+    sys.modules.pop('flask',None)
 
 class Stage3AdaptiveSchedulerTests(unittest.TestCase):
     def setUp(self):

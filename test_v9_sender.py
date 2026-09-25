@@ -16,7 +16,8 @@ class V9SenderSafetyTests(unittest.TestCase):
         src=Path('app.py').read_text()
         self.assertIn("@app.post('/v9-send-wake')",src)
         self.assertIn("RUN_LOCK.acquire(blocking=False)",src)
-        self.assertIn("V9_SEND_SHARD1_ONLY",src)
+        self.assertIn("sender_shard",src)
+        self.assertIn("DUAL_AUTHORITY_DUAL_SHARD_FAILOVER_V2",src)
         self.assertIn("PRODUCTION_LOCKED",src)
         self.assertIn("return 'V9_SENDER'",src)
         self.assertIn("YIELD_TO_WAITING_V9_SENDER",src)
@@ -60,12 +61,13 @@ class V9SenderSafetyTests(unittest.TestCase):
             self.assertEqual(app.V9_SEND_PENDING,pending)
         finally:
             app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING=old
-    def test_sender_turn_capacity_is_four_sequential_tasks(self):
+    def test_sender_turn_capacity_is_four_bounded_tasks(self):
         src=Path('v9_send_worker.py').read_text()
-        self.assertIn('MAX_TASKS_PER_TURN=4',src)
+        self.assertIn("PAL_V9_SEND_MAX_TASKS','4'",src)
         self.assertIn('[:MAX_TASKS_PER_TURN]',src)
-        self.assertIn('for t in tasks:',src)
+        self.assertIn('asyncio.Semaphore(SEND_CONCURRENCY)',src)
         self.assertEqual(w.MAX_TASKS_PER_TURN,4)
+        self.assertEqual(w.SEND_CONCURRENCY,2)
 
     def test_production_waits_for_submit_barrier(self):
         src=Path('v9_send_worker.py').read_text()
@@ -79,5 +81,5 @@ class V9SenderSafetyTests(unittest.TestCase):
     def test_optional_business_identity_fields_reach_fill_logic(self):
         src=Path('v9_send_worker.py').read_text()
         self.assertIn("or COMPANY.search(d) or FIRST_NAME.search(d) or LAST_NAME.search(d)",src)
-        self.assertIn("or NAME.search(d) or SUBJECT.search(d) or URLRX.search(d)",src)
+        self.assertIn("or NAME.search(d) or KANA_FIELD.search(d) or SUBJECT.search(d) or URLRX.search(d)",src)
 if __name__=='__main__': unittest.main()

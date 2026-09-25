@@ -526,10 +526,13 @@ def _start_pending_v9_send():
         return False
     if str(pending.get('mode') or '').upper()=='PRODUCTION':
         auth=str(pending.get('authority') or '')
-        g=int(pending.get('generation') or 0)
-        control_ok=((auth=='GLOBAL_LEDGER_DO' and _v9_production_authorized(g)) or
-                    (auth=='FAILOVER_BLOB_V1' and _v9_failover_authorized(g,pending.get('failover_control_url'))))
-        if not control_ok:
+        if auth=='GLOBAL_LEDGER_DO':
+            revoked=not _v9_production_authorized(int(pending.get('generation') or 0))
+        elif auth=='FAILOVER_BLOB_V1':
+            revoked=not _v9_failover_authorized(int(pending.get('generation') or 0),pending.get('failover_control_url'))
+        else:
+            revoked=True
+        if revoked:
             with V9_SEND_PENDING_LOCK:
                 if V9_SEND_PENDING is not None: V9_SEND_PENDING=None
             with V9_SEND_STATE_LOCK:
@@ -588,12 +591,17 @@ def _v9_send_runner(task_url,result_url,mode,generation=0,authority='',failover_
         V9_SEND_THREAD=None
         try: RUN_LOCK.release()
         except RuntimeError: pass
-        # Do not immediately give the scarce shard1 heavy slot back to Browser.
-        # The external controller decides the next owner on its next tick and
-        # always evaluates safe send inventory before replenishment work.
-        # This removes the ~60s Browser quantum from every send batch while
-        # preserving RUN_LOCK single-owner safety.
-        print(json.dumps({'event':'V9_SEND_STOPPED','handoff':'CONTROLLER_PRIORITY'},separators=(',',':')),flush=True)
+        # Sender keeps highest priority. If another sender queued while this
+        # turn was active it takes the slot first; otherwise resume a pending
+        # bounded Stage2 turn so supply cannot starve behind sender activity.
+        sender_started=_start_pending_v9_send()
+        if sender_started:
+            stage2_started=False
+        else:
+            stage2_started=_start_pending_v9_stage2()
+        print(json.dumps({'event':'V9_SEND_STOPPED','handoff':'SENDER_THEN_STAGE2',
+                          'v9_sender_started':bool(sender_started),'v9_stage2_started':bool(stage2_started)},
+                         separators=(',',':')),flush=True)
 
 def _v9_send_snapshot():
     with V9_SEND_STATE_LOCK:
