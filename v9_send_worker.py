@@ -641,7 +641,10 @@ async def recover_correlated_request_responses(req_objs,responses,resp_objs):
  added=0
  for req in list(req_objs or [])[:8]:
   try:
-   resp=await req.response()
+   # Some servers accept the POST but never finish a response. Do not let one
+   # hung Request.response() consume the whole per-task wall clock after the
+   # durable click barrier is already set.
+   resp=await asyncio.wait_for(req.response(),timeout=1.5)
    if resp is None:continue
    method=str(req.method);url=str(req.url)[:500];status=int(resp.status);key=(method,url,status)
    if key in seen:continue
