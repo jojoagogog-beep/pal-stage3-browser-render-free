@@ -1217,7 +1217,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 elif typ=='email' or re.search(r'(e-?mail|メール)',desc,re.I):value='validation@example.com'
                 elif re.search(r'(会社|法人|企業|company|organization|organisation)',desc,re.I):value='Practical AI Lab'
                 elif re.search(r'(ふりがな|ひらがな)',desc,re.I):value='ぷらくてぃかるえーあいらぼ'
-                elif re.search(r'(フリガナ|カナ|kana)',desc,re.I):value='プラクティカルエーアイラボ'
+                elif re.search(r'(フリガナ|カナ|kana|furigana)',desc,re.I):value='プラクティカルエーアイラボ'
                 elif re.search(r'(姓|苗字|名字|surname|family[ _.-]?name|last[ _.-]?name|\blname\b|(?:^|[\[\]_.-])last(?:$|[\[\]_.-]))',desc,re.I):value='Practical'
                 elif re.search(r'(名|given[ _.-]?name|first[ _.-]?name|\bfname\b|(?:^|[\[\]_.-])first(?:$|[\[\]_.-]))',desc,re.I):value='AI Lab'
                 elif re.search(r'(氏名|お名前|名前|担当者|full.?name|contact.?name|\bname\b)',desc,re.I):value='Practical AI Lab'

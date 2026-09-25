@@ -27,7 +27,7 @@ COMPANY=re.compile(r'(company|organization|organisation|会社|法人|企業)',r
 FIRST_NAME=re.compile(r'(first.?name|given.?name|名(?:前)?$)',re.I)
 LAST_NAME=re.compile(r'(last.?name|family.?name|sur.?name|姓$)',re.I)
 NAME=re.compile(r'(full.?name|your.?name|contact.?name|お名前|氏名|\bname\b)',re.I)
-KANA_FIELD=re.compile(r'(ふりがな|ひらがな|フリガナ|カナ|kana)',re.I)
+KANA_FIELD=re.compile(r'(ふりがな|ひらがな|フリガナ|カナ|kana|furigana)',re.I)
 SUBJECT=re.compile(r'(subject|件名|title)',re.I)
 URLRX=re.compile(r'(website|web.?site|url|サイト)',re.I)
 CAPTCHA_SEL='.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey],iframe[src*="recaptcha"],iframe[src*="hcaptcha"]'
@@ -442,7 +442,7 @@ async def fill_form(page,form,message,email,market):
    elif tag=='textarea' or MESSAGE.search(d):value=message;filled['message']=True
    elif COMPANY.search(d):value=company
    elif re.search(r'(ふりがな|ひらがな)',d,re.I):value='ぷらくてぃかるえーあいらぼ'
-   elif re.search(r'(フリガナ|カナ|kana)',d,re.I):value='プラクティカルエーアイラボ'
+   elif re.search(r'(フリガナ|カナ|kana|furigana)',d,re.I):value='プラクティカルエーアイラボ'
    elif FIRST_NAME.search(d):value='Practical AI'
    elif LAST_NAME.search(d):value='Lab'
    elif NAME.search(d):value=name
