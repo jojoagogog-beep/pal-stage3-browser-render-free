@@ -1472,12 +1472,12 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     'stage3_send_ready':True,'send_ready_proof_v2':True,'required_fillable':True,
                     'business_contact_form':True,'control_kind':control_kind,'proof_source':'RENDERED_BROWSER_V2',
                     'lane_mode':LANE_MODE,'field_schema':field_schema,
-                    'form_fingerprint':hashlib.sha256((final_url+'|frame='+str(best.get('frame_index') or 0)+'|'+str(best['index'])+'|'+str(control.get('text') or '')).encode()).hexdigest(),
+                    'form_fingerprint':hashlib.sha256((final_url+'|frame='+str(best.get('frame_index') or 0)+'|'+str(best['index'])+'|'+control_semantic_text(control)).encode()).hexdigest(),
                     'frame_index':int(best.get('frame_index') or 0),
                     'form_index':int(best.get('index') or 0),
                     'form_action':str(best.get('form_action') or '')[:1000],
                     'form_method':str(best.get('form_method') or '')[:20],
-                    'submit_text':str(control.get('text') or '')[:300]}
+                    'submit_text':control_semantic_text(control)[:300]}
         except PlaywrightTimeoutError as e:
             return {**base,'status':'TECH_DEFER','code':'BROWSER_TIMEOUT','stage3_send_ready':False,
                     'timeout_phase':progress['phase'],'error_detail':str(e)[:300],'lane_mode':LANE_MODE}
