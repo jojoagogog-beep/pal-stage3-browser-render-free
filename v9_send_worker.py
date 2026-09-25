@@ -913,7 +913,7 @@ async def process_task(browser,t):
   if fill.get('timed_out'):return {**out,'outcome':'TECH_RETRY','reason':'FILL_TIMEOUT_PRE_SUBMIT','evidence':{**fill,'pre_submit':True}}
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
   if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':{**fill,'pre_submit':True}}
-  await page.wait_for_timeout(250)
+  await page.wait_for_timeout(500)
   # Frameworks such as Contact Form 7 can reorder forms after field updates.
   # A positional nth() locator can then silently point at an unrelated search
   # form. Re-resolve the contact form and require the exact filled payload to
@@ -929,6 +929,21 @@ async def process_task(browser,t):
   confirm_action=bool(re.search(r'(confirm|review|check|kakunin|確認)',unquote_plus(form_action),re.I))
   confirm,final=await resolve_pre_submit_controls(
    form,proof_confirm_step,confirm_action,initial_proof_submit_text)
+  if final is None and confirm is None:
+   # Hydrating forms can recreate the submit controls after the filled payload
+   # is already stable. Rebind the same proven form twice before failing closed.
+   for settle_ms in (400,700):
+    await page.wait_for_timeout(settle_ms)
+    refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+    if not refreshed:continue
+    _,frame_i,fi,form=refreshed
+    if not await form_contains_payload(form,str(t.get('reply_address') or ''),str(t['message_body'])):continue
+    try:form_action=str(await form.get_attribute('action') or '')
+    except:form_action=''
+    confirm_action=bool(re.search(r'(confirm|review|check|kakunin|確認)',unquote_plus(form_action),re.I))
+    confirm,final=await resolve_pre_submit_controls(
+     form,proof_confirm_step,confirm_action,initial_proof_submit_text)
+    if final is not None or confirm is not None:break
   if final is None and confirm is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_CONTROL_NOT_FOUND','evidence':{'pre_submit':True,'form_action':form_action[:500]}}
   if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'frame_index':frame_i,'form_index':fi,'form_action':form_action[:500],'final_control':bool(final),'confirm_control':bool(confirm)}}
   before=txt
