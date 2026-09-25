@@ -548,11 +548,11 @@ def base_result(rec):
 async def sticky_fill(loc,value):
     target=str(value)
     try:
-        await loc.fill(target)
+        await loc.fill(target,timeout=2500)
     except Exception:
         pass
     try:
-        if str(await loc.input_value())==target:
+        if str(await loc.input_value(timeout=1500))==target:
             return
     except Exception:
         pass
@@ -566,7 +566,7 @@ async def sticky_fill(loc,value):
       e.dispatchEvent(new Event('change',{bubbles:true}));
     }""",target)
     try:
-        if str(await loc.input_value())==target:
+        if str(await loc.input_value(timeout=1500))==target:
             return
     except Exception:
         pass
@@ -786,9 +786,15 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     timeout=4.0,
                 )
             except Exception:
-                return {**base,'status':'TECH_DEFER','code':'BODY_TEXT_TIMEOUT',
-                        'final_url':final_url,'stage3_send_ready':False,
-                        'timeout_phase':'body_text','lane_mode':LANE_MODE}
+                try:
+                    raw_text=await asyncio.wait_for(
+                        page.locator('body').text_content(timeout=3000),
+                        timeout=3.5,
+                    )
+                except Exception:
+                    return {**base,'status':'TECH_DEFER','code':'BODY_TEXT_TIMEOUT',
+                            'final_url':final_url,'stage3_send_ready':False,
+                            'timeout_phase':'body_text','lane_mode':LANE_MODE}
             text=str(raw_text or '')[:180000]
             if not text.strip():
                 return {**base,'status':'TECH_DEFER','code':'DOM_TEXT_EMPTY',
@@ -1114,7 +1120,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                         pick=next((o['v'] for o in opts if o.get('v') and re.search(
                             r'(お問い合わせ|その他|一般|法人|ご提案|協業|business|other|general|partnership|new inquiry|service inquiry|request information|no preference|not applicable)',
                             str(o.get('t') or ''),re.I)),None)
-                        if pick:await loc.select_option(value=pick)
+                        if pick:await loc.select_option(value=pick,timeout=2500)
                         else:unfillable.append(desc[:120] or 'required_select')
                     except Exception:unfillable.append(desc[:120] or 'required_select')
                     continue
