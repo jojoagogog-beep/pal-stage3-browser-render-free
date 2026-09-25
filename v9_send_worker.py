@@ -635,7 +635,7 @@ async def control(form,kind='final'):
     return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
       enabled:!e.disabled,d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' '),
       label:[e.getAttribute('aria-label'),e.value,e.innerText,e.placeholder].filter(Boolean).join(' '),
-      typ:(e.getAttribute('type')||'').toLowerCase()};
+      typ:(e.type||e.getAttribute('type')||'').toLowerCase()};
   })""")
  except Exception:return None
  for m in meta:
@@ -672,7 +672,7 @@ async def final_control_matching_text(form,expected_text=''):
   e=xs.nth(i)
   try:
    if not await e.is_visible() or not await e.is_enabled():continue
-   d=' '.join((await desc(e)).split());label=' '.join(str(await e.evaluate("e=>[e.getAttribute('aria-label'),e.value,e.innerText,e.placeholder].filter(Boolean).join(' ')") or '').split());low=d.lower();typ=(await e.get_attribute('type') or '').lower();compact=re.sub(r'\\s+','',d)
+   d=' '.join((await desc(e)).split());label=' '.join(str(await e.evaluate("e=>[e.getAttribute('aria-label'),e.value,e.innerText,e.placeholder].filter(Boolean).join(' ')") or '').split());low=d.lower();typ=str(await e.evaluate("e=>(e.type||e.getAttribute('type')||'').toLowerCase()") or '');compact=re.sub(r'\\s+','',d)
    if REJECT_CONTROL.search(d):continue
    is_confirm=control_is_confirm(label,d)
    is_final=bool(FINAL.search(d) or re.fullmatch(r'送信',compact,re.I) or typ=='submit') and not is_confirm
