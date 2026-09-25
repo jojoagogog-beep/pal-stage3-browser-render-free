@@ -119,7 +119,7 @@ IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECOND
 # FAST_DOM may process up to four routes *serially inside the same Chromium
 # process* so high-confidence send-reproof candidates amortize browser launch
 # overhead without increasing concurrent memory pressure. Proof/safety gates are unchanged.
-LANE_MAX_ROWS={'DYNAMIC_JS':4,'IFRAME_DEEP':2,'DEEP':3,'FAST_DOM':6}
+LANE_MAX_ROWS={'DYNAMIC_JS':3,'IFRAME_DEEP':2,'DEEP':2,'FAST_DOM':6}
 LANE_CONCURRENCY={'DYNAMIC_JS':1,'IFRAME_DEEP':1,'DEEP':1,'FAST_DOM':1}
 # The per-route budget must exceed the internal navigation + render budget.
 # Previously 16-18s wrapped a page.goto() that could itself wait 30s, making
