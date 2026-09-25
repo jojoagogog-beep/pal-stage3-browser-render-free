@@ -20,7 +20,7 @@ TASK_WALL_TIMEOUT=max(90.0,min(220.0,float(os.environ.get('PAL_V9_TASK_WALL_TIME
 SENDER_SHARD=0 if str(os.environ.get('PAL_V9_SENDER_SHARD','1')).strip()=='0' else 1
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
 SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
-EMAIL=re.compile(r'(e-?mail|(?:^|[_\-\s])mail(?:$|[_\-\s])|メール)',re.I)
+EMAIL=re.compile(r'(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)',re.I)
 MESSAGE=re.compile(r'(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)',re.I)
 COMPANY=re.compile(r'(company|organization|organisation|会社|法人|企業)',re.I)
 FIRST_NAME=re.compile(r'(first.?name|given.?name|名(?:前)?$)',re.I)
@@ -163,7 +163,7 @@ async def choose_form(page):
  try:
   rows=await page.evaluate("""() => {
     const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};
-    const email=/(e-?mail|(^|[\\s_-])mail($|[\\s_-])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;
+    const email=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;
     const contact=/(contact|inquiry|enquiry|お問い合わせ|お問合せ|ご相談)/i;
     return [...document.querySelectorAll('form')].slice(0,20).map((f,fi)=>{
       if(!vis(f)) return null;
@@ -192,11 +192,16 @@ def ordered_form_frames(page,domain=''):
   elif provider_re.search(fu):provider.append(fr)
   else:other.append(fr)
  return ([main]+same+provider+other)[:12]
+def normalize_proof_submit_text(v):
+ s=' '.join(str(v or '').split())
+ return re.sub(r'\s*__[A-Z0-9_]+__\s*$','',s,flags=re.I).strip().lower()
+def post_submit_validation(new_validation_text,invalid_control_count,provider_success,new_success,payload_cleared):
+ return bool(new_validation_text or (int(invalid_control_count or 0)>0 and not ((provider_success or new_success) and payload_cleared)))
 async def proof_form_shape_ok(form,proof_submit_text=''):
  try:
-  ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|(^|[\\s_-])mail($|[\\s_-])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d);M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
+  ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d);M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
   if not ok:return False
-  expected=' '.join(str(proof_submit_text or '').split()).lower()
+  expected=normalize_proof_submit_text(proof_submit_text)
   if not expected:return True
   xs=form.locator('button,input[type=submit],input[type=button],input[type=image]')
   for i in range(min(await xs.count(),40)):
@@ -425,7 +430,7 @@ async def click_and_evidence(page,loc,message,email,before_text):
   payload_values_remaining=await page.locator('input,textarea').evaluate_all("(els,a)=>els.filter(e=>{const v=String(e.value||'');return v===String(a.email||'')||v===String(a.message||'')}).length",{'email':email,'message':message})
  except: payload_values_remaining=-1
  payload_cleared=(payload_values_remaining==0)
- validation=bool(new_validation_text or invalid_control_count>0)
+ validation=post_submit_validation(new_validation_text,invalid_control_count,provider_success,new_success,payload_cleared)
  corr2xx=any(x['matches_form_payload'] and 200<=x['status']<300 for x in responses);corr4xx=any(x['matches_form_payload'] and x['status'] in {400,401,403,404,405,410,415,422} for x in responses)
  def pathmatch(rx,u):
   try:return bool(rx.search(urlsplit(str(u or '')).path or '/'))

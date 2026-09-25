@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 import v9_send_worker as w
 
 class Frame:
@@ -46,6 +47,19 @@ class SenderFrameIdentityTests(unittest.TestCase):
         self.assertIsNotNone(w.EMAIL.search('mail'))
         self.assertIsNotNone(w.EMAIL.search('contact_mail'))
         self.assertIsNone(w.EMAIL.search('mailing_address'))
+
+    def test_static_submit_marker_is_not_part_of_button_identity(self):
+        self.assertEqual(w.normalize_proof_submit_text('Send Message __DIRECT_SUBMIT__'),'send message')
+        self.assertEqual(w.normalize_proof_submit_text('Get Started __DIRECT_SUBMIT__'),'get started')
+
+    def test_explicit_success_beats_reset_form_invalid_controls(self):
+        self.assertFalse(w.post_submit_validation(False,5,False,True,True))
+        self.assertTrue(w.post_submit_validation(True,0,False,True,True))
+        self.assertTrue(w.post_submit_validation(False,5,False,False,True))
+
+    def test_browser_form_scan_knows_mail_alias(self):
+        src=Path('v9_send_worker.py').read_text()
+        self.assertGreaterEqual(src.count("(?:^|[^a-z])mail(?:$|[^a-z])"),3)
 
 if __name__=='__main__':
     unittest.main()
