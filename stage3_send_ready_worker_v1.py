@@ -1212,7 +1212,10 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             # entire route wall-clock budget and converting good routes into
             # OVERALL_ROUTE_TIMEOUT_OR_ERROR. Per-root timeouts are fail-closed;
             # a hung frame is skipped, never accepted.
-            per_root_timeout=3.5 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else 2.75
+            # The inner DOM metadata evaluation is itself bounded at 3.0s.
+            # Keep the outer root budget strictly larger so a slow-but-valid
+            # form scan can return its result instead of being cancelled first.
+            per_root_timeout=3.75 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else 3.5
             for frame_index,root in enumerate(roots):
                 try:
                     cand=await asyncio.wait_for(scan_root(root,frame_index),timeout=per_root_timeout)
