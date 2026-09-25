@@ -44,6 +44,10 @@ CONFIRM_PATH=re.compile(r'/(?:confirm|confirmation|review|check)(?:/|$)',re.I)
 SUCCESS_QUERY=re.compile(r'(?:[?&](?:contact-form-sent|form[-_]?sent|submitted|submission[-_]?success|success)=)(?:1|true|yes|sent|success|\d+)(?:&|$)',re.I)
 
 def host(u):return (urlsplit(str(u or '')).hostname or '').lower().removeprefix('www.')
+def sender_start_url(task):
+ canonical=str((task or {}).get('canonical_url') or '');domain=str((task or {}).get('official_domain') or host(canonical));proof=str((task or {}).get('proof_url') or '')
+ if bool((task or {}).get('proof_confirm_step')):return canonical
+ return proof if proof and host(proof)==domain else canonical
 def _get(u):
  r=requests.get(u,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':int(time.time())},timeout=20);r.raise_for_status();return r.json()
 def _put(u,o):
@@ -159,7 +163,7 @@ async def choose_form(page):
  try:
   rows=await page.evaluate("""() => {
     const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};
-    const email=/(e-?mail|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;
+    const email=/(e-?mail|(^|[\\s_-])mail($|[\\s_-])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;
     const contact=/(contact|inquiry|enquiry|お問い合わせ|お問合せ|ご相談)/i;
     return [...document.querySelectorAll('form')].slice(0,20).map((f,fi)=>{
       if(!vis(f)) return null;
@@ -190,7 +194,7 @@ def ordered_form_frames(page,domain=''):
  return ([main]+same+provider+other)[:12]
 async def proof_form_shape_ok(form,proof_submit_text=''):
  try:
-  ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d);M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
+  ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|(^|[\\s_-])mail($|[\\s_-])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d);M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
   if not ok:return False
   expected=' '.join(str(proof_submit_text or '').split()).lower()
   if not expected:return True
@@ -337,6 +341,21 @@ async def control(form,kind='final'):
  if len(semantic)==1:return semantic[0]
  if not semantic and len(fallback)==1:return fallback[0]
  return None
+async def final_control_matching_text(form,expected_text=''):
+ expected=' '.join(str(expected_text or '').split()).lower()
+ if not expected:return await control(form,'final')
+ xs=form.locator('button,input[type=submit],input[type=button],input[type=image]');hits=[]
+ for i in range(min(await xs.count(),40)):
+  e=xs.nth(i)
+  try:
+   if not await e.is_visible() or not await e.is_enabled():continue
+   d=' '.join((await desc(e)).split());low=d.lower();typ=(await e.get_attribute('type') or '').lower();compact=re.sub(r'\\s+','',d)
+   if REJECT_CONTROL.search(d):continue
+   is_confirm=bool(CONFIRM.search(d) and not re.search(r'(送\\s*信|send|submit)',d,re.I))
+   is_final=bool(FINAL.search(d) or re.fullmatch(r'送信',compact,re.I) or typ=='submit') and not is_confirm
+   if is_final and low and (expected==low or expected in low or low in expected):hits.append((i,e,d))
+  except:continue
+ return hits[0] if len(hits)==1 else None
 async def unique_final_on_page(page):
  hits=[]
  try:n=min(await page.locator('form').count(),20)
@@ -446,7 +465,12 @@ async def process_task(browser,t):
  if MODE=='PRODUCTION' and not _proof_control_ok(t,60000):return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_BROWSER','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
  if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True,'control_recheck':True}}
  canonical_url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(canonical_url));proof_url=str(t.get('proof_url') or '')
- url=proof_url if proof_url and host(proof_url)==domain else canonical_url;ctx=None;click_barrier=False
+ proof_confirm_step=bool(t.get('proof_confirm_step'))
+ # A confirmation-page proof cannot be opened directly: it depends on state
+ # created by filling the canonical form and taking the confirm transition.
+ url=sender_start_url(t)
+ initial_proof_submit_text='' if proof_confirm_step else t.get('proof_submit_text')
+ ctx=None;click_barrier=False
  try:
   ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(3000)
   await page.route('**/*',lambda route: route.abort() if route.request.resource_type in {'image','media','font'} else route.continue_())
@@ -483,11 +507,11 @@ async def process_task(browser,t):
    if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500],'late_form_wait_ms':3000}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
-  chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),t.get('proof_submit_text'))
+  chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
   if not chosen:
    await page.wait_for_timeout(1800)
    if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'late_render':True}}
-   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),t.get('proof_submit_text'))
+   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
   if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True}}
   _,frame_i,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
   if fill.get('timed_out'):return {**out,'outcome':'TECH_RETRY','reason':'FILL_TIMEOUT_PRE_SUBMIT','evidence':{**fill,'pre_submit':True}}
@@ -499,7 +523,12 @@ async def process_task(browser,t):
   except:form_action=''
   confirm_action=bool(re.search(r'(confirm|review|check|kakunin|確認)',unquote_plus(form_action),re.I))
   confirm=await control(form,'confirm');final=await control(form,'final')
-  if confirm_action and confirm is None and final is not None:
+  # Stage3 proof is authoritative about a two-step confirmation flow. Some
+  # forms name the first control submitConfirm, which looks like a final submit
+  # to generic heuristics even though it only opens the confirmation page.
+  if proof_confirm_step and confirm is None and final is not None:
+   confirm=final;final=None
+  elif confirm_action and confirm is None and final is not None:
    confirm=final;final=None
   elif confirm is not None:
    final=None
@@ -515,21 +544,39 @@ async def process_task(browser,t):
    if outcome=='SENT_CONFIRMED':return {**out,'outcome':outcome,'reason':'CONFIRM_CLICK_SENT','evidence':cev}
    if outcome=='CONFIRMED_NOT_SENT':return {**out,'outcome':outcome,'reason':'CONFIRM_REJECTED','evidence':cev}
    corr_redirect=any(x.get('matches_form_payload') and 300<=int(x.get('status') or 0)<400 for x in (cev.get('network_responses') or []))
-   if not (confirm_action and corr_redirect and not cev.get('validation_error') and not cev.get('server_not_sent')):
-    return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'CONFIRM_AMBIGUOUS','evidence':cev}
+   try:confirm_landed=bool(CONFIRM_PATH.search(urlsplit(str(cev.get('final_url') or '')).path or '/'))
+   except Exception:confirm_landed=False
+   confirm_transition=bool(cev.get('submit_redirect_confirm') or confirm_landed or corr_redirect)
+   if not (confirm_transition and not cev.get('validation_error') and not cev.get('server_not_sent')):
+    return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'CONFIRM_AMBIGUOUS','evidence':{**cev,'confirm_action':confirm_action,'confirm_transition':confirm_transition}}
    await page.wait_for_timeout(500)
-   final_forms=[]
-   for fri,root in enumerate(list(page.frames)[:12]):
-    try:n=min(await root.locator('form').count(),12)
-    except Exception:continue
-    for j in range(n):
-     f2=root.locator('form').nth(j)
-     try:
-      if not await f2.is_visible():continue
-      c2=await control(f2,'final')
-      if c2 is not None:final_forms.append((fri,j,f2,c2))
-     except:continue
-   if len(final_forms)!=1:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'CONFIRM_NO_UNIQUE_FINAL_CONTROL','evidence':{**cev,'confirm_navigation':True,'final_candidates':len(final_forms)}}
+   final_forms=[];roots=ordered_form_frames(page,domain)
+   try:pfr=int(t.get('proof_frame_index')) if t.get('proof_frame_index') is not None else -1
+   except Exception:pfr=-1
+   try:pfi=int(t.get('proof_form_index')) if t.get('proof_form_index') is not None else -1
+   except Exception:pfi=-1
+   # Prefer the exact confirmation-page form/control Stage3 proved.
+   if proof_confirm_step and 0<=pfr<len(roots):
+    try:
+     forms=roots[pfr].locator('form')
+     if 0<=pfi<await forms.count():
+      f2=forms.nth(pfi)
+      if await f2.is_visible():
+       c2=await final_control_matching_text(f2,t.get('proof_submit_text'))
+       if c2 is not None:final_forms.append((pfr,pfi,f2,c2))
+    except Exception:pass
+   if not final_forms:
+    for fri,root in enumerate(roots):
+     try:n=min(await root.locator('form').count(),12)
+     except Exception:continue
+     for j in range(n):
+      f2=root.locator('form').nth(j)
+      try:
+       if not await f2.is_visible():continue
+       c2=await final_control_matching_text(f2,t.get('proof_submit_text')) if proof_confirm_step else await control(f2,'final')
+       if c2 is not None:final_forms.append((fri,j,f2,c2))
+      except:continue
+   if len(final_forms)!=1:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'CONFIRM_NO_UNIQUE_FINAL_CONTROL','evidence':{**cev,'confirm_navigation':True,'final_candidates':len(final_forms),'proof_frame_index':pfr,'proof_form_index':pfi}}
    final_frame_i,final_form_i,form,final=final_forms[0]
    before=await body_text(page,3500) or ''
    if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_ON_CONFIRM_PAGE','evidence':{**cev,'confirm_navigation':True,'frame_index':final_frame_i,'form_index':final_form_i}}
