@@ -17,6 +17,7 @@ UA='Practical-AI-Lab-V9-Sender/1.0'
 MAX_TASKS_PER_TURN=max(1,min(8,int(os.environ.get('PAL_V9_SEND_MAX_TASKS','4') or 4)))
 SEND_CONCURRENCY=max(1,min(4,int(os.environ.get('PAL_V9_SEND_CONCURRENCY','2') or 2)))
 TASK_WALL_TIMEOUT=max(90.0,min(220.0,float(os.environ.get('PAL_V9_TASK_WALL_TIMEOUT','180') or 180)))
+RESULT_IO_TIMEOUT=max(3.0,min(12.0,float(os.environ.get('PAL_V9_RESULT_IO_TIMEOUT','6') or 6)))
 SENDER_SHARD=0 if str(os.environ.get('PAL_V9_SENDER_SHARD','1')).strip()=='0' else 1
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
 SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
@@ -151,6 +152,10 @@ def _get(u):
  r=requests.get(u,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':int(time.time())},timeout=20);r.raise_for_status();return r.json()
 def _put(u,o):
  r=requests.put(u,json=o,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=20);r.raise_for_status()
+def _get_result(u):
+ r=requests.get(u,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':int(time.time())},timeout=RESULT_IO_TIMEOUT);r.raise_for_status();return r.json()
+def _put_result(u,o):
+ r=requests.put(u,json=o,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=RESULT_IO_TIMEOUT);r.raise_for_status()
 TASK_WRITE_LOCK=threading.Lock()
 def _mark_click_started(task):
  token=str(task.get('token_id') or '')
@@ -939,10 +944,10 @@ def pre_browser_failure_result(t,reason='BROWSER_LAUNCH_TIMEOUT'):
  return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':(reason+'_HOLD' if clicked else reason+'_PRE_CLICK'),'evidence':({'resend_safe':False,'click_started':True} if clicked else {'pre_submit':True,'click_started':False})}
 
 def publish_result_batch_sync(results):
- try:r=_get(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
+ try:r=_get_result(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
  except:prior=[]
  keys={x.get('token_id') for x in results};prior=[x for x in prior if x.get('token_id') not in keys]
- _put(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
+ _put_result(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
 
 async def main():
  q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1' and (0 if str(x.get('sender_shard',1)).strip()=='0' else 1)==SENDER_SHARD][:MAX_TASKS_PER_TURN];results=[]
@@ -965,7 +970,7 @@ async def main():
    try:await asyncio.to_thread(publish_result_batch_sync,results)
    except Exception:pass
    print(json.dumps({'status':'PASS','mode':MODE,'sender_shard':SENDER_SHARD,'tasks':len(tasks),'browser_launch_error':type(e).__name__,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False));return
-  deferred=0
+  deferred=0;published_tokens=set()
   try:
    armed_all=await asyncio.gather(*(await_submit_barrier(t,20.0) for t in tasks))
    ready=[x for x in armed_all if x is not None]
@@ -974,15 +979,16 @@ async def main():
    result_lock=asyncio.Lock()
    async def publish_one(res):
     async with result_lock:
-     for attempt in range(3):
+     for attempt in range(2):
       try:
-       try:r=await asyncio.to_thread(_get,RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
+       try:r=await asyncio.to_thread(_get_result,RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
        except:prior=[]
-       tok=res.get('token_id');prior=[x for x in prior if x.get('token_id')!=tok]
-       await asyncio.to_thread(_put,RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+[res])[-256:]})
+       tok=str(res.get('token_id') or '');prior=[x for x in prior if str(x.get('token_id') or '')!=tok]
+       await asyncio.to_thread(_put_result,RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+[res])[-256:]})
+       if tok:published_tokens.add(tok)
        return True
       except Exception:
-       if attempt<2:await asyncio.sleep(0.75*(attempt+1))
+       if attempt<1:await asyncio.sleep(0.5)
      return False
    async def run_one(t):
     async with sem:
@@ -998,8 +1004,9 @@ async def main():
   finally:
    try:await asyncio.wait_for(browser.close(),timeout=5.0)
    except:pass
- try:r=_get(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
- except:prior=[]
- keys={x.get('token_id') for x in results};prior=[x for x in prior if x.get('token_id') not in keys];_put(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
+ unpublished=[x for x in results if str(x.get('token_id') or '') not in published_tokens]
+ if unpublished:
+  try:await asyncio.to_thread(publish_result_batch_sync,unpublished)
+  except Exception:pass
  print(json.dumps({'status':'PASS','mode':MODE,'sender_shard':SENDER_SHARD,'tasks':len(tasks),'max_tasks':MAX_TASKS_PER_TURN,'concurrency':SEND_CONCURRENCY,'deferred_unarmed':deferred,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False))
 if __name__=='__main__':asyncio.run(main())
