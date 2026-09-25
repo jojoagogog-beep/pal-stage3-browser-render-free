@@ -26,5 +26,9 @@ class Stage3PerfBoundsTests(unittest.TestCase):
         self.assertIn("frame_cap=8 if LANE_MODE in {'IFRAME_DEEP','DEEP'} else (6 if LANE_MODE=='DYNAMIC_JS' else 2)",src)
         self.assertIn("if not best and LANE_MODE!='FAST_DOM':",src)
 
+    def test_remote_result_queue_is_bounded(self):
+        self.assertLessEqual(w.RESULT_BLOB_MAX_MESSAGES,192)
+        self.assertGreaterEqual(w.RESULT_BLOB_MAX_MESSAGES,64)
+
 if __name__=='__main__':
     unittest.main()

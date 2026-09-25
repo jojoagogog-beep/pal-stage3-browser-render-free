@@ -210,6 +210,10 @@ def rank_pending_tasks(pending,priority_markets):
 RECENT_ROUTE_SECONDS=max(60,min(3600,int(os.environ.get('PAL_STAGE3_RECENT_ROUTE_SECONDS','600') or 600)))
 RECENT_TECH_SECONDS=max(60,min(1800,int(os.environ.get('PAL_STAGE3_RECENT_TECH_SECONDS','600') or 600)))
 RECENT_SAFE_SECONDS=max(60,min(540,int(os.environ.get('PAL_STAGE3_RECENT_SAFE_SECONDS','420') or 420)))
+# Remote result blobs are transport queues, not the evidence archive. Local V9
+# ingests them every controller cycle; 192 entries leaves a wide safety margin
+# over the 8-route/shard inflight cap while keeping each streamed PUT bounded.
+RESULT_BLOB_MAX_MESSAGES=max(64,min(512,int(os.environ.get('PAL_STAGE3_RESULT_BLOB_MAX_MESSAGES','192') or 192)))
 
 def route_cache_key(rec):
     raw='|'.join((
@@ -761,7 +765,7 @@ def publish(msgs):
         keys={(str(x.get('kind') or ''),int(x.get('route_id') or 0)) for x in msgs}
         prior=[x for x in prior if (str(x.get('kind') or ''),int(x.get('route_id') or 0)) not in keys]
         blob_put(RESULT_BLOB,{'schema':'PAL_BROWSER_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),
-                              'messages':(prior+msgs)[-512:]})
+                              'messages':(prior+msgs)[-RESULT_BLOB_MAX_MESSAGES:]})
         return 'SUPERJSONBLOB_V1'
     except Exception:return 'NO_RESULT_TRANSPORT'
 
