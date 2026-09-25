@@ -381,6 +381,18 @@ async def unique_final_on_page(page):
    if c:hits.append((fi,c))
   except:continue
  return hits[0] if len(hits)==1 else None
+async def settle_correlated_click_timeout(page,click_error,mutations):
+ if not click_error or not any(bool(x.get('matches_form_payload')) for x in (mutations or [])):return False
+ # A click timeout can occur after the POST has already left the page. Never
+ # click again; only give that same in-flight submission a bounded settle time.
+ try:await page.wait_for_timeout(2200)
+ except:pass
+ try:await page.wait_for_load_state('domcontentloaded',timeout=4000)
+ except:pass
+ try:await page.wait_for_timeout(600)
+ except:pass
+ return True
+
 async def click_and_evidence(page,loc,message,email,before_text):
  before_url=str(page.url or '')
  mutations=[];responses=[];resp_objs=[]
@@ -401,7 +413,9 @@ async def click_and_evidence(page,loc,message,email,before_text):
   try:await page.wait_for_load_state('domcontentloaded',timeout=5000)
   except:pass
   await page.wait_for_timeout(1500)
- except Exception as e:click_error=type(e).__name__+':'+str(e)[:180]
+ except Exception as e:
+  click_error=type(e).__name__+':'+str(e)[:180]
+  await settle_correlated_click_timeout(page,click_error,mutations)
  finally:
   try:page.remove_listener('request',on_req);page.remove_listener('response',on_resp)
   except:pass
