@@ -52,20 +52,33 @@ def _mark_click_started(task):
  token=str(task.get('token_id') or '')
  if not token:return False
  with TASK_WRITE_LOCK:
-  try:q=_get(TASK_URL)
-  except Exception:return False
-  found=False
-  for x in q.get('tasks') or []:
-   if isinstance(x,dict) and str(x.get('token_id') or '')==token:
-    if x.get('submit_started') is not True:return False
-    if x.get('click_started') is not True:
-     x['click_started']=True;x['click_started_at']=int(time.time()*1000)
-    found=True;break
-  if not found:return False
-  q['updated_at_epoch']=int(time.time())
-  try:
-   _put(TASK_URL,q);task['click_started']=True;task['click_started_at']=int(time.time()*1000);return True
-  except Exception:return False
+  for attempt in range(4):
+   try:q=_get(TASK_URL)
+   except Exception:
+    time.sleep(.35*(attempt+1));continue
+   found=False;stamp=int(time.time()*1000)
+   for x in q.get('tasks') or []:
+    if isinstance(x,dict) and str(x.get('token_id') or '')==token:
+     if x.get('submit_started') is not True:
+      found=False;break
+     x['click_started']=True;x['click_started_at']=stamp
+     found=True;break
+   if not found:
+    time.sleep(.35*(attempt+1));continue
+   q['updated_at_epoch']=int(time.time())
+   try:_put(TASK_URL,q)
+   except Exception:
+    time.sleep(.35*(attempt+1));continue
+   # Verify the durable marker after the write. A controller/task-queue
+   # read-modify-write racing this worker may otherwise erase the marker.
+   try:
+    v=_get(TASK_URL)
+    ok=any(isinstance(x,dict) and str(x.get('token_id') or '')==token and x.get('click_started') is True for x in (v.get('tasks') or []))
+   except Exception:ok=False
+   if ok:
+    task['click_started']=True;task['click_started_at']=stamp;return True
+   time.sleep(.35*(attempt+1))
+  return False
 
 def _cloud_control_ok():
  if CUTOVER_GENERATION<=0:return False
