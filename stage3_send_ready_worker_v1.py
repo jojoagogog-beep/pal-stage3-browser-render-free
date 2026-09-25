@@ -588,6 +588,36 @@ async def same_origin_script_required_sensitive(page):
         return set()
     return script_required_sensitive_kinds(text)
 
+POST_CONFIRM_FIELD_ERROR=re.compile(r'(正しく入力してください|入力してください|必須|未入力|required|invalid|validation\s+error)',re.I)
+
+def sensitive_validation_row(row):
+    if not isinstance(row,dict):
+        return False
+    ident=' '.join(str(row.get(k) or '') for k in ('type','name','id','placeholder','label','parent','desc'))
+    sensitive=bool(str(row.get('type') or '').lower()=='tel' or SENSITIVE.search(ident))
+    blank=not str(row.get('value') or '').strip()
+    error=bool(POST_CONFIRM_FIELD_ERROR.search(str(row.get('parent') or '')+' '+str(row.get('desc') or '')))
+    return bool(sensitive and blank and error)
+
+async def confirmation_required_sensitive(page,frame_cap=4):
+    blocked=[]
+    for root in list(page.frames)[:max(1,int(frame_cap))]:
+        try:
+            rows=await root.locator('input,textarea,select').evaluate_all(r"""els=>els.map(e=>{
+              const s=getComputedStyle(e),r=e.getBoundingClientRect();
+              if(e.disabled||s.display==='none'||s.visibility==='hidden'||r.width<=0||r.height<=0)return null;
+              const p=e.closest('td,dd,li,p,div,tr,dl')||e.parentElement;
+              return {type:(e.type||e.tagName||'').toLowerCase(),name:e.name||'',id:e.id||'',
+                placeholder:e.placeholder||'',label:e.labels?[...e.labels].map(x=>x.innerText||'').join(' '):'',
+                parent:(p?.innerText||'').slice(0,800),value:e.value||''};
+            }).filter(Boolean)""")
+        except Exception:
+            continue
+        for row in rows:
+            if sensitive_validation_row(row):
+                blocked.append(' '.join(str(row.get(k) or '') for k in ('type','name','label','parent'))[:180])
+    return blocked[:8]
+
 def www_fallback_url(u,official_domain):
     """Retry only the www alias of the same official apex host.
 
@@ -1525,6 +1555,12 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 if captcha_after:
                     return {**base,'status':'CAPTCHA','code':'VISIBLE_CAPTCHA_AFTER_CONFIRM','final_url':final_url,'stage3_send_ready':False}
                 finals=final_control_candidates(all_ctrls)
+                if not finals:
+                    blocked_after_confirm=await confirmation_required_sensitive(page,frame_cap)
+                    if blocked_after_confirm:
+                        return {**base,'status':'REQUIRED_SENSITIVE','code':'REQUIRED_SENSITIVE_AFTER_CONFIRM_VALIDATION',
+                                'final_url':final_url,'required_sensitive':True,'required_unfillable':False,
+                                'stage3_send_ready':False,'blocked_fields':blocked_after_confirm}
                 # Some server-backed/Javascript forms ignore a synthetic click
                 # even though the exact safe confirmation submitter is visible.
                 # If the SAME non-final confirm control is still present and no
