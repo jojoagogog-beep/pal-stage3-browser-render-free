@@ -954,11 +954,51 @@ def pre_browser_failure_result(t,reason='BROWSER_LAUNCH_TIMEOUT'):
  clicked=t.get('click_started') is True
  return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':(reason+'_HOLD' if clicked else reason+'_PRE_CLICK'),'evidence':({'resend_safe':False,'click_started':True} if clicked else {'pre_submit':True,'click_started':False})}
 
-def publish_result_batch_sync(results):
- try:r=_get_result(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
- except:prior=[]
- keys={x.get('token_id') for x in results};prior=[x for x in prior if x.get('token_id') not in keys]
+RESULT_WRITE_LOCK=threading.Lock()
+def _publish_result_batch_unlocked(results):
+ r=_get_result(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
+ keys={str(x.get('token_id') or '') for x in results}
+ prior=[x for x in prior if str(x.get('token_id') or '') not in keys]
  _put_result(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
+
+def publish_result_batch_sync(results):
+ with RESULT_WRITE_LOCK:_publish_result_batch_unlocked(results)
+
+def publish_one_result_sync(res,published_tokens=None):
+ with RESULT_WRITE_LOCK:
+  _publish_result_batch_unlocked([res])
+  tok=str(res.get('token_id') or '')
+  if tok and published_tokens is not None:published_tokens.add(tok)
+
+def hard_timeout_result(t,remote_t=None,seconds=0,marker_read_ok=True):
+ src=remote_t if isinstance(remote_t,dict) else t
+ clicked=src.get('click_started') is True
+ unknown=not marker_read_ok
+ if unknown or clicked:
+  return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':'AMBIGUOUS_HOLD','reason':('WORKER_HARD_TIMEOUT_MARKER_UNKNOWN' if unknown else 'WORKER_HARD_TIMEOUT_AFTER_CLICK'),'evidence':{'hard_timeout_seconds':float(seconds),'resend_safe':False,'click_started':(True if clicked else None),'marker_read_ok':bool(marker_read_ok)}}
+ return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':'TECH_RETRY','reason':'WORKER_HARD_TIMEOUT_PRE_CLICK','evidence':{'hard_timeout_seconds':float(seconds),'pre_submit':True,'click_started':False,'resend_safe':True,'marker_read_ok':True}}
+
+def start_hard_watchdog(tasks,seconds,stop_event,published_tokens):
+ def watch():
+  if stop_event.wait(float(seconds)):return
+  marker_read_ok=True;remote_by_token={}
+  try:
+   q=_get_task(TASK_URL)
+   remote_by_token={str(x.get('token_id') or ''):x for x in (q.get('tasks') or []) if isinstance(x,dict)}
+  except Exception:
+   marker_read_ok=False
+  results=[]
+  try:
+   with RESULT_WRITE_LOCK:
+    pending=[t for t in tasks if str(t.get('token_id') or '') not in published_tokens]
+    results=[hard_timeout_result(t,remote_by_token.get(str(t.get('token_id') or '')),seconds,marker_read_ok) for t in pending]
+    if results:_publish_result_batch_unlocked(results)
+  except Exception:pass
+  summary={'status':'PASS','mode':MODE,'sender_shard':SENDER_SHARD,'tasks':len(tasks),'hard_watchdog':True,'hard_timeout_seconds':float(seconds),'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]}
+  try:os.write(1,(json.dumps(summary,ensure_ascii=False)+'\n').encode())
+  except Exception:pass
+  os._exit(0)
+ th=threading.Thread(target=watch,name='v9-send-hard-watchdog',daemon=True);th.start();return th
 
 async def main():
  q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1' and (0 if str(x.get('sender_shard',1)).strip()=='0' else 1)==SENDER_SHARD][:MAX_TASKS_PER_TURN];results=[]
@@ -981,22 +1021,22 @@ async def main():
    try:await asyncio.to_thread(publish_result_batch_sync,results)
    except Exception:pass
    print(json.dumps({'status':'PASS','mode':MODE,'sender_shard':SENDER_SHARD,'tasks':len(tasks),'browser_launch_error':type(e).__name__,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False));return
-  deferred=0;published_tokens=set()
+  deferred=0;published_tokens=set();hard_stop=None
   try:
    armed_all=await asyncio.gather(*(await_submit_barrier(t,20.0) for t in tasks))
    ready=[x for x in armed_all if x is not None]
    deferred=len(tasks)-len(ready)
+   if ready:
+    waves=(len(ready)+SEND_CONCURRENCY-1)//SEND_CONCURRENCY
+    hard_seconds=max(30.0,float(waves)*TASK_WALL_TIMEOUT+20.0)
+    hard_stop=threading.Event();start_hard_watchdog(ready,hard_seconds,hard_stop,published_tokens)
    sem=asyncio.Semaphore(SEND_CONCURRENCY)
    result_lock=asyncio.Lock()
    async def publish_one(res):
     async with result_lock:
      for attempt in range(2):
       try:
-       try:r=await asyncio.to_thread(_get_result,RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
-       except:prior=[]
-       tok=str(res.get('token_id') or '');prior=[x for x in prior if str(x.get('token_id') or '')!=tok]
-       await asyncio.to_thread(_put_result,RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+[res])[-256:]})
-       if tok:published_tokens.add(tok)
+       await asyncio.to_thread(publish_one_result_sync,res,published_tokens)
        return True
       except Exception:
        if attempt<1:await asyncio.sleep(0.5)
@@ -1013,6 +1053,7 @@ async def main():
    if ready:
     results.extend(await asyncio.gather(*(run_one(t) for t in ready)))
   finally:
+   if hard_stop is not None:hard_stop.set()
    try:await asyncio.wait_for(browser.close(),timeout=5.0)
    except:pass
  unpublished=[x for x in results if str(x.get('token_id') or '') not in published_tokens]
