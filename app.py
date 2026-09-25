@@ -367,6 +367,26 @@ def _browser_queue_lane_counts(url=None, max_age=3.0):
     except Exception:
         return None
 
+def _defer_v9_stage2_for_browser_backlog(completed_quanta,counts,code=200,tasks=0,routes=0):
+    """Allow at most two Browser quanta before yielding to queued V9 Stage2.
+
+    Under a real Browser backlog, one extra quantum improves Stage3 proof
+    throughput. Unknown/failed/empty work remains conservative and yields
+    immediately so Stage2 cannot starve.
+    """
+    try:
+        q=max(0,int(completed_quanta or 0)); status=int(code or 0)
+        work=max(0,int(tasks or 0))+max(0,int(routes or 0))
+    except Exception:
+        return False
+    if status>=500 or work<=0 or q>=2 or not isinstance(counts,dict):
+        return False
+    try:
+        backlog=sum(max(0,int(v or 0)) for v in counts.values())
+    except Exception:
+        return False
+    return backlog>=3
+
 def _release_idle_browser_priority():
     """Yield the shared Stage3/Stage2 heavy slot after Browser queue drains."""
     global BROWSER_DEMAND_UNTIL,LEASE_UNTIL
@@ -787,6 +807,7 @@ def execute_lane(lane):
 def background_pump():
     global PUMP_THREAD
     idle_rounds=0
+    browser_quanta=0
     crash=None
     try:
         while _lease_remaining()>0:
@@ -808,6 +829,10 @@ def background_pump():
             body,code=execute_lane(lane)
             summary=body.get('worker_summary') or {}
             _record_lane_result(lane,summary,code)
+            tasks=int(summary.get('tasks') or 0)
+            routes=int(summary.get('routes') or 0)
+            if tasks>0 or routes>0:
+                browser_quanta+=1
             # Revenue sender outranks Browser proof on both shards. A queued
             # sender gets the next heavy slot after one completed Browser quantum.
             # RUN_LOCK still guarantees Browser and sender never overlap.
@@ -817,10 +842,16 @@ def background_pump():
                     STATE['idle_exit_reason']='YIELD_TO_WAITING_V9_SENDER'
                 break
             if not STAGE2_PRIMARY_ROLE and _v9_stage2_pending_snapshot() is not None:
-                _release_idle_browser_priority()
-                with STATE_LOCK:
-                    STATE['idle_exit_reason']='YIELD_TO_WAITING_V9_STAGE2'
-                break
+                lane_counts=_browser_queue_lane_counts()
+                if _defer_v9_stage2_for_browser_backlog(browser_quanta,lane_counts,code,tasks,routes):
+                    with STATE_LOCK:
+                        STATE['stage2_yield_deferred_browser_backlog']=sum(int(v or 0) for v in lane_counts.values())
+                        STATE['stage2_yield_deferred_quanta']=browser_quanta
+                else:
+                    _release_idle_browser_priority()
+                    with STATE_LOCK:
+                        STATE['idle_exit_reason']='YIELD_TO_WAITING_V9_STAGE2'
+                    break
             # Primary shares one memory-safe heavy slot with Stage2. Once a
             # valid Stage2 request has waited through one complete Browser
             # quantum, yield the lock so the next controller tick can drain a
@@ -838,8 +869,6 @@ def background_pump():
                 with STATE_LOCK:
                     STATE['idle_exit_reason']='YIELD_TO_WAITING_STAGE2'
                 break
-            tasks=int(summary.get('tasks') or 0)
-            routes=int(summary.get('routes') or 0)
             if code>=500:
                 time.sleep(min(30,5*max(1,int(_snapshot().get('failure_streak') or 1))))
                 continue
