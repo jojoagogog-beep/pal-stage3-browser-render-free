@@ -27,6 +27,7 @@ COMPANY=re.compile(r'(company|organization|organisation|会社|法人|企業)',r
 FIRST_NAME=re.compile(r'(first.?name|given.?name|名(?:前)?$)',re.I)
 LAST_NAME=re.compile(r'(last.?name|family.?name|sur.?name|姓$)',re.I)
 NAME=re.compile(r'(full.?name|your.?name|contact.?name|お名前|氏名|\bname\b)',re.I)
+KANA_FIELD=re.compile(r'(ふりがな|ひらがな|フリガナ|カナ|kana)',re.I)
 SUBJECT=re.compile(r'(subject|件名|title)',re.I)
 URLRX=re.compile(r'(website|web.?site|url|サイト)',re.I)
 CAPTCHA_SEL='.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey],iframe[src*="recaptcha"],iframe[src*="hcaptcha"]'
@@ -331,7 +332,7 @@ async def fill_form(page,form,message,email,market):
    if time.monotonic()>fill_deadline:return {'ok':False,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'timed_out':True}
    core=bool(typ in {'email','url'} or EMAIL.search(d) or EMAIL_EXAMPLE.search(d) or tag=='textarea' or MESSAGE.search(d)
              or COMPANY.search(d) or FIRST_NAME.search(d) or LAST_NAME.search(d)
-             or NAME.search(d) or SUBJECT.search(d) or URLRX.search(d))
+             or NAME.search(d) or KANA_FIELD.search(d) or SUBJECT.search(d) or URLRX.search(d))
    if typ in {'hidden','submit','button','image','reset','password','file'}:
     if req and typ=='file':required_unknown.append(d or 'file')
     continue

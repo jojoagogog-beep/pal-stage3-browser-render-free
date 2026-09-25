@@ -2,6 +2,10 @@ import unittest
 import v9_send_worker as w
 
 class RequiredAndRedirectTests(unittest.TestCase):
+    def test_optional_kana_field_is_core(self):
+        self.assertIsNotNone(w.KANA_FIELD.search('kana'))
+        self.assertIsNotNone(w.KANA_FIELD.search('フリガナ'))
+
     def test_required_hint_from_japanese_mark(self):
         self.assertTrue(w.field_required_hint(False,'','電話番号※'))
         self.assertTrue(w.field_required_hint(False,'','ご住所 ※'))
