@@ -50,6 +50,44 @@ CONFIRM_QUERY=re.compile(r'(?:[?&](?:mode|step|action)=)(?:check|confirm|confirm
 SUCCESS_QUERY=re.compile(r'(?:[?&](?:contact-form-sent|form[-_]?sent|submitted|submission[-_]?success|success)=)(?:1|true|yes|sent|success|\d+)(?:&|$)',re.I)
 
 def host(u):return (urlsplit(str(u or '')).hostname or '').lower().removeprefix('www.')
+def sensitive_kind(text):
+ d=str(text or '')
+ if re.search(r'(\bphone\b|\btelephone\b|\btel\b|\bmobile\b|携帯|電話)',d,re.I):return 'phone'
+ if re.search(r'(\bpostal\b|\bpostcode\b|\bzip\b|郵便)',d,re.I):return 'postal'
+ if re.search(r'(\baddress\b|住所|都道府県|市区町村|番地)',d,re.I):return 'address'
+ return ''
+
+def script_required_sensitive_kinds(text):
+ s=str(text or '')[:500000]
+ anchors=list(re.finditer(r'(?:contact[-_ ]?form|contact[-_ ]?page|/api/contact|contactForm)',s,re.I))
+ if not anchors:return set()
+ ctx='\n'.join(s[max(0,m.start()-800):min(len(s),m.start()+4200)] for m in anchors[:8])
+ out=set()
+ if re.search(r'(?:(?:phone(?:\s+number)?|telephone|mobile).{0,90}(?:is\s+)?required|if\s*\(\s*!\s*(?:[\w$]+\.)*(?:phone|telephone|mobile)\b)',ctx,re.I|re.S):out.add('phone')
+ if re.search(r'(?:(?:postal(?:\s+code)?|postcode|zip).{0,90}(?:is\s+)?required|if\s*\(\s*!\s*(?:[\w$]+\.)*(?:postal|postcode|zip)\b)',ctx,re.I|re.S):out.add('postal')
+ if re.search(r'(?:(?:address(?:\s+line\s*1)?).{0,90}(?:is\s+)?required|if\s*\(\s*!\s*(?:[\w$]+\.)*(?:address|addressLine1)\b)',ctx,re.I|re.S):out.add('address')
+ return out
+
+async def same_origin_script_required_sensitive(page):
+ try:
+  text=await asyncio.wait_for(page.evaluate("""async () => {
+    const score=u=>/(contact|form|main|app|script)/i.test(u)?1:0;
+    let urls=[...document.scripts].map(s=>s.src).filter(Boolean).filter(u=>{try{return new URL(u,location.href).origin===location.origin}catch{return false}});
+    urls=[...new Set(urls)].sort((a,b)=>score(b)-score(a)).slice(0,6);
+    let out='';
+    for(const u of urls){
+      try{
+        const r=await fetch(u,{cache:'force-cache',credentials:'same-origin'});
+        if(!r.ok)continue;
+        const t=await r.text(); out+='\\n'+t.slice(0,180000);
+        if(out.length>=500000)break;
+      }catch{}
+    }
+    return out.slice(0,500000);
+  }"""),timeout=4.5)
+ except Exception:return set()
+ return script_required_sensitive_kinds(text)
+
 def is_confirm_url(u):
  s=str(u or '')
  try:return bool(CONFIRM_PATH.search(urlsplit(s).path or '/') or CONFIRM_QUERY.search(s))
@@ -389,23 +427,27 @@ async def reveal_candidate_forms(page,proof_frame_index=None,proof_form_index=No
 async def fill_form(page,form,message,email,market):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
  fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False};fill_deadline=time.monotonic()+25.0
+ script_required=set()
  try:
   meta=await fields.evaluate_all("""els => els.slice(0,60).map((e,i)=>{
     const s=getComputedStyle(e),r=e.getBoundingClientRect();
     return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
       enabled:!e.disabled,name:e.name||'',id:e.id||'',tag:e.tagName.toLowerCase(),typ:(e.getAttribute('type')||e.tagName).toLowerCase(),
-      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,e.closest('dd')?.previousElementSibling?.innerText,e.closest('dl')?.querySelector('dt')?.innerText,e.closest('.contactConfirmWrap')?.innerText,e.parentElement?.querySelector(':scope > label')?.innerText,e.closest('.form-group,.form-row,.field,.contact_area')?.querySelector('label')?.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
+      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,e.closest('dd')?.previousElementSibling?.innerText,e.closest('dl')?.querySelector('dt')?.innerText,e.closest('.contactConfirmWrap')?.innerText,(e.previousElementSibling&&e.previousElementSibling.tagName==='LABEL'?e.previousElementSibling.innerText:''),(e.parentElement&&e.parentElement.tagName!=='FORM'?e.parentElement.querySelector(':scope > label')?.innerText:''),e.closest('.form-group,.form-row,.field,.contact_area')?.querySelector('label')?.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
       cls:String(e.className||''),required:!!e.required||e.getAttribute('aria-required')==='true',
       options:e.tagName==='SELECT'?[...e.options].map(o=>o.textContent||''):[]};
   })""")
  except Exception:
   meta=[]
+ if any(sensitive_kind(str(m.get('d') or '')) for m in meta):
+  script_required=await same_origin_script_required_sensitive(page)
  for m in meta:
   req=False;d=''
   try:
    if not m.get('visible') or not m.get('enabled'):continue
    i=int(m.get('i') or 0);e=fields.nth(i);tag=str(m.get('tag') or '');typ=str(m.get('typ') or tag);d=' '.join(str(m.get('d') or '').split())[:500];cls=str(m.get('cls') or '')
-   req=field_required_hint(bool(m.get('required')),cls,d)
+   kind=sensitive_kind(d)
+   req=field_required_hint(bool(m.get('required')),cls,d) or bool(kind and kind in script_required)
    if time.monotonic()>fill_deadline:return {'ok':False,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'timed_out':True}
    core=bool(typ in {'email','url'} or EMAIL.search(d) or EMAIL_EXAMPLE.search(d) or tag=='textarea' or MESSAGE.search(d)
              or COMPANY.search(d) or FIRST_NAME.search(d) or LAST_NAME.search(d)

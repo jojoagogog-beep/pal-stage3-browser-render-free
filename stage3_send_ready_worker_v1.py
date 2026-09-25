@@ -461,6 +461,46 @@ def host(u):
     try:return (urlsplit(str(u or '')).hostname or '').lower().removeprefix('www.')
     except Exception:return ''
 
+def sensitive_kind(text):
+    d=str(text or '')
+    if re.search(r'(\bphone\b|\btelephone\b|\btel\b|\bmobile\b|携帯|電話)',d,re.I):return 'phone'
+    if re.search(r'(\bpostal\b|\bpostcode\b|\bzip\b|郵便)',d,re.I):return 'postal'
+    if re.search(r'(\baddress\b|住所|都道府県|市区町村|番地)',d,re.I):return 'address'
+    return ''
+
+def script_required_sensitive_kinds(text):
+    s=str(text or '')[:500000]
+    anchors=list(re.finditer(r'(?:contact[-_ ]?form|contact[-_ ]?page|/api/contact|contactForm)',s,re.I))
+    if not anchors:
+        return set()
+    ctx='\n'.join(s[max(0,m.start()-800):min(len(s),m.start()+4200)] for m in anchors[:8])
+    out=set()
+    if re.search(r'(?:(?:phone(?:\s+number)?|telephone|mobile).{0,90}(?:is\s+)?required|if\s*\(\s*!\s*(?:[\w$]+\.)*(?:phone|telephone|mobile)\b)',ctx,re.I|re.S):out.add('phone')
+    if re.search(r'(?:(?:postal(?:\s+code)?|postcode|zip).{0,90}(?:is\s+)?required|if\s*\(\s*!\s*(?:[\w$]+\.)*(?:postal|postcode|zip)\b)',ctx,re.I|re.S):out.add('postal')
+    if re.search(r'(?:(?:address(?:\s+line\s*1)?).{0,90}(?:is\s+)?required|if\s*\(\s*!\s*(?:[\w$]+\.)*(?:address|addressLine1)\b)',ctx,re.I|re.S):out.add('address')
+    return out
+
+async def same_origin_script_required_sensitive(page):
+    try:
+        text=await asyncio.wait_for(page.evaluate("""async () => {
+          const score=u=>/(contact|form|main|app|script)/i.test(u)?1:0;
+          let urls=[...document.scripts].map(s=>s.src).filter(Boolean).filter(u=>{try{return new URL(u,location.href).origin===location.origin}catch{return false}});
+          urls=[...new Set(urls)].sort((a,b)=>score(b)-score(a)).slice(0,6);
+          let out='';
+          for(const u of urls){
+            try{
+              const r=await fetch(u,{cache:'force-cache',credentials:'same-origin'});
+              if(!r.ok)continue;
+              const t=await r.text(); out+='\\n'+t.slice(0,180000);
+              if(out.length>=500000)break;
+            }catch{}
+          }
+          return out.slice(0,500000);
+        }"""),timeout=4.5)
+    except Exception:
+        return set()
+    return script_required_sensitive_kinds(text)
+
 def www_fallback_url(u,official_domain):
     """Retry only the www alias of the same official apex host.
 
@@ -924,6 +964,8 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                           }));
                           rowRequiredClass=labelCells.some(c=>/(?:^|[ _-])(required|req|mandatory|hissu)(?:$|[ _-])/i.test(String(c.className||'')));
                         }
+                        const prev=e.previousElementSibling;
+                        if(!rowLabel&&prev&&prev.tagName==='LABEL')rowLabel=(prev.innerText||'').trim();
                         const dd=e.closest('dd');
                         if(!rowLabel&&dd&&dd.previousElementSibling&&dd.previousElementSibling.tagName==='DT'){
                           const dt=dd.previousElementSibling;
@@ -1133,6 +1175,9 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             form=forms.nth(int(best['index']))
             sensitive_required=[]
             unfillable=[]
+            script_required=set()
+            if any(sensitive_kind((str(x.get('name') or '')+' '+str(x.get('id') or '')+' '+str(x.get('self_desc') or '')+' '+str(x.get('row_label') or '')).strip()) for x in best['fields']):
+                script_required=await same_origin_script_required_sensitive(page)
             # Required radios are group requirements. In addition, some forms
             # use a privacy-policy consent radio without the HTML required
             # attribute while explicitly stating that consent is required before
@@ -1177,6 +1222,8 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 self_desc=str(row.get('self_desc') or '')
                 row_label=str(row.get('row_label') or '')
                 identity=(str(row.get('name') or '')+' '+str(row.get('id') or '')+' '+self_desc+' '+row_label).strip()
+                kind=sensitive_kind(identity)
+                req=req or bool(kind and kind in script_required)
                 # Sensitive-field detection must use the field itself, not a broad
                 # parent block that may also contain neighboring labels.
                 sensitive_field=(typ=='tel' or bool(SENSITIVE.search(identity)))
