@@ -184,7 +184,7 @@ async def fill_form(page,form,message,email,market):
   meta=await fields.evaluate_all("""els => els.slice(0,60).map((e,i)=>{
     const s=getComputedStyle(e),r=e.getBoundingClientRect();
     return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
-      enabled:!e.disabled,tag:e.tagName.toLowerCase(),typ:(e.getAttribute('type')||e.tagName).toLowerCase(),
+      enabled:!e.disabled,name:e.name||'',id:e.id||'',tag:e.tagName.toLowerCase(),typ:(e.getAttribute('type')||e.tagName).toLowerCase(),
       d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
       cls:String(e.className||''),required:!!e.required||e.getAttribute('aria-required')==='true',
       options:e.tagName==='SELECT'?[...e.options].map(o=>o.textContent||''):[]};
@@ -204,7 +204,7 @@ async def fill_form(page,form,message,email,market):
     if req and typ=='file':required_unknown.append(d or 'file')
     continue
    if not req and not core:continue
-   if SENSITIVE.search(d):
+   if SENSITIVE.search(d) and not EMAIL.search(d):
     if req:sensitive.append(d[:160])
     continue
    if typ in {'checkbox','radio'}:
@@ -228,13 +228,24 @@ async def fill_form(page,form,message,email,market):
    elif FIRST_NAME.search(d):value='Practical AI'
    elif LAST_NAME.search(d):value='Lab'
    elif NAME.search(d):value=name
-   elif re.search(r'(部署|部門|department|designation)',d,re.I):value='Operations'
+   elif re.search(r'(部署|部門|department|designation|job.?title|position|役職|職種)',d,re.I):value='Operations'
    elif typ=='url' or URLRX.search(d):value=site
    elif SUBJECT.search(d):value='AI workflow fit check' if market!='JP-JA' else 'AI業務改善のご相談'
    elif req and typ in {'text','search','input'}:value=company
    elif req:required_unknown.append(d[:160] or typ);continue
    if value is not None:
-    await e.fill(value,timeout=1200)
+    try:
+     await e.fill(value,timeout=1800)
+    except Exception:
+     # React/SPA forms can replace the input node during hydration. Reacquire
+     # the same logical field by stable name/id before declaring it unfillable.
+     name=str(m.get('name') or '') if isinstance(m,dict) else ''
+     eid=str(m.get('id') or '') if isinstance(m,dict) else ''
+     retry=None
+     if name: retry=form.locator(f'[name="{name}"]').first
+     elif eid: retry=form.locator(f'#{eid}').first
+     if retry is None: raise
+     await retry.fill(value,timeout=3000)
   except Exception as ex:
    if req:required_unknown.append((d or type(ex).__name__)[:160])
  return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}
