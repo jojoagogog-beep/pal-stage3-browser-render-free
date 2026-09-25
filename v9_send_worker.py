@@ -1,5 +1,5 @@
 from __future__ import annotations
-import asyncio,json,os,re,time,hashlib,hmac
+import asyncio,json,os,re,time,hashlib,hmac,threading
 from urllib.parse import urlsplit,unquote_plus
 from pathlib import Path
 import requests
@@ -46,6 +46,26 @@ def _get(u):
  r=requests.get(u,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':int(time.time())},timeout=20);r.raise_for_status();return r.json()
 def _put(u,o):
  r=requests.put(u,json=o,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=20);r.raise_for_status()
+TASK_WRITE_LOCK=threading.Lock()
+def _mark_click_started(task):
+ token=str(task.get('token_id') or '')
+ if not token:return False
+ with TASK_WRITE_LOCK:
+  try:q=_get(TASK_URL)
+  except Exception:return False
+  found=False
+  for x in q.get('tasks') or []:
+   if isinstance(x,dict) and str(x.get('token_id') or '')==token:
+    if x.get('submit_started') is not True:return False
+    if x.get('click_started') is not True:
+     x['click_started']=True;x['click_started_at']=int(time.time()*1000)
+    found=True;break
+  if not found:return False
+  q['updated_at_epoch']=int(time.time())
+  try:
+   _put(TASK_URL,q);task['click_started']=True;task['click_started_at']=int(time.time()*1000);return True
+  except Exception:return False
+
 def _cloud_control_ok():
  if CUTOVER_GENERATION<=0:return False
  try:
@@ -297,7 +317,7 @@ async def process_task(browser,t):
  if MODE=='PRODUCTION' and not _proof_control_ok(t,60000):return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_BROWSER','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
  if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True,'control_recheck':True}}
  canonical_url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(canonical_url));proof_url=str(t.get('proof_url') or '')
- url=proof_url if proof_url and host(proof_url)==domain else canonical_url;ctx=None
+ url=proof_url if proof_url and host(proof_url)==domain else canonical_url;ctx=None;click_barrier=False
  try:
   ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(8000)
   await page.route('**/*',lambda route: route.abort() if route.request.resource_type in {'image','media','font'} else route.continue_())
@@ -348,6 +368,8 @@ async def process_task(browser,t):
   if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_CLICK','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True,'control_recheck':True}}
   if confirm is not None:
+   if MODE=='PRODUCTION' and not await asyncio.to_thread(_mark_click_started,t):return {**out,'outcome':'TECH_RETRY','reason':'CLICK_BARRIER_WRITE_FAILED','evidence':{'pre_submit':True}}
+   click_barrier=True
    outcome,cev=await click_and_evidence(page,confirm[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
    if outcome=='SENT_CONFIRMED':return {**out,'outcome':outcome,'reason':'CONFIRM_CLICK_SENT','evidence':cev}
    if outcome=='CONFIRMED_NOT_SENT':return {**out,'outcome':outcome,'reason':'CONFIRM_REJECTED','evidence':cev}
@@ -369,10 +391,14 @@ async def process_task(browser,t):
    if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_ON_CONFIRM_PAGE','evidence':{**cev,'confirm_navigation':True}}
    if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PROOF_EXPIRED_BEFORE_FINAL','evidence':{**cev,'proof_expires_at':t.get('proof_expires_at')}}
    if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**cev,'control_recheck':True}}
+  if MODE=='PRODUCTION' and not click_barrier:
+   if not await asyncio.to_thread(_mark_click_started,t):return {**out,'outcome':'TECH_RETRY','reason':'CLICK_BARRIER_WRITE_FAILED','evidence':{'pre_submit':True}}
+   click_barrier=True
   outcome,ev=await click_and_evidence(page,final[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
   return {**out,'outcome':outcome,'reason':'FINAL_CLICK_'+outcome,'evidence':ev}
  except Exception as e:
-  return {**out,'outcome':('AMBIGUOUS_HOLD' if MODE=='PRODUCTION' else 'SHADOW_PREPARED'),'reason':'WORKER_EXCEPTION_'+type(e).__name__.upper(),'evidence':{'detail':str(e)[:240]}}
+  if MODE=='PRODUCTION' and not click_barrier:return {**out,'outcome':'TECH_RETRY','reason':'WORKER_EXCEPTION_PRE_CLICK_'+type(e).__name__.upper(),'evidence':{'pre_submit':True,'detail':str(e)[:240]}}
+  return {**out,'outcome':('AMBIGUOUS_HOLD' if MODE=='PRODUCTION' else 'SHADOW_PREPARED'),'reason':'WORKER_EXCEPTION_'+type(e).__name__.upper(),'evidence':{'detail':str(e)[:240],'click_started':bool(click_barrier)}}
  finally:
   if ctx:
    try:await asyncio.wait_for(ctx.close(),timeout=4.0)
@@ -397,7 +423,8 @@ async def main():
      try:
       return await asyncio.wait_for(process_task(browser,t),timeout=90.0)
      except asyncio.TimeoutError:
-      return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':'AMBIGUOUS_HOLD','reason':'TASK_WALL_TIMEOUT_HOLD','evidence':{'wall_timeout_seconds':90,'resend_safe':False}}
+      clicked=t.get('click_started') is True
+      return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':('TASK_WALL_TIMEOUT_HOLD' if clicked else 'TASK_WALL_TIMEOUT_PRE_CLICK'),'evidence':({'wall_timeout_seconds':90,'resend_safe':False,'click_started':True} if clicked else {'wall_timeout_seconds':90,'pre_submit':True,'click_started':False})}
    if ready:
     results.extend(await asyncio.gather(*(run_one(t) for t in ready)))
   finally:
