@@ -129,25 +129,23 @@ async def desc(loc):
  try:return ' '.join(str(await loc.evaluate("e=>[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ')" ) or '').split())[:500]
  except:return ''
 async def visible_captcha(page):
+ # One browser-side DOM pass instead of up to 120 Playwright round trips.
  try:
-  xs=page.locator(CAPTCHA_SEL)
-  for i in range(min(await xs.count(),12)):
-   if await xs.nth(i).is_visible():return True
- except:pass
- # Some sites use a custom visible checkbox rather than a standard CAPTCHA
- # widget. Treat robot/human-verification controls as anti-bot challenges.
- try:
-  xs=page.locator('input,button,label')
-  for i in range(min(await xs.count(),120)):
-   e=xs.nth(i)
-   if not await e.is_visible():continue
-   meta=await e.evaluate("""e=>[
-     e.name,e.id,e.className,e.value,e.innerText,e.getAttribute('aria-label'),
-     e.getAttribute('for')
-   ].filter(Boolean).join(' ')""")
-   if BOT_HINT.search(str(meta or '')):return True
- except:pass
- return False
+  return bool(await page.evaluate("""sel => {
+    const visible = e => {
+      const s=getComputedStyle(e),r=e.getBoundingClientRect();
+      return s.display!=='none' && s.visibility!=='hidden' && r.width>0 && r.height>0;
+    };
+    for (const e of document.querySelectorAll(sel)) if (visible(e)) return true;
+    const bot=/(captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|human[-_ ]?(?:check|verification))/i;
+    for (const e of document.querySelectorAll('input,button,label')) {
+      if (!visible(e)) continue;
+      const meta=[e.name,e.id,e.className,e.value,e.innerText,e.getAttribute('aria-label'),e.getAttribute('for')].filter(Boolean).join(' ');
+      if (bot.test(meta)) return true;
+    }
+    return false;
+  }""",CAPTCHA_SEL))
+ except:return False
 async def body_text(page,timeout=3500):
  try:return ' '.join((await page.locator('body').inner_text(timeout=timeout)).split())
  except PlaywrightTimeoutError:
@@ -156,50 +154,67 @@ async def body_text(page,timeout=3500):
  except:return None
 
 async def choose_form(page):
- best=None
- for fi in range(min(await page.locator('form').count(),20)):
-  f=page.locator('form').nth(fi)
-  try:
-   if not await f.is_visible():continue
-   rows=f.locator('input,textarea,select'); has_e=False;has_m=False
-   for i in range(min(await rows.count(),80)):
-    e=rows.nth(i)
-    if not await e.is_visible() or not await e.is_enabled():continue
-    d=(await desc(e)).lower();typ=(await e.get_attribute('type') or '').lower();tag=await e.evaluate('e=>e.tagName.toLowerCase()')
-    has_e=has_e or typ=='email' or bool(EMAIL.search(d));has_m=has_m or tag=='textarea' or bool(MESSAGE.search(d))
-   txt=' '.join((await f.inner_text(timeout=1500)).split())[:5000]
-   score=(5 if has_e else 0)+(5 if has_m else 0)+(3 if re.search(r'(contact|inquiry|enquiry|お問い合わせ|お問合せ|ご相談)',txt,re.I) else 0)
-   if has_e and has_m and (best is None or score>best[0]):best=(score,fi,f)
-  except:continue
- return best
+ # Score forms in one DOM pass; only return a Playwright locator for the winner.
+ try:
+  rows=await page.evaluate("""() => {
+    const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};
+    const email=/(e-?mail|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;
+    const contact=/(contact|inquiry|enquiry|お問い合わせ|お問合せ|ご相談)/i;
+    return [...document.querySelectorAll('form')].slice(0,20).map((f,fi)=>{
+      if(!vis(f)) return null;
+      let hasE=false,hasM=false;
+      for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){
+        if(!vis(e)) continue;
+        const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ');
+        const typ=(e.getAttribute('type')||'').toLowerCase();
+        hasE=hasE||typ==='email'||email.test(d);hasM=hasM||e.tagName==='TEXTAREA'||msg.test(d);
+      }
+      const txt=(f.innerText||'').slice(0,5000);
+      return {fi,hasE,hasM,score:(hasE?5:0)+(hasM?5:0)+(contact.test(txt)?3:0)};
+    }).filter(x=>x&&x.hasE&&x.hasM).sort((a,b)=>b.score-a.score);
+  }""")
+  if not rows:return None
+  fi=int(rows[0]['fi']);return (int(rows[0]['score']),fi,page.locator('form').nth(fi))
+ except:return None
 async def fill_form(page,form,message,email,market):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
  fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False}
- for i in range(min(await fields.count(),100)):
-  e=fields.nth(i)
+ try:
+  meta=await fields.evaluate_all("""els => els.slice(0,60).map((e,i)=>{
+    const s=getComputedStyle(e),r=e.getBoundingClientRect();
+    return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
+      enabled:!e.disabled,tag:e.tagName.toLowerCase(),typ:(e.getAttribute('type')||e.tagName).toLowerCase(),
+      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' '),
+      cls:String(e.className||''),required:!!e.required||e.getAttribute('aria-required')==='true',
+      options:e.tagName==='SELECT'?[...e.options].map(o=>o.textContent||''):[]};
+  })""")
+ except Exception:
+  meta=[]
+ for m in meta:
+  req=False;d=''
   try:
-   if not await e.is_visible() or not await e.is_enabled():continue
-   tag=await e.evaluate('e=>e.tagName.toLowerCase()'); typ=(await e.get_attribute('type') or tag).lower(); d=await desc(e); cls=str(await e.get_attribute('class') or '')
+   if not m.get('visible') or not m.get('enabled'):continue
+   i=int(m.get('i') or 0);e=fields.nth(i);tag=str(m.get('tag') or '');typ=str(m.get('typ') or tag);d=' '.join(str(m.get('d') or '').split())[:500];cls=str(m.get('cls') or '')
    class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in cls.split())
-   req=bool(await e.evaluate("e=>!!e.required||e.getAttribute('aria-required')==='true'") or class_required or (re.search(r'(必須|required|mandatory)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
+   req=bool(m.get('required') or class_required or (re.search(r'(必須|required|mandatory)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
    if typ in {'hidden','submit','button','image','reset','password','file'}:
     if req and typ=='file':required_unknown.append(d or 'file')
     continue
    if SENSITIVE.search(d):
-    if req:sensitive.append(d[:160]);continue
+    if req:sensitive.append(d[:160])
+    continue
    if typ in {'checkbox','radio'}:
     if not req:continue
-    text=d
-    if typ=='checkbox' and CONSENT_OK.search(text) and not CONSENT_BAD.search(text):await e.check(timeout=2000);continue
-    if typ=='radio' and SAFE_CHOICE.search(text) and not UNSAFE_CHOICE.search(text):await e.check(timeout=2000);continue
-    required_unknown.append(text[:160] or typ);continue
+    if typ=='checkbox' and CONSENT_OK.search(d) and not CONSENT_BAD.search(d):await e.check(timeout=1500);continue
+    if typ=='radio' and SAFE_CHOICE.search(d) and not UNSAFE_CHOICE.search(d):await e.check(timeout=1500);continue
+    required_unknown.append(d[:160] or typ);continue
    if tag=='select':
     if not req:continue
-    opts=await e.locator('option').all_text_contents();pick=None
-    for idx,t in enumerate(opts):
-     if idx and SAFE_CHOICE.search(t) and not UNSAFE_CHOICE.search(t):pick=idx;break
+    pick=None
+    for idx,opt in enumerate(m.get('options') or []):
+     if idx and SAFE_CHOICE.search(str(opt)) and not UNSAFE_CHOICE.search(str(opt)):pick=idx;break
     if pick is None:required_unknown.append(d[:160] or 'select');continue
-    await e.select_option(index=pick);continue
+    await e.select_option(index=pick,timeout=1500);continue
    value=None
    if typ=='email' or EMAIL.search(d):value=email;filled['email']=True
    elif tag=='textarea' or MESSAGE.search(d):value=message;filled['message']=True
@@ -214,26 +229,32 @@ async def fill_form(page,form,message,email,market):
    elif SUBJECT.search(d):value='AI workflow fit check' if market!='JP-JA' else 'AI業務改善のご相談'
    elif req and typ in {'text','search','input'}:value=company
    elif req:required_unknown.append(d[:160] or typ);continue
-   if value is not None:await e.fill(value);await e.dispatch_event('input');await e.dispatch_event('change')
+   if value is not None:
+    await e.fill(value,timeout=2000)
   except Exception as ex:
-   if req:required_unknown.append((d if 'd' in locals() else type(ex).__name__)[:160])
+   if req:required_unknown.append((d or type(ex).__name__)[:160])
  return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}
 async def control(form,kind='final'):
  xs=form.locator('button,input[type=submit],input[type=button],input[type=image]');semantic=[];fallback=[]
- for i in range(min(await xs.count(),40)):
-  e=xs.nth(i)
-  try:
-   if not await e.is_visible() or not await e.is_enabled():continue
-   d=await desc(e); compact=re.sub(r'\s+','',d); typ=(await e.get_attribute('type') or '').lower()
-   if REJECT_CONTROL.search(d):continue
-   is_confirm=bool(CONFIRM.search(d) and not re.search(r'(送\\s*信|send|submit)',d,re.I))
-   if kind=='confirm':
-    if is_confirm:semantic.append((i,e,d))
-    continue
-   explicit_final=bool(FINAL.search(d) or re.fullmatch(r'送信',compact,re.I))
-   if explicit_final and not is_confirm:semantic.append((i,e,d))
-   elif typ=='submit' and not is_confirm:fallback.append((i,e,d))
-  except:continue
+ try:
+  meta=await xs.evaluate_all("""els => els.slice(0,40).map((e,i)=>{
+    const s=getComputedStyle(e),r=e.getBoundingClientRect();
+    return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
+      enabled:!e.disabled,d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' '),
+      typ:(e.getAttribute('type')||'').toLowerCase()};
+  })""")
+ except Exception:return None
+ for m in meta:
+  if not m.get('visible') or not m.get('enabled'):continue
+  i=int(m.get('i') or 0);d=' '.join(str(m.get('d') or '').split())[:500];typ=str(m.get('typ') or '');compact=re.sub(r'\s+','',d)
+  if REJECT_CONTROL.search(d):continue
+  is_confirm=bool(CONFIRM.search(d) and not re.search(r'(送\\s*信|send|submit)',d,re.I))
+  if kind=='confirm':
+   if is_confirm:semantic.append((i,xs.nth(i),d))
+   continue
+  explicit_final=bool(FINAL.search(d) or re.fullmatch(r'送信',compact,re.I))
+  if explicit_final and not is_confirm:semantic.append((i,xs.nth(i),d))
+  elif typ=='submit' and not is_confirm:fallback.append((i,xs.nth(i),d))
  if len(semantic)==1:return semantic[0]
  if not semantic and len(fallback)==1:return fallback[0]
  return None
@@ -338,7 +359,7 @@ async def process_task(browser,t):
  canonical_url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(canonical_url));proof_url=str(t.get('proof_url') or '')
  url=proof_url if proof_url and host(proof_url)==domain else canonical_url;ctx=None;click_barrier=False
  try:
-  ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(8000)
+  ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(3000)
   await page.route('**/*',lambda route: route.abort() if route.request.resource_type in {'image','media','font'} else route.continue_())
   nav_timeout=False
   try:await page.goto(url,wait_until='domcontentloaded',timeout=14000)

@@ -1021,7 +1021,7 @@ def health():
                    lane_skip_until=LANE_SKIP_UNTIL,
                    v9_sender_enabled=True,
                    v9_sender_control_revision='DUAL_AUTHORITY_DUAL_SHARD_FAILOVER_V2',
-                   v9_sender_worker_revision='V9_SENDER_DUAL_SHARD_2X2_V7_PATH_EVIDENCE',
+                   v9_sender_worker_revision='V9_SENDER_SHARD1_V8_FAST_PRECLICK',
                    v9_sender_production_enabled=True,
                    v9_sender_pending=_v9_send_pending_snapshot(),
                    v9_send_state=_v9_send_snapshot(),
