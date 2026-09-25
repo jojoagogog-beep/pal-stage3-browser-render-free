@@ -630,6 +630,21 @@ async def form_contains_payload(form,email,message):
   return bool(found.get('email') and found.get('message'))
  except Exception:return False
 
+async def resolve_pre_submit_controls(form,proof_confirm_step=False,confirm_action=False,proof_submit_text=''):
+ confirm=await control(form,'confirm');final=await control(form,'final')
+ # Stage3 already proved the exact final control text on this same form.
+ # Use that evidence only when generic heuristics found no actionable control,
+ # and never to bypass a known confirmation step.
+ if confirm is None and final is None and proof_submit_text and not proof_confirm_step and not confirm_action:
+  final=await final_control_matching_text(form,proof_submit_text)
+ if proof_confirm_step and confirm is None and final is not None:
+  confirm=final;final=None
+ elif confirm_action and confirm is None and final is not None:
+  confirm=final;final=None
+ elif confirm is not None:
+  final=None
+ return confirm,final
+
 async def refresh_actionable_control(form,item,kind='final',expected_text=''):
  if await control_actionable(item):return item
  for delay in (0.2,0.5):
@@ -912,16 +927,8 @@ async def process_task(browser,t):
   try:form_action=str(await form.get_attribute('action') or '')
   except:form_action=''
   confirm_action=bool(re.search(r'(confirm|review|check|kakunin|確認)',unquote_plus(form_action),re.I))
-  confirm=await control(form,'confirm');final=await control(form,'final')
-  # Stage3 proof is authoritative about a two-step confirmation flow. Some
-  # forms name the first control submitConfirm, which looks like a final submit
-  # to generic heuristics even though it only opens the confirmation page.
-  if proof_confirm_step and confirm is None and final is not None:
-   confirm=final;final=None
-  elif confirm_action and confirm is None and final is not None:
-   confirm=final;final=None
-  elif confirm is not None:
-   final=None
+  confirm,final=await resolve_pre_submit_controls(
+   form,proof_confirm_step,confirm_action,initial_proof_submit_text)
   if final is None and confirm is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_CONTROL_NOT_FOUND','evidence':{'pre_submit':True,'form_action':form_action[:500]}}
   if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'frame_index':frame_i,'form_index':fi,'form_action':form_action[:500],'final_control':bool(final),'confirm_control':bool(confirm)}}
   before=txt
