@@ -6,6 +6,10 @@ class SubmissionRejectedTests(unittest.TestCase):
         self.assertIsNotNone(w.FAIL.search('Submission Rejected'))
         self.assertIsNotNone(w.FAIL.search('Form submission rejected'))
 
+    def test_explicit_submission_failure_is_failure(self):
+        self.assertIsNotNone(w.FAIL.search('Your submission failed because of a server error.'))
+        self.assertIsNotNone(w.FAIL.search('Form submission declined'))
+
     def test_generic_ui_error_is_not_enough_by_itself(self):
         self.assertIsNone(w.FAIL.search('Something went wrong'))
 
