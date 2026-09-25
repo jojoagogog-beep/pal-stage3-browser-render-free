@@ -39,6 +39,7 @@ CONSENT_OK=re.compile(r'(privacy|terms|policy|個人情報|プライバシー|�
 CONSENT_BAD=re.compile(r'(newsletter|marketing|promotional|メルマガ|広告|案内を受け取|subscribe)',re.I)
 COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
 CONFIRM_PATH=re.compile(r'/(?:confirm|confirmation|review|check)(?:/|$)',re.I)
+SUCCESS_QUERY=re.compile(r'(?:[?&](?:contact-form-sent|form[-_]?sent|submitted|submission[-_]?success|success)=)(?:1|true|yes|sent|success|\d+)(?:&|$)',re.I)
 
 def host(u):return (urlsplit(str(u or '')).hostname or '').lower().removeprefix('www.')
 def _get(u):
@@ -250,11 +251,14 @@ async def click_and_evidence(page,loc,message,email,before_text):
   try:return bool(rx.search(urlsplit(str(u or '')).path or '/'))
   except:return False
  corr3xx=[x for x in responses if x['matches_form_payload'] and 300<=x['status']<400]
+ corr204=any(x['matches_form_payload'] and x['status']==204 for x in responses)
  redirect_completion=any(pathmatch(COMPLETION_PATH,x.get('location')) for x in corr3xx)
+ redirect_success_query=any(bool(SUCCESS_QUERY.search(str(x.get('location') or ''))) for x in corr3xx)
  redirect_confirm=any(pathmatch(CONFIRM_PATH,x.get('location')) for x in corr3xx)
  final_completion=pathmatch(COMPLETION_PATH,page.url)
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_redirect_completion':redirect_completion,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
- if (provider_success or new_success or redirect_completion or final_completion) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
+ final_success_query=bool(SUCCESS_QUERY.search(str(page.url or '')))
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ if (provider_success or new_success or corr204 or redirect_completion or redirect_success_query or final_completion or final_success_query) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):
