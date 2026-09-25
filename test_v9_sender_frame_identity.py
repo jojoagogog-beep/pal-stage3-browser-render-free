@@ -23,4 +23,8 @@ class SenderFrameIdentityTests(unittest.TestCase):
         page=Page([Frame('https://x.invalid'),main],main,main.url)
         self.assertIs(w.ordered_form_frames(page,'example.com')[0],main)
 
+    def test_japanese_validation_errors_are_failures(self):
+        for text in ('入力にエラーがあります','【社名】は必須項目です','下記をご確認の上「戻る」ボタンにて修正'):
+            self.assertIsNotNone(w.FAIL.search(text))
+
 if __name__=='__main__': unittest.main()

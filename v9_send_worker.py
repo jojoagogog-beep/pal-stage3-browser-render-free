@@ -31,7 +31,7 @@ URLRX=re.compile(r'(website|web.?site|url|サイト)',re.I)
 CAPTCHA_SEL='.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey],iframe[src*="recaptcha"],iframe[src*="hcaptcha"]'
 BOT_HINT=re.compile(r'(?:captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|chk[-_ ]?not[-_ ]?robot|human[-_ ]?(?:check|verification)|help\s+us\s+prevent\s+spam|anti[- ]?spam|spam\s+(?:check|question|protection)|security\s+(?:question|check)|which\s+is\s+(?:bigger|larger|smaller)|what\s+is\s+\d+\s*[+\-x×*]\s*\d+|\bquiz\b)',re.I)
 SUCCESS=re.compile(r'(送信が完了|送信完了|お問い合わせ.{0,30}(?:ありがとう|受け付け|受付)|thank\s+you.{0,80}(?:message|inquir|contact)|(?:message|inquir(?:y|ies)|request).{0,80}(?:sent|received|submitted)|successfully\s+(?:sent|submitted))',re.I)
-FAIL=re.compile(r'(入力してください|未入力|required field|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid)',re.I)
+FAIL=re.compile(r'(入力してください|未入力|入力.{0,20}エラー|エラーがあります|必須(?:項目)?です|必須項目|正しく入力|入力内容.{0,20}(?:誤|エラー)|ご確認の上.{0,40}(?:修正|戻る)|required field|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid)',re.I)
 FINAL=re.compile(r'(この内容で送信|内容を送信|確認して送信|送信する|^送信$|send\s*(?:message|inquiry|enquiry)?$|submit\s*(?:message|inquiry|enquiry|form)?$)',re.I)
 CONFIRM=re.compile(r'(確認画面へ|入力内容を確認|内容を確認|確認する|confirm|review|next|次へ)',re.I)
 REJECT_CONTROL=re.compile(r'(戻る|back|cancel|修正|reset|clear|クリア)',re.I)
