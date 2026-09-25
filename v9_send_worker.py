@@ -743,6 +743,16 @@ async def process_task(browser,t):
   if ctx:
    try:await asyncio.wait_for(ctx.close(),timeout=4.0)
    except:pass
+def pre_browser_failure_result(t,reason='BROWSER_LAUNCH_TIMEOUT'):
+ clicked=t.get('click_started') is True
+ return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':(reason+'_HOLD' if clicked else reason+'_PRE_CLICK'),'evidence':({'resend_safe':False,'click_started':True} if clicked else {'pre_submit':True,'click_started':False})}
+
+def publish_result_batch_sync(results):
+ try:r=_get(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
+ except:prior=[]
+ keys={x.get('token_id') for x in results};prior=[x for x in prior if x.get('token_id') not in keys]
+ _put(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
+
 async def main():
  q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1' and (0 if str(x.get('sender_shard',1)).strip()=='0' else 1)==SENDER_SHARD][:MAX_TASKS_PER_TURN];results=[]
  if not tasks:
@@ -751,7 +761,19 @@ async def main():
   chromium_path=(os.environ.get('PAL_CHROMIUM_PATH','').strip() or ('/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else ('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' if Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome').exists() else '')))
   launch_kw={'headless':True,'args':['--disable-dev-shm-usage','--no-sandbox']}
   if chromium_path: launch_kw['executable_path']=chromium_path
-  browser=await p.chromium.launch(**launch_kw)
+  try:
+   browser=await asyncio.wait_for(p.chromium.launch(**launch_kw),timeout=25.0)
+  except asyncio.TimeoutError:
+   results=[pre_browser_failure_result(t) for t in tasks]
+   try:await asyncio.to_thread(publish_result_batch_sync,results)
+   except Exception:pass
+   print(json.dumps({'status':'PASS','mode':MODE,'sender_shard':SENDER_SHARD,'tasks':len(tasks),'browser_launch_timeout':True,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False));return
+  except Exception as e:
+   reason='BROWSER_LAUNCH_'+type(e).__name__.upper()
+   results=[pre_browser_failure_result(t,reason) for t in tasks]
+   try:await asyncio.to_thread(publish_result_batch_sync,results)
+   except Exception:pass
+   print(json.dumps({'status':'PASS','mode':MODE,'sender_shard':SENDER_SHARD,'tasks':len(tasks),'browser_launch_error':type(e).__name__,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False));return
   deferred=0
   try:
    armed_all=await asyncio.gather(*(await_submit_barrier(t,20.0) for t in tasks))
