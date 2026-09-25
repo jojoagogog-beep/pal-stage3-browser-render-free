@@ -364,7 +364,7 @@ async def process_task(browser,t):
   return {**out,'outcome':('AMBIGUOUS_HOLD' if MODE=='PRODUCTION' else 'SHADOW_PREPARED'),'reason':'WORKER_EXCEPTION_'+type(e).__name__.upper(),'evidence':{'detail':str(e)[:240]}}
  finally:
   if ctx:
-   try:await ctx.close()
+   try:await asyncio.wait_for(ctx.close(),timeout=4.0)
    except:pass
 async def main():
  q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1'][:MAX_TASKS_PER_TURN];results=[]
@@ -389,7 +389,9 @@ async def main():
       return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':'AMBIGUOUS_HOLD','reason':'TASK_WALL_TIMEOUT_HOLD','evidence':{'wall_timeout_seconds':60,'resend_safe':False}}
    if ready:
     results.extend(await asyncio.gather(*(run_one(t) for t in ready)))
-  finally:await browser.close()
+  finally:
+   try:await asyncio.wait_for(browser.close(),timeout=5.0)
+   except:pass
  try:r=_get(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
  except:prior=[]
  keys={x.get('token_id') for x in results};prior=[x for x in prior if x.get('token_id') not in keys];_put(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
