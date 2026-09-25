@@ -253,6 +253,7 @@ CAPTCHA_SELECTOR='iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="
 HUMAN_CHALLENGE=re.compile(r'(help\s+us\s+prevent\s+spam|anti[- ]?spam|spam\s+(?:check|question|protection)|security\s+(?:question|check)|human\s+(?:check|verification)|which\s+is\s+(?:bigger|larger|smaller)|what\s+is\s+\d+\s*[+\-x×*]\s*\d+|solve\s+(?:this|the)\s+(?:math|equation)|simple\s+(?:math|question)|\bquiz\b)',re.I)
 PROHIBIT=re.compile(r'(no\s+(?:unsolicited|sales\s+solicit)|sales\s+solicitations?.{0,30}(?:not\s+accepted|prohibited|declin|refus)|(?:営業(?:目的|勧誘|メール|メ[ー－-]ル)|ご?提案|セールス).{0,40}(?:禁止|お断り|受け付け(?:て)?おりません|受付(?:して)?おりません|ご遠慮))',re.I)
 SENSITIVE=re.compile(r'(電話|\btel\b|\bphone\b|mobile|\b(?:full|contact|telephone|phone)[ _.-]?number\b|住所|\baddress\b|郵便|postal|postcode|\bzip\b|都道府県|市区町村|番地)',re.I)
+EMAIL_CLIENT_FORM=re.compile(r'(opens?\s+(?:your\s+)?email\s+client|email\s+draft.{0,50}(?:ready|send)|hit\s+send\s+in\s+your\s+mail\s+client|mailto:)',re.I)
 MARKETING=re.compile(r'(newsletter|marketing|マーケティング|メルマガ|広告|キャンペーン|販促|プロモーション)',re.I)
 CONSENT=re.compile(r'(privacy|terms|agree|consent|同意|プライバシー|利用規約|個人情報)',re.I)
 CONSENT_GATE=re.compile(
@@ -1033,6 +1034,8 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     # mailto/tel/javascript actions are not web-form outreach.
                     # They cannot satisfy the Stage-3 -> Stage-4 web-submit contract.
                     if re.match(r'^(?:mailto|tel|javascript):',form_action,re.I):
+                        continue
+                    if EMAIL_CLIENT_FORM.search(form_text):
                         continue
                     # Reject forms whose structure itself identifies a non-contact
                     # purpose. Do not reject a genuine contact form merely because

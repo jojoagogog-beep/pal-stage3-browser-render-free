@@ -636,7 +636,10 @@ async def recover_correlated_request_responses(req_objs,responses,resp_objs):
 
 async def click_and_evidence(page,loc,message,email,before_text):
  before_url=str(page.url or '')
- mutations=[];responses=[];resp_objs=[];correlated_req_objs=[]
+ mutations=[];responses=[];resp_objs=[];correlated_req_objs=[];captured_raw={};body_tasks=[];scheduled_resp_ids=set()
+ async def capture_response_body(resp):
+  try: captured_raw[id(resp)]=(await asyncio.wait_for(resp.text(),2.5))[:65536]
+  except Exception: pass
  def on_req(req):
   try:
    if str(req.method).upper() not in {'GET','HEAD','OPTIONS'}:
@@ -648,7 +651,10 @@ async def click_and_evidence(page,loc,message,email,before_text):
    req=resp.request
    if str(req.method).upper() not in {'GET','HEAD','OPTIONS'}:
     m=_payload_match(req.post_data or '',message,email);hdrs=resp.headers or {};responses.append({'method':req.method,'url':req.url[:500],'status':int(resp.status),'location':str(hdrs.get('location') or '')[:500],'matches_form_payload':m});
-    if m:resp_objs.append(resp)
+    if m:
+     resp_objs.append(resp)
+     if id(resp) not in scheduled_resp_ids and len(body_tasks)<8:
+      scheduled_resp_ids.add(id(resp));body_tasks.append(asyncio.create_task(capture_response_body(resp)))
   except:pass
  page.on('request',on_req);page.on('response',on_resp);click_error=''
  try:
@@ -673,13 +679,20 @@ async def click_and_evidence(page,loc,message,email,before_text):
   # their eventual Response before removing listeners; never re-submit.
   if correlated_req_objs:
    await recover_correlated_request_responses(correlated_req_objs,responses,resp_objs)
+  for resp in resp_objs[:6]:
+   if id(resp) not in scheduled_resp_ids and len(body_tasks)<8:
+    scheduled_resp_ids.add(id(resp));body_tasks.append(asyncio.create_task(capture_response_body(resp)))
+  if body_tasks:
+   try:await asyncio.wait_for(asyncio.gather(*body_tasks,return_exceptions=True),3.5)
+   except Exception:pass
   try:page.remove_listener('request',on_req);page.remove_listener('response',on_resp)
   except:pass
  provider_success=False;provider_fail=False;bodies=[]
  before_success=SUCCESS.search(before_text or ''); before_failure=FAIL.search(before_text or '')
  for resp in resp_objs[:6]:
   try:
-   raw=(await asyncio.wait_for(resp.text(),1.5))[:65536]
+   raw=captured_raw.get(id(resp))
+   if raw is None:raw=(await asyncio.wait_for(resp.text(),1.5))[:65536]
    st='';body_success=False;body_fail=False
    try:
     o=json.loads(raw);st=provider_app_status(o)
