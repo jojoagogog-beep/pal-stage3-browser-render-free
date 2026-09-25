@@ -587,6 +587,18 @@ async def final_control_matching_text(form,expected_text=''):
    if is_final and low and (expected==low or expected in low or low in expected):hits.append((i,e,d))
   except:continue
  return hits[0] if len(hits)==1 else None
+
+async def refresh_actionable_control(form,item,kind='final',expected_text=''):
+ if await control_actionable(item):return item
+ for delay in (0.2,0.5):
+  try:await asyncio.sleep(delay)
+  except Exception:pass
+  try:
+   candidate=(await final_control_matching_text(form,expected_text)) if (kind=='final' and expected_text) else (await control(form,kind))
+  except Exception:candidate=None
+  if candidate is not None and await control_actionable(candidate):return candidate
+ return None
+
 async def unique_final_on_page(page):
  hits=[]
  try:n=min(await page.locator('form').count(),20)
@@ -859,7 +871,9 @@ async def process_task(browser,t):
   if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_CLICK','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True,'control_recheck':True}}
   if confirm is not None:
-   if MODE=='PRODUCTION' and not await control_actionable(confirm):return {**out,'outcome':'TECH_RETRY','reason':'CONFIRM_CONTROL_STALE_PRE_CLICK','evidence':{'pre_submit':True,'resend_safe':True}}
+   if MODE=='PRODUCTION':
+    confirm=await refresh_actionable_control(form,confirm,'confirm')
+    if confirm is None:return {**out,'outcome':'TECH_RETRY','reason':'CONFIRM_CONTROL_STALE_PRE_CLICK','evidence':{'pre_submit':True,'resend_safe':True}}
    if MODE=='PRODUCTION' and not await asyncio.to_thread(_mark_click_started,t):return {**out,'outcome':'TECH_RETRY','reason':'CLICK_BARRIER_WRITE_FAILED','evidence':{'pre_submit':True}}
    click_barrier=True
    outcome,cev=await click_and_evidence(page,confirm[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
@@ -904,7 +918,8 @@ async def process_task(browser,t):
    if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PROOF_EXPIRED_BEFORE_FINAL','evidence':{**cev,'proof_expires_at':t.get('proof_expires_at')}}
    if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**cev,'control_recheck':True}}
   if MODE=='PRODUCTION' and not click_barrier:
-   if not await control_actionable(final):return {**out,'outcome':'TECH_RETRY','reason':'SUBMIT_CONTROL_STALE_PRE_CLICK','evidence':{'pre_submit':True,'resend_safe':True}}
+   final=await refresh_actionable_control(form,final,'final',t.get('proof_submit_text') or '')
+   if final is None:return {**out,'outcome':'TECH_RETRY','reason':'SUBMIT_CONTROL_STALE_PRE_CLICK','evidence':{'pre_submit':True,'resend_safe':True}}
    if not await asyncio.to_thread(_mark_click_started,t):return {**out,'outcome':'TECH_RETRY','reason':'CLICK_BARRIER_WRITE_FAILED','evidence':{'pre_submit':True}}
    click_barrier=True
   outcome,ev=await click_and_evidence(page,final[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
