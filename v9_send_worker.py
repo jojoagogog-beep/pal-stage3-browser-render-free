@@ -178,7 +178,7 @@ async def choose_form(page):
  except:return None
 async def fill_form(page,form,message,email,market):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
- fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False}
+ fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False};fill_deadline=time.monotonic()+25.0
  try:
   meta=await fields.evaluate_all("""els => els.slice(0,60).map((e,i)=>{
     const s=getComputedStyle(e),r=e.getBoundingClientRect();
@@ -197,9 +197,12 @@ async def fill_form(page,form,message,email,market):
    i=int(m.get('i') or 0);e=fields.nth(i);tag=str(m.get('tag') or '');typ=str(m.get('typ') or tag);d=' '.join(str(m.get('d') or '').split())[:500];cls=str(m.get('cls') or '')
    class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in cls.split())
    req=bool(m.get('required') or class_required or (re.search(r'(必須|required|mandatory)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
+   if time.monotonic()>fill_deadline:return {'ok':False,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'timed_out':True}
+   core=bool(typ=='email' or EMAIL.search(d) or tag=='textarea' or MESSAGE.search(d))
    if typ in {'hidden','submit','button','image','reset','password','file'}:
     if req and typ=='file':required_unknown.append(d or 'file')
     continue
+   if not req and not core:continue
    if SENSITIVE.search(d):
     if req:sensitive.append(d[:160])
     continue
@@ -230,7 +233,7 @@ async def fill_form(page,form,message,email,market):
    elif req and typ in {'text','search','input'}:value=company
    elif req:required_unknown.append(d[:160] or typ);continue
    if value is not None:
-    await e.fill(value,timeout=2000)
+    await e.fill(value,timeout=1200)
   except Exception as ex:
    if req:required_unknown.append((d or type(ex).__name__)[:160])
  return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}
@@ -390,6 +393,7 @@ async def process_task(browser,t):
    chosen=await choose_form(page)
   if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True}}
   _,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
+  if fill.get('timed_out'):return {**out,'outcome':'TECH_RETRY','reason':'FILL_TIMEOUT_PRE_SUBMIT','evidence':{**fill,'pre_submit':True}}
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
   if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':{**fill,'pre_submit':True}}
   await page.wait_for_timeout(250)
