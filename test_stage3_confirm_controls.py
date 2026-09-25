@@ -49,6 +49,11 @@ class SemanticLabelTests(unittest.TestCase):
     def test_visible_confirm_label_is_not_final_even_if_internal_name_contains_submit(self):
         x={"tag":"input","type":"submit","label":"確認画面へ","text":"確認画面へ submitConfirm submitButton"}
         self.assertEqual(w.final_control_candidates([x]),[])
+        self.assertTrue(w.safe_confirm_text(w.control_semantic_text(x)))
+
+    def test_japanese_confirm_progression_variants(self):
+        for text in ('確認画面に進む','確認画面に進める','入力内容の確認画面へ'):
+            self.assertIsNotNone(w.CONFIRM.search(text), text)
 
 if __name__=="__main__":
     unittest.main()

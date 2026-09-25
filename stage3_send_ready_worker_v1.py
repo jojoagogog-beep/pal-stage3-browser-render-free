@@ -254,7 +254,7 @@ CONSENT_GATE=re.compile(
     r'consent.{0,50}(?:submit|send))',re.I)
 FINAL=re.compile(r'(この内容で送信|内容を送信|送信する|送信|send\s*(message|inquiry|enquiry)?|submit\s*(message|inquiry|enquiry|form)?)',re.I)
 NONFINAL=re.compile(r'(確認|confirm|next|次へ|preview|戻る|back|cancel|修正)',re.I)
-CONFIRM=re.compile(r'(確認画面(?:へ)?|入力内容(?:を)?確認|内容(?:を)?確認|確認(?:する|へ)?|confirm|review|next|次へ)',re.I)
+CONFIRM=re.compile(r'(確認画面(?:へ|に(?:進む|進める)?)|入力内容(?:を)?確認|内容(?:を)?確認|確認(?:する|へ)?|confirm|review|next|次へ)',re.I)
 COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
 
 def is_completion_route(url):
@@ -960,21 +960,14 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     # A visible type=submit control on a verified contact form is a
                     # final control even when branded text says "Get in touch",
                     # "Contact us", etc. Exclude explicit Next/Confirm/Back controls.
-                    direct=[x for x in ctrls
-                            if not NONFINAL.search(str(x.get('text') or ''))
-                            and (
-                                FINAL.search(str(x.get('text') or ''))
-                                or str(x.get('type') or '')=='submit'
-                            )
-                            and not (str(x.get('tag') or '')=='input' and str(x.get('type') or '') in {'button','image'})]
-                    confirm=[x for x in ctrls if CONFIRM.search(str(x.get('text') or ''))]
-                    safe_confirm=[]
-                    for x in confirm:
-                        tx=str(x.get('text') or '')
-                        if re.search(r'(この内容で送信|内容を送信|送信する|確認して送信|送信$|\bsend\b|\bsubmit\b|確定)',tx,re.I):
-                            continue
-                        if CONFIRM.search(tx):
-                            safe_confirm.append(x)
+                    # Use user-visible semantics consistently. Internal names/ids such
+                    # as submitConfirm must not turn a harmless confirmation
+                    # control into a direct-send control.
+                    direct=final_control_candidates(ctrls)
+                    safe_confirm=[
+                        x for x in ctrls
+                        if safe_confirm_text(control_semantic_text(x))
+                    ]
                     form_diag['direct_submit_count']=len(direct)
                     form_diag['safe_confirm_count']=len(safe_confirm)
                     if not direct and not safe_confirm:
