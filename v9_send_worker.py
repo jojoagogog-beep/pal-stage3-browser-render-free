@@ -122,6 +122,37 @@ def field_required_hint(explicit=False,cls='',desc=''):
  d=str(desc or '')
  return bool(explicit or class_required or framework_required or (re.search(r'(必須|required|mandatory|※)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
 
+def safe_select_value(options):
+ rows=[x for x in (options or []) if isinstance(x,dict)]
+ safe=[]
+ for x in rows:
+  value=str(x.get('v') or '').strip(); text=str(x.get('t') or '').strip()
+  if not value:continue
+  if SAFE_CHOICE.search(text) and not UNSAFE_CHOICE.search(text):
+   safe.append(value)
+ return safe[0] if len(safe)==1 else None
+
+async def sticky_fill(loc,value):
+ target=str(value)
+ try:await loc.fill(target,timeout=2500)
+ except Exception:pass
+ try:
+  if str(await loc.input_value(timeout=1200))==target:return
+ except Exception:pass
+ await loc.evaluate(r"""(e,v)=>{
+   const proto=e.tagName==='TEXTAREA' ? HTMLTextAreaElement.prototype :
+               (e.tagName==='SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype);
+   const d=Object.getOwnPropertyDescriptor(proto,'value');
+   if(!d||!d.set) throw new Error('NO_NATIVE_VALUE_SETTER');
+   d.set.call(e,v);
+   e.dispatchEvent(new Event('input',{bubbles:true}));
+   e.dispatchEvent(new Event('change',{bubbles:true}));
+ }""",target)
+ try:
+  if str(await loc.input_value(timeout=1200))==target:return
+ except Exception:pass
+ raise RuntimeError('STICKY_FILL_FAILED')
+
 def same_form_redirect_failure(before_url,responses,payload_values_remaining,has_success=False):
  if has_success or int(payload_values_remaining or 0)<=0:return False
  try:
@@ -447,9 +478,9 @@ async def reveal_candidate_forms(page,proof_frame_index=None,proof_form_index=No
  except Exception:pass
  return moved
 
-async def safe_checkbox_check(loc):
+async def safe_checkbox_check(loc,form=None,row=None):
  try:
-  await loc.check(timeout=1500)
+  await loc.check(timeout=2200)
   if await loc.is_checked(timeout=1000):return True
  except Exception:pass
  try:
@@ -460,8 +491,23 @@ async def safe_checkbox_check(loc):
     if(!lab || !visible(lab)) throw new Error('NO_VISIBLE_LABEL');
     lab.click();
   }""")
-  return bool(await loc.is_checked(timeout=1200))
- except Exception:return False
+  if await loc.is_checked(timeout=1200):return True
+ except Exception:pass
+ field_id=str((row or {}).get('id') or '')
+ if form is not None and field_id:
+  try:
+   labels=form.locator('label')
+   indexes=await labels.evaluate_all(
+    """(els,id)=>els.map((e,i)=>({i,forId:e.htmlFor||'',s:getComputedStyle(e),r:e.getBoundingClientRect()}))
+      .filter(x=>x.forId===id&&x.s.display!=='none'&&x.s.visibility!=='hidden'&&x.r.width>0&&x.r.height>0)
+      .map(x=>x.i)""",field_id)
+   for idx in indexes[:3]:
+    try:
+     await labels.nth(int(idx)).click(timeout=3000)
+     if await loc.is_checked(timeout=1000):return True
+    except Exception:continue
+  except Exception:pass
+ return False
 
 async def fill_form(page,form,message,email,market):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
@@ -474,7 +520,7 @@ async def fill_form(page,form,message,email,market):
       enabled:!e.disabled,name:e.name||'',id:e.id||'',tag:e.tagName.toLowerCase(),typ:(e.getAttribute('type')||e.tagName).toLowerCase(),
       d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,e.closest('dd')?.previousElementSibling?.innerText,e.closest('dl')?.querySelector('dt')?.innerText,e.closest('.contactConfirmWrap')?.innerText,(e.previousElementSibling&&e.previousElementSibling.tagName==='LABEL'?e.previousElementSibling.innerText:''),(e.parentElement&&e.parentElement.tagName!=='FORM'?e.parentElement.querySelector(':scope > label')?.innerText:''),e.closest('.form-group,.form-row,.field,.contact_area')?.querySelector('label')?.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
       cls:String(e.className||''),required:!!e.required||e.getAttribute('aria-required')==='true',
-      options:e.tagName==='SELECT'?[...e.options].map(o=>o.textContent||''):[]};
+      options:e.tagName==='SELECT'?[...e.options].map(o=>({v:o.value||'',t:o.textContent||''})):[]};
   })""")
  except Exception:
   meta=[]
@@ -500,7 +546,7 @@ async def fill_form(page,form,message,email,market):
    if typ=='checkbox':
     safe_check=bool((CONSENT_OK.search(d) and not CONSENT_BAD.search(d)) or SUBMIT_CONFIRM_CHECK.search(d))
     if safe_check:
-     if await safe_checkbox_check(e):continue
+     if await safe_checkbox_check(e,form,m):continue
      if req:required_unknown.append(d[:160] or typ)
      continue
     if not req:continue
@@ -515,11 +561,9 @@ async def fill_form(page,form,message,email,market):
     continue
    if tag=='select':
     if not req:continue
-    pick=None
-    for idx,opt in enumerate(m.get('options') or []):
-     if idx and SAFE_CHOICE.search(str(opt)) and not UNSAFE_CHOICE.search(str(opt)):pick=idx;break
+    pick=safe_select_value(m.get('options') or [])
     if pick is None:required_unknown.append(d[:160] or 'select');continue
-    await e.select_option(index=pick,timeout=1500);continue
+    await e.select_option(value=pick,timeout=2200);continue
    value=None
    if typ=='email' or EMAIL.search(d) or EMAIL_EXAMPLE.search(d):value=email;filled['email']=True
    elif tag=='textarea' or MESSAGE.search(d):value=message;filled['message']=True
@@ -536,7 +580,7 @@ async def fill_form(page,form,message,email,market):
    elif req:required_unknown.append(d[:160] or typ);continue
    if value is not None:
     try:
-     await e.fill(value,timeout=1800)
+     await sticky_fill(e,value)
     except Exception:
      # React/SPA forms can replace the input node during hydration. Reacquire
      # the same logical field by stable name/id before declaring it unfillable.
@@ -546,7 +590,7 @@ async def fill_form(page,form,message,email,market):
      if name: retry=form.locator(f'[name="{name}"]').first
      elif eid: retry=form.locator(f'#{eid}').first
      if retry is None: raise
-     await retry.fill(value,timeout=3000)
+     await sticky_fill(retry,value)
   except Exception as ex:
    if req:required_unknown.append((d or type(ex).__name__)[:160])
  return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}
