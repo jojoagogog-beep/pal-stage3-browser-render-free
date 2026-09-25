@@ -71,4 +71,8 @@ class V9SenderSafetyTests(unittest.TestCase):
         src=Path('v9_send_worker.py').read_text()
         self.assertIn('await_submit_barrier',src)
         self.assertIn('deferred_unarmed',src)
+
+    def test_production_rejects_missing_proof_expiry(self):
+        self.assertFalse(w._proof_control_ok({}))
+        self.assertFalse(w._proof_control_ok({'proof_expires_at':None}))
 if __name__=='__main__': unittest.main()

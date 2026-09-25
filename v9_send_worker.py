@@ -108,7 +108,7 @@ def _production_control_ok():
 
 def _proof_control_ok(task,min_remaining_ms=30000):
  exp=task.get('proof_expires_at')
- if exp in (None,'',0):return True
+ if exp in (None,'',0):return False
  try:return int(exp)>int(time.time()*1000)+int(min_remaining_ms)
  except Exception:return False
 
