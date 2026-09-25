@@ -463,6 +463,24 @@ async def safe_checkbox_check(loc):
   return bool(await loc.is_checked(timeout=1200))
  except Exception:return False
 
+async def reacquire_visible_field(form,name='',eid='',fallback_index=-1):
+ fields=form.locator('input,textarea,select')
+ try:
+  matches=await fields.evaluate_all("""(els,a)=>els.map((e,i)=>{
+    const s=getComputedStyle(e),r=e.getBoundingClientRect();
+    const visible=s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;
+    const identity=(a.id && e.id===a.id) || (a.name && e.name===a.name);
+    return {i,ok:identity&&visible&&!e.disabled};
+  }).filter(x=>x.ok).map(x=>x.i)""",{'name':str(name or ''),'id':str(eid or '')})
+  if matches:return fields.nth(int(matches[0]))
+ except Exception:pass
+ try:
+  if int(fallback_index)>=0:
+   loc=fields.nth(int(fallback_index))
+   if await loc.is_visible() and await loc.is_enabled():return loc
+ except Exception:pass
+ return None
+
 async def fill_form(page,form,message,email,market):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
  fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False};fill_deadline=time.monotonic()+25.0
@@ -485,6 +503,9 @@ async def fill_form(page,form,message,email,market):
   try:
    if not m.get('visible') or not m.get('enabled'):continue
    i=int(m.get('i') or 0);e=fields.nth(i);tag=str(m.get('tag') or '');typ=str(m.get('typ') or tag);d=' '.join(str(m.get('d') or '').split())[:500];cls=str(m.get('cls') or '')
+   field_name=str(m.get('name') or '');field_id=str(m.get('id') or '')
+   live=await reacquire_visible_field(form,field_name,field_id,i)
+   if live is not None:e=live
    kind=sensitive_kind(d)
    req=field_required_hint(bool(m.get('required')),cls,d) or bool(kind and kind in script_required)
    if time.monotonic()>fill_deadline:return {'ok':False,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'timed_out':True}
@@ -520,9 +541,9 @@ async def fill_form(page,form,message,email,market):
      if idx and SAFE_CHOICE.search(str(opt)) and not UNSAFE_CHOICE.search(str(opt)):pick=idx;break
     if pick is None:required_unknown.append(d[:160] or 'select');continue
     await e.select_option(index=pick,timeout=1500);continue
-   value=None
-   if typ=='email' or EMAIL.search(d) or EMAIL_EXAMPLE.search(d):value=email;filled['email']=True
-   elif tag=='textarea' or MESSAGE.search(d):value=message;filled['message']=True
+   value=None;is_email_field=False;is_message_field=False
+   if typ=='email' or EMAIL.search(d) or EMAIL_EXAMPLE.search(d):value=email;is_email_field=True
+   elif tag=='textarea' or MESSAGE.search(d):value=message;is_message_field=True
    elif COMPANY.search(d):value=company
    elif re.search(r'(ふりがな|ひらがな)',d,re.I):value='ぷらくてぃかるえーあいらぼ'
    elif re.search(r'(フリガナ|カナ|kana|furigana)',d,re.I):value='プラクティカルエーアイラボ'
@@ -535,18 +556,17 @@ async def fill_form(page,form,message,email,market):
    elif req and typ in {'text','search','input'}:value=company
    elif req:required_unknown.append(d[:160] or typ);continue
    if value is not None:
+    target=e
     try:
-     await e.fill(value,timeout=1800)
+     await target.fill(value,timeout=1800)
     except Exception:
-     # React/SPA forms can replace the input node during hydration. Reacquire
-     # the same logical field by stable name/id before declaring it unfillable.
-     name=str(m.get('name') or '') if isinstance(m,dict) else ''
-     eid=str(m.get('id') or '') if isinstance(m,dict) else ''
-     retry=None
-     if name: retry=form.locator(f'[name="{name}"]').first
-     elif eid: retry=form.locator(f'#{eid}').first
-     if retry is None: raise
-     await retry.fill(value,timeout=3000)
+     # React/SPA forms can replace or duplicate inputs during hydration.
+     # Reacquire the currently visible/enabled field, never a stale .first.
+     target=await reacquire_visible_field(form,field_name,field_id,i)
+     if target is None:raise
+     await target.fill(value,timeout=3000)
+    if is_email_field:filled['email']=True
+    if is_message_field:filled['message']=True
   except Exception as ex:
    if req:required_unknown.append((d or type(ex).__name__)[:160])
  return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}

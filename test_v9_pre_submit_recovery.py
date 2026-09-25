@@ -21,6 +21,27 @@ class PreSubmitRecoveryTests(unittest.TestCase):
         self.assertIsNotNone(w.CONSENT_OK.search(text))
         self.assertIsNone(w.CONSENT_BAD.search(text))
 
+class VisibleFieldRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reacquire_prefers_current_visible_identity(self):
+        class Fields:
+            def __init__(self): self.items=['stale-hidden','current-visible']
+            async def evaluate_all(self,script,arg): return [1]
+            def nth(self,i): return self.items[i]
+        class Form:
+            def locator(self,sel): return Fields()
+        self.assertEqual(
+            await w.reacquire_visible_field(Form(),name='email',eid='email',fallback_index=0),
+            'current-visible')
+
+    def test_fill_flags_are_set_only_after_successful_fill(self):
+        src=Path('v9_send_worker.py').read_text()
+        start=src.index('value=None;is_email_field=False;is_message_field=False')
+        end=src.index('except Exception as ex:',start)
+        block=src[start:end]
+        self.assertLess(block.index('await target.fill(value,timeout=3000)'),block.index("if is_email_field:filled['email']=True"))
+        self.assertNotIn("EMAIL.search(d) or EMAIL_EXAMPLE.search(d):value=email;filled['email']=True",block)
+        self.assertNotIn("form.locator(f'[name=",block)
+
 class SafeCheckboxTests(unittest.IsolatedAsyncioTestCase):
     async def test_visible_label_fallback_checks_consent(self):
         class Loc:
