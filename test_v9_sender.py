@@ -52,6 +52,7 @@ class V9SenderSafetyTests(unittest.TestCase):
         task='https://superjsonblob.com/api/jsonBlob/a';result='https://superjsonblob.com/api/jsonBlob/b'
         pending={'task_url':task,'result_url':result,'mode':'SHADOW','queued_at':123}
         old=(app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING)
+        app.RUN_LOCK.acquire()
         try:
             app.TOKEN='test-token';app.STAGE2_PRIMARY_ROLE=False;app.V9_SEND_THREAD=None;app.V9_SEND_PENDING=dict(pending)
             c=app.app.test_client()
@@ -60,7 +61,24 @@ class V9SenderSafetyTests(unittest.TestCase):
             self.assertEqual(r.get_json().get('status'),'QUEUED')
             self.assertEqual(app.V9_SEND_PENDING,pending)
         finally:
+            app.RUN_LOCK.release()
             app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING=old
+    def test_duplicate_queued_wake_retries_start(self):
+        task='https://superjsonblob.com/api/jsonBlob/a';result='https://superjsonblob.com/api/jsonBlob/b'
+        pending={'task_url':task,'result_url':result,'mode':'SHADOW','generation':0,'sender_shard':0,'queued_at':123}
+        old=(app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING,app._start_pending_v9_send)
+        calls=[]
+        try:
+            app.TOKEN='test-token';app.STAGE2_PRIMARY_ROLE=False;app.V9_SEND_THREAD=None;app.V9_SEND_PENDING=dict(pending)
+            app._start_pending_v9_send=lambda: calls.append(1) or True
+            c=app.app.test_client()
+            r=c.post('/v9-send-wake',headers={'x-pal-token':'test-token'},json={'task_url':task,'result_url':result,'mode':'SHADOW','sender_shard':0})
+            self.assertEqual(r.status_code,202)
+            self.assertEqual(r.get_json().get('status'),'STARTED')
+            self.assertEqual(calls,[1])
+        finally:
+            app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING,app._start_pending_v9_send=old
+
     def test_sender_turn_capacity_is_four_bounded_tasks(self):
         src=Path('v9_send_worker.py').read_text()
         self.assertIn("PAL_V9_SEND_MAX_TASKS','4'",src)

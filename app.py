@@ -1137,9 +1137,17 @@ def v9_send_wake():
     with V9_SEND_PENDING_LOCK:
         pending=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else None
     if pending and pending.get('task_url')==task_url and pending.get('result_url')==result_url and pending.get('mode')==mode and int(pending.get('generation') or 0)==generation and int(pending.get('sender_shard') or 0)==sender_shard:
+        # A prior wake can be queued behind a synchronous /tick. Retrying the
+        # same idempotent wake must also retry lock acquisition, otherwise the
+        # pending sender can remain stranded after /tick releases RUN_LOCK.
+        if _start_pending_v9_send():
+            return jsonify(status='STARTED',mode=mode,v9_send_state=_v9_send_snapshot()),202
+        pending_now=_v9_send_pending_snapshot();send_state=_v9_send_snapshot()
+        if pending_now is None and send_state.get('status')=='CONTROL_REVOKED':
+            return jsonify(status='CONTROL_REVOKED',mode=mode,v9_send_state=send_state),403
         return jsonify(status='QUEUED',mode=mode,resource_owner=_resource_owner(),
-                       v9_sender_pending=_v9_send_pending_snapshot(),
-                       v9_send_state=_v9_send_snapshot(),state=_snapshot()),202
+                       v9_sender_pending=pending_now,
+                       v9_send_state=send_state,state=_snapshot()),202
     _queue_v9_send(task_url,result_url,mode,generation,authority,failover_control_url,sender_shard)
     if _start_pending_v9_send():
         return jsonify(status='STARTED',mode=mode,v9_send_state=_v9_send_snapshot()),202
@@ -1177,3 +1185,11 @@ def tick():
         return jsonify(body),code
     finally:
         RUN_LOCK.release()
+        # /tick is synchronous, so no background thread exists to perform the
+        # normal heavy-lane handoff. Drain any sender queued while tick held
+        # RUN_LOCK; sender remains higher priority than bounded Stage2 work.
+        sender_started=_start_pending_v9_send()
+        stage2_started=False if sender_started else _start_pending_v9_stage2()
+        if sender_started or stage2_started:
+            print(json.dumps({'event':'SYNC_TICK_HANDOFF','v9_sender_started':bool(sender_started),
+                              'v9_stage2_started':bool(stage2_started)},separators=(',',':')),flush=True)
