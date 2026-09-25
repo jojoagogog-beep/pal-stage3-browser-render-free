@@ -506,7 +506,12 @@ async def control_actionable(item):
  if item is None:return False
  try:
   loc=item[1] if isinstance(item,(tuple,list)) and len(item)>1 else item
-  return bool(await loc.is_visible() and await loc.is_enabled())
+  if not (await loc.is_visible() and await loc.is_enabled()):return False
+  # Playwright trial mode runs the full actionability checks (including scroll,
+  # stability and hit-target checks) without dispatching the click. This keeps
+  # the durable click barrier unset until an actual click is likely to succeed.
+  await loc.click(trial=True,timeout=2500)
+  return True
  except Exception:return False
 
 async def final_control_matching_text(form,expected_text=''):
