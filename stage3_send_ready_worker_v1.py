@@ -882,6 +882,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                           .map((e,i)=>({i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),
                             text:((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')+' '+(e.name||'')+' '+(e.id||'')).trim()}));
                         return {index,text:(f.innerText||'').slice(0,12000),action:f.action||'',method:(f.method||'get').toLowerCase(),
+                          action_attr:f.getAttribute('action')||'',method_attr:f.getAttribute('method')||'',
                           ident:((f.id||'')+' '+(f.className||'')+' '+(f.action||'')).slice(0,1000),fields:fs,controls};
                       });
                     }"""),timeout=3.0)
@@ -897,6 +898,8 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     ident_blob=str(meta.get('ident') or '').lower()
                     form_text=str(meta.get('text') or '').lower()
                     form_action=str(meta.get('action') or '').strip()
+                    form_action_attr=str(meta.get('action_attr') or '').strip()
+                    form_method=str(meta.get('method') or 'get').strip().lower()
                     # mailto/tel/javascript actions are not web-form outreach.
                     # They cannot satisfy the Stage-3 -> Stage-4 web-submit contract.
                     if re.match(r'^(?:mailto|tel|javascript):',form_action,re.I):
@@ -913,11 +916,30 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     has_msg=any(str(x.get('tag') or '')=='textarea' or re.search(r'(message|inquir|enquir|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)',str(x.get('desc') or ''),re.I) for x in fields)
                     form_diag={'index':int(i),'field_count':len(fields),
                                'has_email':bool(has_email),'has_message':bool(has_msg),
-                               'ident':str(meta.get('ident') or '')[:180]}
+                               'ident':str(meta.get('ident') or '')[:180],
+                               'method':form_method,'action':form_action[:240]}
                     if len(root_diag['forms'])<20:
                         root_diag['forms'].append(form_diag)
                     if not (has_email and has_msg):
                         form_diag['decision']='NO_EMAIL_OR_MESSAGE'
+                        continue
+                    # A contact-looking form with an explicitly declared GET target
+                    # that is clearly a placeholder/broken endpoint must not become
+                    # SEND_READY. Omitted action/method remains allowed because many
+                    # modern forms are submitted by JavaScript/AJAX.
+                    try:
+                        action_parts=urlsplit(form_action)
+                        action_leaf=(action_parts.path or '').rstrip('/').split('/')[-1].lower()
+                        current_scheme=urlsplit(str(page.url or '')).scheme.lower()
+                        action_scheme=(action_parts.scheme or '').lower()
+                    except Exception:
+                        action_leaf='';current_scheme='';action_scheme=''
+                    broken_leaf=bool(re.fullmatch(r'(?:string|dummy|placeholder|example|sample|test\d*|action)',action_leaf,re.I))
+                    insecure_downgrade=bool(current_scheme=='https' and action_scheme=='http')
+                    if form_method=='get' and bool(form_action_attr) and (broken_leaf or insecure_downgrade):
+                        form_diag['decision']='BROKEN_GET_ACTION'
+                        form_diag['broken_action_leaf']=action_leaf[:80]
+                        form_diag['insecure_downgrade']=insecure_downgrade
                         continue
                     ctrls=list(meta.get('controls') or [])
                     form_diag['control_count']=len(ctrls)
@@ -953,7 +975,8 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     chosen_control=direct[0] if direct else safe_confirm[0]
                     score=10+(3 if direct else 2)+(2 if re.search(r'(会社|法人|company|organization)',blob,re.I) else 0)
                     cand={'index':i,'fields':fields,'control':chosen_control,'control_kind':kind,'score':score,
-                          'frame_index':frame_index,'form_text':form_text[:12000]}
+                          'frame_index':frame_index,'form_text':form_text[:12000],
+                          'form_action':form_action[:1000],'form_method':form_method}
                     if best_local is None or score>best_local['score']:
                         best_local=cand
                 return best_local
@@ -1358,6 +1381,8 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     'form_fingerprint':hashlib.sha256((final_url+'|frame='+str(best.get('frame_index') or 0)+'|'+str(best['index'])+'|'+str(control.get('text') or '')).encode()).hexdigest(),
                     'frame_index':int(best.get('frame_index') or 0),
                     'form_index':int(best.get('index') or 0),
+                    'form_action':str(best.get('form_action') or '')[:1000],
+                    'form_method':str(best.get('form_method') or '')[:20],
                     'submit_text':str(control.get('text') or '')[:300]}
         except PlaywrightTimeoutError as e:
             return {**base,'status':'TECH_DEFER','code':'BROWSER_TIMEOUT','stage3_send_ready':False,

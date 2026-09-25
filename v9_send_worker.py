@@ -247,7 +247,11 @@ async def click_and_evidence(page,loc,message,email,before_text):
  try:after=' '.join((await page.locator('body').inner_text(timeout=2500)).split())
  except:after=''
  new_success=bool(SUCCESS.search(after) and (not SUCCESS.search(before_text) or SUCCESS.search(after).group(0)!=SUCCESS.search(before_text).group(0)))
- validation=bool(FAIL.search(after))
+ before_fail=FAIL.search(before_text or ''); after_fail=FAIL.search(after)
+ new_validation_text=bool(after_fail and (not before_fail or after_fail.group(0)!=before_fail.group(0)))
+ try: invalid_control_count=await page.locator('input:invalid,textarea:invalid,select:invalid').count()
+ except: invalid_control_count=0
+ validation=bool(new_validation_text or invalid_control_count>0)
  corr2xx=any(x['matches_form_payload'] and 200<=x['status']<300 for x in responses);corr4xx=any(x['matches_form_payload'] and x['status'] in {400,401,403,404,405,410,415,422} for x in responses)
  def pathmatch(rx,u):
   try:return bool(rx.search(urlsplit(str(u or '')).path or '/'))
@@ -259,7 +263,7 @@ async def click_and_evidence(page,loc,message,email,before_text):
  redirect_confirm=any(pathmatch(CONFIRM_PATH,x.get('location')) for x in corr3xx)
  final_completion=pathmatch(COMPLETION_PATH,page.url)
  final_success_query=bool(SUCCESS_QUERY.search(str(page.url or '')))
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
  if (provider_success or new_success or corr204 or redirect_completion or redirect_success_query or final_completion or final_success_query) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
