@@ -363,7 +363,7 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
             'PAL_ROUTE_PRIORITY_MARKETS':','.join(priority_markets[:8]),
             'PAL_ROUTE_PRIORITY_STRICT':'1',
         })
-        cp=subprocess.run([sys.executable,str(STAGE2_WORKER)],env=env,text=True,capture_output=True,timeout=220)
+        cp=subprocess.run([sys.executable,str(STAGE2_WORKER)],env=env,text=True,capture_output=True,timeout=(220 if STAGE2_PRIMARY_ROLE else 75))
         summary=_worker_summary(cp.stdout or '')
         completed={
             'status':'PASS' if cp.returncode==0 else 'ERROR',
