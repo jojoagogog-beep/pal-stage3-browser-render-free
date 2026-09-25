@@ -15,6 +15,7 @@ FAILOVER_CONTROL_URL=os.environ.get('PAL_V9_FAILOVER_CONTROL_URL','').strip()
 FAILOVER_SECRET=os.environ.get('PAL_V9_FAILOVER_SECRET','')
 UA='Practical-AI-Lab-V9-Sender/1.0'
 MAX_TASKS_PER_TURN=4
+SEND_CONCURRENCY=max(1,min(2,int(os.environ.get('PAL_V9_SEND_CONCURRENCY','2') or 2)))
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
 SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
 EMAIL=re.compile(r'(e-?mail|メール)',re.I)
@@ -253,7 +254,7 @@ async def click_and_evidence(page,loc,message,email,before_text):
  redirect_confirm=any(pathmatch(CONFIRM_PATH,x.get('location')) for x in corr3xx)
  final_completion=pathmatch(COMPLETION_PATH,page.url)
  ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_redirect_completion':redirect_completion,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
- if (corr2xx and (provider_success or new_success) or redirect_completion or final_completion) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
+ if (provider_success or new_success or redirect_completion or final_completion) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):
@@ -352,12 +353,15 @@ async def main():
   browser=await p.chromium.launch(**launch_kw)
   deferred=0
   try:
-   for t in tasks:
-    armed=await await_submit_barrier(t,65.0)
-    if armed is None:
-     deferred+=1
-     continue
-    results.append(await process_task(browser,armed))
+   armed_all=await asyncio.gather(*(await_submit_barrier(t,65.0) for t in tasks))
+   ready=[x for x in armed_all if x is not None]
+   deferred=len(tasks)-len(ready)
+   sem=asyncio.Semaphore(SEND_CONCURRENCY)
+   async def run_one(t):
+    async with sem:
+     return await process_task(browser,t)
+   if ready:
+    results.extend(await asyncio.gather(*(run_one(t) for t in ready)))
   finally:await browser.close()
  try:r=_get(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
  except:prior=[]
