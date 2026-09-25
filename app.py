@@ -562,8 +562,8 @@ def _v9_send_runner(task_url,result_url,mode,generation=0,authority='',failover_
     started=time.time()
     try:
         env=os.environ.copy()
-        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health'),'PAL_V9_PRODUCTION_AUTHORITY':str(authority),'PAL_V9_FAILOVER_CONTROL_URL':str(failover_control_url),'PAL_V9_FAILOVER_SECRET':TOKEN,'PAL_V9_SENDER_SHARD':str(0 if int(sender_shard or 0)==0 else 1),'PAL_V9_SEND_MAX_TASKS':'2','PAL_V9_SEND_CONCURRENCY':'2','PAL_V9_TASK_WALL_TIMEOUT':'180'})
-        cp=subprocess.run([sys.executable,str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=300)
+        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health'),'PAL_V9_PRODUCTION_AUTHORITY':str(authority),'PAL_V9_FAILOVER_CONTROL_URL':str(failover_control_url),'PAL_V9_FAILOVER_SECRET':TOKEN,'PAL_V9_SENDER_SHARD':str(0 if int(sender_shard or 0)==0 else 1),'PAL_V9_SEND_MAX_TASKS':'4','PAL_V9_SEND_CONCURRENCY':'2','PAL_V9_TASK_WALL_TIMEOUT':'180'})
+        cp=subprocess.run([sys.executable,str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=420)
         summary=_worker_summary(cp.stdout or '')
         completed={'status':'PASS' if cp.returncode==0 else 'ERROR','at':int(time.time()),
                    'duration_seconds':round(time.time()-started,2),'returncode':cp.returncode,

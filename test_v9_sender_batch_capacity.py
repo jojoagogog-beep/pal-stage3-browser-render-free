@@ -1,0 +1,12 @@
+import unittest
+from pathlib import Path
+
+class SenderBatchCapacityTests(unittest.TestCase):
+    def test_sender_keeps_two_way_concurrency_but_drains_four_per_wake(self):
+        src=Path('app.py').read_text()
+        self.assertIn("'PAL_V9_SEND_MAX_TASKS':'4'",src)
+        self.assertIn("'PAL_V9_SEND_CONCURRENCY':'2'",src)
+        self.assertIn("str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=420",src)
+
+if __name__=='__main__':
+    unittest.main()
