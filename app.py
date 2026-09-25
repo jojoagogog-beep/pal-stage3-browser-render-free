@@ -55,7 +55,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Primary is dual-role under one heavy-resource lock: Stage2 route verification
 # and Stage3 Browser never overlap. Shard1 keeps Stage3/Sender priority and may use idle time for bounded V9 Stage2.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
-SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V10_STAGE3_LOW_WATER'
+SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V11_FAST_REPROOF'
 V9_STAGE2_SHARD1_REVISION='V9_STAGE2_SHARD1_IDLE_ONLY_V1'
 V9_STRICT_STATIC_REVISION='V9_STAGE2_STRICT_STATIC_FULL_V1'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
@@ -116,17 +116,17 @@ LEASE_SECONDS=max(120,min(600,int(os.environ.get('PAL_RENDER_LEASE_SECONDS','180
 IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECONDS','8') or 8)))
 # Render Free is memory-bound: even two concurrent Browser inspections OOM-killed
 # the gunicorn worker. Keep exactly one live Browser inspection / renderer.
-# FAST_DOM may process up to three routes *serially inside the same Chromium
-# process* so high-confidence static-FULL candidates amortize browser launch
+# FAST_DOM may process up to four routes *serially inside the same Chromium
+# process* so high-confidence send-reproof candidates amortize browser launch
 # overhead without increasing concurrent memory pressure. Proof/safety gates are unchanged.
-LANE_MAX_ROWS={'DYNAMIC_JS':3,'IFRAME_DEEP':1,'DEEP':2,'FAST_DOM':3}
+LANE_MAX_ROWS={'DYNAMIC_JS':3,'IFRAME_DEEP':1,'DEEP':2,'FAST_DOM':4}
 LANE_CONCURRENCY={'DYNAMIC_JS':1,'IFRAME_DEEP':1,'DEEP':1,'FAST_DOM':1}
 # The per-route budget must exceed the internal navigation + render budget.
 # Previously 16-18s wrapped a page.goto() that could itself wait 30s, making
 # OVERALL_ROUTE_TIMEOUT_OR_ERROR inevitable on otherwise valid slower sites.
-LANE_DEADLINE_SECONDS={'DYNAMIC_JS':96,'IFRAME_DEEP':58,'DEEP':90,'FAST_DOM':118}
-LANE_ROUTE_TIMEOUT_SECONDS={'DYNAMIC_JS':42,'IFRAME_DEEP':42,'DEEP':38,'FAST_DOM':30}
-LANE_RETRY_TIMEOUT_SECONDS={'DYNAMIC_JS':42,'IFRAME_DEEP':42,'DEEP':38,'FAST_DOM':30}
+LANE_DEADLINE_SECONDS={'DYNAMIC_JS':96,'IFRAME_DEEP':58,'DEEP':90,'FAST_DOM':108}
+LANE_ROUTE_TIMEOUT_SECONDS={'DYNAMIC_JS':42,'IFRAME_DEEP':42,'DEEP':38,'FAST_DOM':22}
+LANE_RETRY_TIMEOUT_SECONDS={'DYNAMIC_JS':42,'IFRAME_DEEP':42,'DEEP':38,'FAST_DOM':22}
 app=Flask(__name__)
 
 def allowed():
@@ -491,12 +491,13 @@ def _v9_send_pending_snapshot():
     # Blob URLs are intentionally not exposed in health/state.
     out={'mode':p.get('mode'),'queued_at':p.get('queued_at')}
     if p.get('generation') is not None: out['generation']=p.get('generation')
+    if p.get('sender_shard') is not None: out['sender_shard']=p.get('sender_shard')
     return out
 
-def _queue_v9_send(task_url,result_url,mode,generation=0,authority='',failover_control_url=''):
+def _queue_v9_send(task_url,result_url,mode,generation=0,authority='',failover_control_url='',sender_shard=1):
     global V9_SEND_PENDING
     with V9_SEND_PENDING_LOCK:
-        V9_SEND_PENDING={'task_url':task_url,'result_url':result_url,'mode':mode,'generation':int(generation or 0),'authority':str(authority or ''),'failover_control_url':str(failover_control_url or ''),'queued_at':int(time.time())}
+        V9_SEND_PENDING={'task_url':task_url,'result_url':result_url,'mode':mode,'generation':int(generation or 0),'authority':str(authority or ''),'failover_control_url':str(failover_control_url or ''),'sender_shard':0 if int(sender_shard or 0)==0 else 1,'queued_at':int(time.time())}
     with V9_SEND_STATE_LOCK:
         if not (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()):
             V9_SEND_STATE.update(status='QUEUED',at=int(time.time()))
@@ -529,7 +530,7 @@ def _start_pending_v9_send():
             V9_SEND_STATE.update(status='RUNNING',at=int(time.time()),returncode=None)
         V9_SEND_THREAD=threading.Thread(
             target=_v9_send_runner,
-            args=(pending['task_url'],pending['result_url'],pending['mode'],int(pending.get('generation') or 0),str(pending.get('authority') or ''),str(pending.get('failover_control_url') or '')),
+            args=(pending['task_url'],pending['result_url'],pending['mode'],int(pending.get('generation') or 0),str(pending.get('authority') or ''),str(pending.get('failover_control_url') or ''),int(pending.get('sender_shard') or 0)),
             name='pal-v9-send',daemon=True)
         V9_SEND_THREAD.start()
         return True
@@ -541,12 +542,12 @@ def _start_pending_v9_send():
         except RuntimeError: pass
         raise
 
-def _v9_send_runner(task_url,result_url,mode,generation=0,authority='',failover_control_url=''):
+def _v9_send_runner(task_url,result_url,mode,generation=0,authority='',failover_control_url='',sender_shard=1):
     global V9_SEND_THREAD
     started=time.time()
     try:
         env=os.environ.copy()
-        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health'),'PAL_V9_PRODUCTION_AUTHORITY':str(authority),'PAL_V9_FAILOVER_CONTROL_URL':str(failover_control_url),'PAL_V9_FAILOVER_SECRET':TOKEN,'PAL_V9_SENDER_SHARD':'0' if STAGE2_PRIMARY_ROLE else '1','PAL_V9_SEND_MAX_TASKS':'2','PAL_V9_SEND_CONCURRENCY':'2'})
+        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health'),'PAL_V9_PRODUCTION_AUTHORITY':str(authority),'PAL_V9_FAILOVER_CONTROL_URL':str(failover_control_url),'PAL_V9_FAILOVER_SECRET':TOKEN,'PAL_V9_SENDER_SHARD':str(0 if int(sender_shard or 0)==0 else 1),'PAL_V9_SEND_MAX_TASKS':'2','PAL_V9_SEND_CONCURRENCY':'2','PAL_V9_TASK_WALL_TIMEOUT':'180'})
         cp=subprocess.run([sys.executable,str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=300)
         summary=_worker_summary(cp.stdout or '')
         completed={'status':'PASS' if cp.returncode==0 else 'ERROR','at':int(time.time()),
@@ -1021,7 +1022,7 @@ def health():
                    lane_skip_until=LANE_SKIP_UNTIL,
                    v9_sender_enabled=True,
                    v9_sender_control_revision='DUAL_AUTHORITY_DUAL_SHARD_FAILOVER_V2',
-                   v9_sender_worker_revision='V9_SENDER_SHARD1_V9_TIMEOUT180',
+                   v9_sender_worker_revision='V9_SENDER_DEDICATED_2X_V10',
                    v9_sender_production_enabled=True,
                    v9_sender_pending=_v9_send_pending_snapshot(),
                    v9_send_state=_v9_send_snapshot(),
@@ -1062,7 +1063,7 @@ def v9_send_wake():
     payload=request.get_json(silent=True) or {}
     task_url=str(payload.get('task_url') or '')
     result_url=str(payload.get('result_url') or '')
-    mode=str(payload.get('mode') or 'SHADOW').upper();generation=int(payload.get('cutover_generation') or 0)
+    mode=str(payload.get('mode') or 'SHADOW').upper();generation=int(payload.get('cutover_generation') or 0);sender_shard=0 if int(payload.get('sender_shard') or 0)==0 else 1
     if mode not in {'SHADOW','PRODUCTION'}:
         return jsonify(status='BAD_MODE'),400
     authority=str(payload.get('production_authority') or '')
@@ -1081,11 +1082,11 @@ def v9_send_wake():
                        v9_send_state=_v9_send_snapshot()),202
     with V9_SEND_PENDING_LOCK:
         pending=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else None
-    if pending and pending.get('task_url')==task_url and pending.get('result_url')==result_url and pending.get('mode')==mode and int(pending.get('generation') or 0)==generation:
+    if pending and pending.get('task_url')==task_url and pending.get('result_url')==result_url and pending.get('mode')==mode and int(pending.get('generation') or 0)==generation and int(pending.get('sender_shard') or 0)==sender_shard:
         return jsonify(status='QUEUED',mode=mode,resource_owner=_resource_owner(),
                        v9_sender_pending=_v9_send_pending_snapshot(),
                        v9_send_state=_v9_send_snapshot(),state=_snapshot()),202
-    _queue_v9_send(task_url,result_url,mode,generation,authority,failover_control_url)
+    _queue_v9_send(task_url,result_url,mode,generation,authority,failover_control_url,sender_shard)
     if _start_pending_v9_send():
         return jsonify(status='STARTED',mode=mode,v9_send_state=_v9_send_snapshot()),202
     return jsonify(status='QUEUED',mode=mode,resource_owner=_resource_owner(),
