@@ -18,6 +18,7 @@ MAX_TASKS_PER_TURN=max(1,min(8,int(os.environ.get('PAL_V9_SEND_MAX_TASKS','4') o
 SEND_CONCURRENCY=max(1,min(4,int(os.environ.get('PAL_V9_SEND_CONCURRENCY','2') or 2)))
 TASK_WALL_TIMEOUT=max(90.0,min(220.0,float(os.environ.get('PAL_V9_TASK_WALL_TIMEOUT','180') or 180)))
 RESULT_IO_TIMEOUT=max(3.0,min(12.0,float(os.environ.get('PAL_V9_RESULT_IO_TIMEOUT','6') or 6)))
+TASK_BARRIER_IO_TIMEOUT=max(2.0,min(8.0,float(os.environ.get('PAL_V9_TASK_BARRIER_IO_TIMEOUT','4') or 4)))
 SENDER_SHARD=0 if str(os.environ.get('PAL_V9_SENDER_SHARD','1')).strip()=='0' else 1
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
 SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
@@ -156,13 +157,17 @@ def _get_result(u):
  r=requests.get(u,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':int(time.time())},timeout=RESULT_IO_TIMEOUT);r.raise_for_status();return r.json()
 def _put_result(u,o):
  r=requests.put(u,json=o,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=RESULT_IO_TIMEOUT);r.raise_for_status()
+def _get_task(u):
+ r=requests.get(u,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':time.time_ns()},timeout=TASK_BARRIER_IO_TIMEOUT);r.raise_for_status();return r.json()
+def _put_task(u,o):
+ r=requests.put(u,json=o,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=TASK_BARRIER_IO_TIMEOUT);r.raise_for_status()
 TASK_WRITE_LOCK=threading.Lock()
 def _mark_click_started(task):
  token=str(task.get('token_id') or '')
  if not token:return False
  with TASK_WRITE_LOCK:
-  for attempt in range(4):
-   try:q=_get(TASK_URL)
+  for attempt in range(2):
+   try:q=_get_task(TASK_URL)
    except Exception:
     time.sleep(.35*(attempt+1));continue
    found=False;stamp=int(time.time()*1000)
@@ -175,13 +180,13 @@ def _mark_click_started(task):
    if not found:
     time.sleep(.35*(attempt+1));continue
    q['updated_at_epoch']=int(time.time())
-   try:_put(TASK_URL,q)
+   try:_put_task(TASK_URL,q)
    except Exception:
     time.sleep(.35*(attempt+1));continue
    # Verify the durable marker after the write. A controller/task-queue
    # read-modify-write racing this worker may otherwise erase the marker.
    try:
-    v=_get(TASK_URL)
+    v=_get_task(TASK_URL)
     ok=any(isinstance(x,dict) and str(x.get('token_id') or '')==token and x.get('click_started') is True for x in (v.get('tasks') or []))
    except Exception:ok=False
    if ok:
@@ -776,7 +781,7 @@ async def await_submit_barrier(task,timeout=65.0):
  if MODE!='PRODUCTION' or task.get('submit_started') is True:return task
  token=str(task.get('token_id') or '');deadline=time.monotonic()+max(1.0,float(timeout))
  while time.monotonic()<deadline:
-  try:q=await asyncio.to_thread(_get,TASK_URL)
+  try:q=await asyncio.to_thread(_get_task,TASK_URL)
   except Exception:
    await asyncio.sleep(.5);continue
   for x in (q.get('tasks') or []):
