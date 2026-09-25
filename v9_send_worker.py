@@ -124,12 +124,21 @@ def field_required_hint(explicit=False,cls='',desc=''):
 
 def safe_select_value(options):
  rows=[x for x in (options or []) if isinstance(x,dict)]
- safe=[]
- for x in rows:
+ ranked=[]; safe=[]
+ for idx,x in enumerate(rows):
   value=str(x.get('v') or '').strip(); text=str(x.get('t') or '').strip()
-  if not value:continue
-  if SAFE_CHOICE.search(text) and not UNSAFE_CHOICE.search(text):
-   safe.append(value)
+  if not value or UNSAFE_CHOICE.search(text):continue
+  # When several harmless business-contact choices exist, pick the option
+  # whose meaning most closely matches this outreach instead of failing merely
+  # because more than one safe choice is present.
+  score=None
+  if re.search(r'(request\s+(?:a\s+)?consultation|consultation|ご相談)',text,re.I):score=0
+  elif re.search(r'((general|business).{0,30}(inquiry|enquiry|contact)|(inquiry|enquiry|contact).{0,30}(general|business)|一般|法人)',text,re.I):score=1
+  elif re.search(r'(partnership|collaboration|協業|提携)',text,re.I):score=2
+  elif re.fullmatch(r'\s*(other|その他)\s*',text,re.I):score=3
+  if score is not None:ranked.append((score,idx,value))
+  if SAFE_CHOICE.search(text):safe.append(value)
+ if ranked:return min(ranked)[2]
  return safe[0] if len(safe)==1 else None
 
 async def sticky_fill(loc,value):
