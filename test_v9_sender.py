@@ -75,4 +75,9 @@ class V9SenderSafetyTests(unittest.TestCase):
     def test_production_rejects_missing_proof_expiry(self):
         self.assertFalse(w._proof_control_ok({}))
         self.assertFalse(w._proof_control_ok({'proof_expires_at':None}))
+
+    def test_optional_business_identity_fields_reach_fill_logic(self):
+        src=Path('v9_send_worker.py').read_text()
+        self.assertIn("or COMPANY.search(d) or FIRST_NAME.search(d) or LAST_NAME.search(d)",src)
+        self.assertIn("or NAME.search(d) or SUBJECT.search(d) or URLRX.search(d)",src)
 if __name__=='__main__': unittest.main()

@@ -258,7 +258,9 @@ async def fill_form(page,form,message,email,market):
    class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in cls.split())
    req=bool(m.get('required') or class_required or (re.search(r'(必須|required|mandatory)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
    if time.monotonic()>fill_deadline:return {'ok':False,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'timed_out':True}
-   core=bool(typ=='email' or EMAIL.search(d) or tag=='textarea' or MESSAGE.search(d))
+   core=bool(typ in {'email','url'} or EMAIL.search(d) or tag=='textarea' or MESSAGE.search(d)
+             or COMPANY.search(d) or FIRST_NAME.search(d) or LAST_NAME.search(d)
+             or NAME.search(d) or SUBJECT.search(d) or URLRX.search(d))
    if typ in {'hidden','submit','button','image','reset','password','file'}:
     if req and typ=='file':required_unknown.append(d or 'file')
     continue
