@@ -29,7 +29,7 @@ NAME=re.compile(r'(full.?name|your.?name|contact.?name|お名前|氏名|\bname\b
 SUBJECT=re.compile(r'(subject|件名|title)',re.I)
 URLRX=re.compile(r'(website|web.?site|url|サイト)',re.I)
 CAPTCHA_SEL='.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey],iframe[src*="recaptcha"],iframe[src*="hcaptcha"]'
-BOT_HINT=re.compile(r'(?:captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|chk[-_ ]?not[-_ ]?robot|human[-_ ]?(?:check|verification))',re.I)
+BOT_HINT=re.compile(r'(?:captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|chk[-_ ]?not[-_ ]?robot|human[-_ ]?(?:check|verification)|help\s+us\s+prevent\s+spam|anti[- ]?spam|spam\s+(?:check|question|protection)|security\s+(?:question|check)|which\s+is\s+(?:bigger|larger|smaller)|what\s+is\s+\d+\s*[+\-x×*]\s*\d+|\bquiz\b)',re.I)
 SUCCESS=re.compile(r'(送信が完了|送信完了|お問い合わせ.{0,30}(?:ありがとう|受け付け|受付)|thank\s+you.{0,80}(?:message|inquir|contact)|(?:message|inquir(?:y|ies)|request).{0,80}(?:sent|received|submitted)|successfully\s+(?:sent|submitted))',re.I)
 FAIL=re.compile(r'(入力してください|未入力|required field|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid)',re.I)
 FINAL=re.compile(r'(この内容で送信|内容を送信|確認して送信|送信する|^送信$|send\s*(?:message|inquiry|enquiry)?$|submit\s*(?:message|inquiry|enquiry|form)?$)',re.I)
@@ -132,13 +132,13 @@ async def desc(loc):
 async def visible_captcha(page):
  # One browser-side DOM pass instead of up to 120 Playwright round trips.
  try:
-  return bool(await page.evaluate("""sel => {
+  return bool(await page.evaluate(r"""sel => {
     const visible = e => {
       const s=getComputedStyle(e),r=e.getBoundingClientRect();
       return s.display!=='none' && s.visibility!=='hidden' && r.width>0 && r.height>0;
     };
     for (const e of document.querySelectorAll(sel)) if (visible(e)) return true;
-    const bot=/(captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|human[-_ ]?(?:check|verification))/i;
+    const bot=/(captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|human[-_ ]?(?:check|verification)|help\s+us\s+prevent\s+spam|anti[- ]?spam|spam\s+(?:check|question|protection)|security\s+(?:question|check)|which\s+is\s+(?:bigger|larger|smaller)|what\s+is\s+\d+\s*[+\-x×*]\s*\d+|\bquiz\b)/i;
     for (const e of document.querySelectorAll('input,button,label')) {
       if (!visible(e)) continue;
       const meta=[e.name,e.id,e.className,e.value,e.innerText,e.getAttribute('aria-label'),e.getAttribute('for')].filter(Boolean).join(' ');
@@ -204,6 +204,9 @@ async def fill_form(page,form,message,email,market):
     if req and typ=='file':required_unknown.append(d or 'file')
     continue
    if not req and not core:continue
+   if BOT_HINT.search(d):
+    if req:required_unknown.append(('human_challenge:'+d)[:160])
+    continue
    if SENSITIVE.search(d) and not EMAIL.search(d):
     if req:sensitive.append(d[:160])
     continue

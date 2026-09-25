@@ -242,6 +242,7 @@ except Exception:
     SSL_CONTEXT=ssl.create_default_context()
 CAPTCHA=re.compile(r'(g-recaptcha|grecaptcha|recaptcha/api|hcaptcha|h-captcha|challenges\.cloudflare\.com|cf-turnstile|turnstile/v0|captcha)',re.I)
 CAPTCHA_SELECTOR='iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey]'
+HUMAN_CHALLENGE=re.compile(r'(help\s+us\s+prevent\s+spam|anti[- ]?spam|spam\s+(?:check|question|protection)|security\s+(?:question|check)|human\s+(?:check|verification)|which\s+is\s+(?:bigger|larger|smaller)|what\s+is\s+\d+\s*[+\-x×*]\s*\d+|solve\s+(?:this|the)\s+(?:math|equation)|simple\s+(?:math|question)|\bquiz\b)',re.I)
 PROHIBIT=re.compile(r'(no\s+(?:unsolicited|sales\s+solicit)|sales\s+solicitations?.{0,30}(?:not\s+accepted|prohibited|declin|refus)|(?:営業(?:目的|勧誘|メール|メ[ー－-]ル)|ご?提案|セールス).{0,40}(?:禁止|お断り|受け付け(?:て)?おりません|受付(?:して)?おりません|ご遠慮))',re.I)
 SENSITIVE=re.compile(r'(電話|\btel\b|\bphone\b|mobile|\b(?:full|contact|telephone|phone)[ _.-]?number\b|住所|\baddress\b|郵便|postal|postcode|\bzip\b|都道府県|市区町村|番地)',re.I)
 MARKETING=re.compile(r'(newsletter|marketing|マーケティング|メルマガ|広告|キャンペーン|販促|プロモーション)',re.I)
@@ -930,6 +931,11 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                         root_diag['forms'].append(form_diag)
                     if not (has_email and has_msg):
                         form_diag['decision']='NO_EMAIL_OR_MESSAGE'
+                        continue
+                    human_challenge=[x for x in fields if bool(x.get('required')) and HUMAN_CHALLENGE.search(str(x.get('desc') or ''))]
+                    if human_challenge:
+                        form_diag['decision']='HUMAN_CHALLENGE_REQUIRED'
+                        form_diag['human_challenge_count']=len(human_challenge)
                         continue
                     # A contact-looking form with an explicitly declared GET target
                     # that is clearly a placeholder/broken endpoint must not become
