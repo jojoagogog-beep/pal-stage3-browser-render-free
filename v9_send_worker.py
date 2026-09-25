@@ -129,7 +129,9 @@ async def choose_form(page):
    if not await f.is_visible():continue
    rows=f.locator('input,textarea,select'); has_e=False;has_m=False
    for i in range(min(await rows.count(),80)):
-    e=rows.nth(i);d=(await desc(e)).lower();typ=(await e.get_attribute('type') or '').lower();tag=await e.evaluate('e=>e.tagName.toLowerCase()')
+    e=rows.nth(i)
+    if not await e.is_visible() or not await e.is_enabled():continue
+    d=(await desc(e)).lower();typ=(await e.get_attribute('type') or '').lower();tag=await e.evaluate('e=>e.tagName.toLowerCase()')
     has_e=has_e or typ=='email' or bool(EMAIL.search(d));has_m=has_m or tag=='textarea' or bool(MESSAGE.search(d))
    txt=' '.join((await f.inner_text(timeout=1500)).split())[:5000]
    score=(5 if has_e else 0)+(5 if has_m else 0)+(3 if re.search(r'(contact|inquiry|enquiry|お問い合わせ|お問合せ|ご相談)',txt,re.I) else 0)
@@ -176,7 +178,7 @@ async def fill_form(page,form,message,email,market):
    elif re.search(r'(部署|部門|department|designation)',d,re.I):value='Operations'
    elif typ=='url' or URLRX.search(d):value=site
    elif SUBJECT.search(d):value='AI workflow fit check' if market!='JP-JA' else 'AI業務改善のご相談'
-   elif req and typ in {'text','search'}:value=company
+   elif req and typ in {'text','search','input'}:value=company
    elif req:required_unknown.append(d[:160] or typ);continue
    if value is not None:await e.fill(value);await e.dispatch_event('input');await e.dispatch_event('change')
   except Exception as ex:
@@ -297,7 +299,11 @@ async def process_task(browser,t):
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
   chosen=await choose_form(page)
-  if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True}}
+  if not chosen:
+   await page.wait_for_timeout(1800)
+   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'late_render':True}}
+   chosen=await choose_form(page)
+  if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True}}
   _,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
   if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':fill}
