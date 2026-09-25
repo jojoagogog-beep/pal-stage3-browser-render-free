@@ -675,7 +675,10 @@ async def click_and_evidence(page,loc,message,email,before_text):
   except:pass
  page.on('request',on_req);page.on('response',on_resp);click_error=''
  try:
-  await loc.click(timeout=5000)
+  # Trial click already verified actionability. Dispatch the real click without
+  # coupling its success to Playwright's implicit navigation wait; post-click
+  # navigation/network/DOM evidence is observed explicitly below.
+  await loc.click(timeout=5000,no_wait_after=True)
   try:await page.wait_for_load_state('domcontentloaded',timeout=5000)
   except:pass
   await page.wait_for_timeout(1500)
