@@ -85,21 +85,21 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         finally:
             m.LANE_SKIP_UNTIL['FAST_DOM']=old
 
-    def test_dynamic_and_deep_backlog_get_priority_but_all_lanes_remain_represented(self):
+    def test_empirical_lane_mix_prioritizes_fast_and_dynamic_but_keeps_all_lanes(self):
         from pathlib import Path
         src=(Path(__file__).resolve().parent/'app.py').read_text()
-        self.assertIn("'DYNAMIC_JS','DEEP','DYNAMIC_JS','FAST_DOM'",src)
-        self.assertIn("'DYNAMIC_JS','DEEP','IFRAME_DEEP','FAST_DOM'",src)
+        self.assertIn("'FAST_DOM','DYNAMIC_JS','FAST_DOM','DYNAMIC_JS'",src)
+        self.assertIn("'FAST_DOM','DYNAMIC_JS','IFRAME_DEEP','DEEP'",src)
 
     def test_free_plan_browser_parallelism_is_memory_safe(self):
         # Render Free still OOM-killed the service at two-way browser parallelism.
         # Keep exactly one live Browser route/renderer per process. FAST_DOM may
         # amortize one Chromium launch across three routes, but only serially.
         self.assertEqual(set(m.LANE_CONCURRENCY.values()), {1})
-        self.assertEqual(m.LANE_MAX_ROWS['DYNAMIC_JS'],2)
-        self.assertEqual(m.LANE_MAX_ROWS['IFRAME_DEEP'],1)
+        self.assertEqual(m.LANE_MAX_ROWS['DYNAMIC_JS'],3)
+        self.assertEqual(m.LANE_MAX_ROWS['IFRAME_DEEP'],2)
         self.assertEqual(m.LANE_MAX_ROWS['DEEP'],2)
-        self.assertEqual(m.LANE_MAX_ROWS['FAST_DOM'],3)
+        self.assertEqual(m.LANE_MAX_ROWS['FAST_DOM'],6)
         self.assertGreaterEqual(m.LANE_DEADLINE_SECONDS['FAST_DOM'],100)
 
     def test_secret_file_fallbacks_keep_clone_credentials_out_of_repo(self):

@@ -63,8 +63,8 @@ V9_STRICT_STATIC_REVISION='V9_STAGE2_STRICT_STATIC_FULL_V1'
 # Keep every lane represented, but do not spend 25% of the free Render browser
 # budget on low-yield technical DEEP retries. This changes scheduling only;
 # every route still passes the exact same proof/safety contract.
-LANES=itertools.cycle(('DYNAMIC_JS','DEEP','DYNAMIC_JS','FAST_DOM',
-                       'DYNAMIC_JS','DEEP','IFRAME_DEEP','FAST_DOM'))
+LANES=itertools.cycle(('FAST_DOM','DYNAMIC_JS','FAST_DOM','DYNAMIC_JS',
+                       'FAST_DOM','DYNAMIC_JS','IFRAME_DEEP','DEEP'))
 RUN_LOCK=threading.Lock()  # shared heavy-resource lock: Stage3 Browser OR Stage2 route worker
 STAGE2_LOCK=threading.Lock()
 STAGE2_STATE_LOCK=threading.Lock()
