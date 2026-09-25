@@ -199,7 +199,7 @@ async def choose_form(page):
     const email=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;
     const contact=/(contact|inquiry|enquiry|お問い合わせ|お問合せ|ご相談)/i;
     return [...document.querySelectorAll('form')].slice(0,20).map((f,fi)=>{
-      if(!vis(f)) return null;
+      const fs=getComputedStyle(f);if(fs.display==='none'||fs.visibility==='hidden') return null;
       let hasE=false,hasM=false;
       for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){
         if(!vis(e)) continue;
@@ -262,7 +262,7 @@ async def choose_form_any_frame(page,proof_frame_index=None,proof_form_index=Non
    forms=root.locator('form')
    if 0<=pfi<await forms.count():
     pf=forms.nth(pfi)
-    if await pf.is_visible() and await proof_form_shape_ok(pf,proof_submit_text):return (1000,pfr,pfi,pf)
+    if await proof_form_shape_ok(pf,proof_submit_text):return (1000,pfr,pfi,pf)
   except Exception:pass
  best=None
  for fri,root in enumerate(frames):
@@ -307,6 +307,16 @@ async def reveal_candidate_forms(page,proof_frame_index=None,proof_form_index=No
    await f.scroll_into_view_if_needed(timeout=2500);moved=True
   except Exception:pass
  if moved:await page.wait_for_timeout(1200)
+ # Dynamic contact widgets often remain visibility:hidden until a normal
+ # viewport traversal triggers their IntersectionObserver/animation hook.
+ # Reproduce the same harmless viewport event Stage3 uses; never mutate CSS.
+ try:
+  await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+  await page.wait_for_timeout(1600)
+  await page.evaluate("window.scrollTo(0, 0)")
+  await page.wait_for_timeout(500)
+  moved=True
+ except Exception:pass
  return moved
 
 async def fill_form(page,form,message,email,market):
@@ -447,7 +457,6 @@ async def unique_final_on_page(page):
  for fi in range(n):
   try:
    f=page.locator('form').nth(fi)
-   if not await f.is_visible():continue
    c=await control(f,'final')
    if c:hits.append((fi,c))
   except:continue
@@ -707,9 +716,8 @@ async def process_task(browser,t):
      forms=roots[pfr].locator('form')
      if 0<=pfi<await forms.count():
       f2=forms.nth(pfi)
-      if await f2.is_visible():
-       c2=await final_control_matching_text(f2,t.get('proof_submit_text'))
-       if c2 is not None:final_forms.append((pfr,pfi,f2,c2))
+      c2=await final_control_matching_text(f2,t.get('proof_submit_text'))
+      if c2 is not None:final_forms.append((pfr,pfi,f2,c2))
     except Exception:pass
    if not final_forms:
     for fri,root in enumerate(roots):
@@ -718,7 +726,6 @@ async def process_task(browser,t):
      for j in range(n):
       f2=root.locator('form').nth(j)
       try:
-       if not await f2.is_visible():continue
        c2=await final_control_matching_text(f2,t.get('proof_submit_text')) if proof_confirm_step else await control(f2,'final')
        if c2 is not None:final_forms.append((fri,j,f2,c2))
       except:continue
