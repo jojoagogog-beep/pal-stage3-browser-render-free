@@ -281,7 +281,8 @@ async def process_task(browser,t):
  if MODE=='PRODUCTION' and t.get('submit_started') is not True:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_BARRIER_MISSING','evidence':{'pre_submit':True}}
  if MODE=='PRODUCTION' and not _proof_control_ok(t,60000):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PROOF_EXPIRED_PRE_BROWSER','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
  if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True,'control_recheck':True}}
- url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(url));ctx=None
+ canonical_url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(canonical_url));proof_url=str(t.get('proof_url') or '')
+ url=proof_url if proof_url and host(proof_url)==domain else canonical_url;ctx=None
  try:
   ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(8000)
   await page.route('**/*',lambda route: route.abort() if route.request.resource_type in {'image','media','font'} else route.continue_())
@@ -298,7 +299,16 @@ async def process_task(browser,t):
    if not has_form:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500]}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
-  chosen=await choose_form(page)
+  chosen=None
+  try:
+   pfi=int(t.get('proof_form_index')) if t.get('proof_form_index') is not None else -1
+   forms=page.locator('form')
+   if 0<=pfi<await forms.count():
+    pf=forms.nth(pfi)
+    if await pf.is_visible() and await pf.locator('textarea').count()>0 and await pf.locator('input[type=email]').count()>0:
+     chosen=(1000,pfi,pf)
+  except Exception: chosen=None
+  if not chosen: chosen=await choose_form(page)
   if not chosen:
    await page.wait_for_timeout(1800)
    if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'late_render':True}}
@@ -369,7 +379,10 @@ async def main():
    sem=asyncio.Semaphore(SEND_CONCURRENCY)
    async def run_one(t):
     async with sem:
-     return await process_task(browser,t)
+     try:
+      return await asyncio.wait_for(process_task(browser,t),timeout=60.0)
+     except asyncio.TimeoutError:
+      return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':'AMBIGUOUS_HOLD','reason':'TASK_WALL_TIMEOUT_HOLD','evidence':{'wall_timeout_seconds':60,'resend_safe':False}}
    if ready:
     results.extend(await asyncio.gather(*(run_one(t) for t in ready)))
   finally:await browser.close()
