@@ -61,5 +61,9 @@ class SenderFrameIdentityTests(unittest.TestCase):
         src=Path('v9_send_worker.py').read_text()
         self.assertGreaterEqual(src.count("(?:^|[^a-z])mail(?:$|[^a-z])"),3)
 
+    def test_table_cell_labels_are_used_in_sender_field_detection(self):
+        src=Path('v9_send_worker.py').read_text()
+        self.assertGreaterEqual(src.count("closest('td')?.previousElementSibling?.innerText"),3)
+
 if __name__=='__main__':
     unittest.main()
