@@ -1,5 +1,5 @@
 from __future__ import annotations
-import asyncio,json,os,re,time,hashlib
+import asyncio,json,os,re,time,hashlib,hmac
 from urllib.parse import urlsplit,unquote_plus
 from pathlib import Path
 import requests
@@ -10,6 +10,9 @@ RESULT_URL=os.environ.get('PAL_V9_SEND_RESULT_BLOB_URL','').strip()
 MODE=os.environ.get('PAL_V9_SEND_MODE','SHADOW').strip().upper()
 CONTROL_URL=os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health').strip()
 CUTOVER_GENERATION=int(os.environ.get('PAL_V9_CUTOVER_GENERATION','0') or 0)
+AUTHORITY=os.environ.get('PAL_V9_PRODUCTION_AUTHORITY','GLOBAL_LEDGER_DO').strip()
+FAILOVER_CONTROL_URL=os.environ.get('PAL_V9_FAILOVER_CONTROL_URL','').strip()
+FAILOVER_SECRET=os.environ.get('PAL_V9_FAILOVER_SECRET','')
 UA='Practical-AI-Lab-V9-Sender/1.0'
 MAX_TASKS_PER_TURN=4
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
@@ -40,13 +43,31 @@ def _get(u):
  r=requests.get(u,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':int(time.time())},timeout=20);r.raise_for_status();return r.json()
 def _put(u,o):
  r=requests.put(u,json=o,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=20);r.raise_for_status()
-def _production_control_ok():
- if MODE!='PRODUCTION':return True
+def _cloud_control_ok():
  if CUTOVER_GENERATION<=0:return False
  try:
   r=requests.get(CONTROL_URL,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},timeout=8);r.raise_for_status();d=r.json();cut=d.get('cutover') or {};led=cut.get('ledger') or {}
   return bool(d.get('service')=='PAL_B2B_V9_PLANE' and d.get('authority')=='GLOBAL_LEDGER_DO' and d.get('mode')=='PRODUCTION' and d.get('ledger_mode')=='PRODUCTION' and d.get('external_send_enabled') is True and int(cut.get('generation') or 0)==CUTOVER_GENERATION and int(led.get('generation') or 0)==CUTOVER_GENERATION and led.get('mode')=='PRODUCTION' and led.get('history_sync_complete') is True and led.get('legacy_writer_disabled') is True and led.get('production_unlock') is True)
  except Exception:return False
+
+def _failover_control_ok():
+ if not FAILOVER_CONTROL_URL or not FAILOVER_SECRET or _cloud_control_ok():return False
+ try:
+  r=requests.get(FAILOVER_CONTROL_URL,headers={'User-Agent':UA,'Cache-Control':'no-cache, no-store'},params={'ts':time.time_ns()},timeout=8);r.raise_for_status();d=r.json()
+  if d.get('schema')!='PAL_V9_FAILOVER_CONTROL_V1' or d.get('mode')!='FAILOVER' or d.get('lease_owner')!='MAC_V9_FAILOVER':return False
+  if int(d.get('generation') or 0)!=CUTOVER_GENERATION or int(d.get('lease_until_epoch') or 0)<=int(time.time())+5:return False
+  sig=str(d.get('sig') or '');unsigned={k:v for k,v in d.items() if k!='sig'}
+  raw=json.dumps(unsigned,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
+  exp=hmac.new(FAILOVER_SECRET.encode(),raw,hashlib.sha256).hexdigest()
+  return bool(sig and hmac.compare_digest(sig,exp))
+ except Exception:return False
+
+def _production_control_ok():
+ if MODE!='PRODUCTION':return True
+ if AUTHORITY=='GLOBAL_LEDGER_DO':return _cloud_control_ok()
+ if AUTHORITY=='FAILOVER_BLOB_V1':return _failover_control_ok()
+ return False
+
 def _payload_match(payload,message,email):
  if not payload:return False
  vals=[str(payload),unquote_plus(str(payload))]

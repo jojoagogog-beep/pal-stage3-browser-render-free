@@ -1,7 +1,7 @@
 # PAL_REPAIR_OWNER=RENDER_BROWSER | Cross-lane edits prohibited; use published interfaces/contracts.
 # PAL_REPAIR_PROTOCOL_V2=GLOBAL_SINGLE_WRITER | CLAIM_LANE=RENDER_BROWSER before edit; ACCEPT_LANE after tests.
 from __future__ import annotations
-import hashlib, itertools, json, os, subprocess, sys, threading, time, urllib.request
+import hashlib, hmac, itertools, json, os, subprocess, sys, threading, time, urllib.request
 from pathlib import Path
 from flask import Flask, jsonify, request
 
@@ -28,6 +28,25 @@ def _v9_production_authorized(generation):
                     and int(cut.get('generation') or 0)==g and int(led.get('generation') or 0)==g
                     and led.get('mode')=='PRODUCTION' and led.get('history_sync_complete') is True
                     and led.get('legacy_writer_disabled') is True and led.get('production_unlock') is True)
+    except Exception:
+        return False
+
+def _v9_failover_authorized(generation,control_url):
+    try:
+        g=int(generation or 0); url=str(control_url or '').strip()
+        if g<=0 or not url.startswith('https://superjsonblob.com/api/jsonBlob/'): return False
+        # Never run standby while Cloudflare production authority is healthy.
+        if _v9_production_authorized(g): return False
+        req=urllib.request.Request(url+'?ts='+str(time.time_ns()),headers={'User-Agent':'PAL-Render-V9-Failover/1.0','Cache-Control':'no-cache'})
+        with urllib.request.urlopen(req,timeout=8) as r:
+            d=json.loads(r.read().decode('utf-8'))
+        if d.get('schema')!='PAL_V9_FAILOVER_CONTROL_V1' or d.get('mode')!='FAILOVER': return False
+        if int(d.get('generation') or 0)!=g or int(d.get('lease_until_epoch') or 0)<=int(time.time())+5: return False
+        if d.get('lease_owner')!='MAC_V9_FAILOVER': return False
+        sig=str(d.get('sig') or ''); unsigned={k:v for k,v in d.items() if k!='sig'}
+        raw=json.dumps(unsigned,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
+        exp=hmac.new(TOKEN.encode(),raw,hashlib.sha256).hexdigest()
+        return bool(sig and hmac.compare_digest(sig,exp))
     except Exception:
         return False
 
@@ -468,10 +487,10 @@ def _v9_send_pending_snapshot():
     if p.get('generation') is not None: out['generation']=p.get('generation')
     return out
 
-def _queue_v9_send(task_url,result_url,mode,generation=0,authority=''):
+def _queue_v9_send(task_url,result_url,mode,generation=0,authority='',failover_control_url=''):
     global V9_SEND_PENDING
     with V9_SEND_PENDING_LOCK:
-        V9_SEND_PENDING={'task_url':task_url,'result_url':result_url,'mode':mode,'generation':int(generation or 0),'authority':str(authority or ''),'queued_at':int(time.time())}
+        V9_SEND_PENDING={'task_url':task_url,'result_url':result_url,'mode':mode,'generation':int(generation or 0),'authority':str(authority or ''),'failover_control_url':str(failover_control_url or ''),'queued_at':int(time.time())}
     with V9_SEND_STATE_LOCK:
         if not (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()):
             V9_SEND_STATE.update(status='QUEUED',at=int(time.time()))
@@ -485,7 +504,11 @@ def _start_pending_v9_send():
     if not pending or (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()):
         return False
     if str(pending.get('mode') or '').upper()=='PRODUCTION':
-        if str(pending.get('authority') or '')!='GLOBAL_LEDGER_DO' or not _v9_production_authorized(int(pending.get('generation') or 0)):
+        auth=str(pending.get('authority') or '')
+        g=int(pending.get('generation') or 0)
+        control_ok=((auth=='GLOBAL_LEDGER_DO' and _v9_production_authorized(g)) or
+                    (auth=='FAILOVER_BLOB_V1' and _v9_failover_authorized(g,pending.get('failover_control_url'))))
+        if not control_ok:
             with V9_SEND_PENDING_LOCK:
                 if V9_SEND_PENDING is not None: V9_SEND_PENDING=None
             with V9_SEND_STATE_LOCK:
@@ -502,7 +525,7 @@ def _start_pending_v9_send():
             V9_SEND_STATE.update(status='RUNNING',at=int(time.time()),returncode=None)
         V9_SEND_THREAD=threading.Thread(
             target=_v9_send_runner,
-            args=(pending['task_url'],pending['result_url'],pending['mode'],int(pending.get('generation') or 0)),
+            args=(pending['task_url'],pending['result_url'],pending['mode'],int(pending.get('generation') or 0),str(pending.get('authority') or ''),str(pending.get('failover_control_url') or '')),
             name='pal-v9-send',daemon=True)
         V9_SEND_THREAD.start()
         return True
@@ -514,12 +537,12 @@ def _start_pending_v9_send():
         except RuntimeError: pass
         raise
 
-def _v9_send_runner(task_url,result_url,mode,generation=0):
+def _v9_send_runner(task_url,result_url,mode,generation=0,authority='',failover_control_url=''):
     global V9_SEND_THREAD
     started=time.time()
     try:
         env=os.environ.copy()
-        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health')})
+        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health'),'PAL_V9_PRODUCTION_AUTHORITY':str(authority),'PAL_V9_FAILOVER_CONTROL_URL':str(failover_control_url),'PAL_V9_FAILOVER_SECRET':TOKEN})
         cp=subprocess.run([sys.executable,str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=220)
         summary=_worker_summary(cp.stdout or '')
         completed={'status':'PASS' if cp.returncode==0 else 'ERROR','at':int(time.time()),
@@ -991,7 +1014,7 @@ def health():
                    lane_empty_streak=LANE_EMPTY_STREAK,
                    lane_skip_until=LANE_SKIP_UNTIL,
                    v9_sender_enabled=not STAGE2_PRIMARY_ROLE,
-                   v9_sender_control_revision='CLOUDFLARE_LEDGER_HEALTH_V1',
+                   v9_sender_control_revision='DUAL_AUTHORITY_FAILOVER_V1',
                    v9_sender_worker_revision='V9_SENDER_FORM_COMPAT_V3',
                    v9_sender_production_enabled=not STAGE2_PRIMARY_ROLE,
                    v9_sender_pending=_v9_send_pending_snapshot(),
@@ -1038,10 +1061,13 @@ def v9_send_wake():
     mode=str(payload.get('mode') or 'SHADOW').upper();generation=int(payload.get('cutover_generation') or 0)
     if mode not in {'SHADOW','PRODUCTION'}:
         return jsonify(status='BAD_MODE'),400
+    authority=str(payload.get('production_authority') or '')
+    failover_control_url=str(payload.get('failover_control_url') or '')
     if mode=='PRODUCTION':
-        cloud_authorized=(str(payload.get('production_authority') or '')=='GLOBAL_LEDGER_DO' and _v9_production_authorized(generation))
-        if not cloud_authorized:
-            return jsonify(status='PRODUCTION_LOCKED',cloud_authorized=False),403
+        cloud_authorized=(authority=='GLOBAL_LEDGER_DO' and _v9_production_authorized(generation))
+        failover_authorized=(authority=='FAILOVER_BLOB_V1' and _v9_failover_authorized(generation,failover_control_url))
+        if not (cloud_authorized or failover_authorized):
+            return jsonify(status='PRODUCTION_LOCKED',cloud_authorized=cloud_authorized,failover_authorized=failover_authorized),403
     if not _valid_blob_url(task_url) or not _valid_blob_url(result_url):
         return jsonify(status='BAD_BLOB_URL'),400
     # Idempotent wake: a retry while the same sender is already running must
@@ -1055,7 +1081,7 @@ def v9_send_wake():
         return jsonify(status='QUEUED',mode=mode,resource_owner=_resource_owner(),
                        v9_sender_pending=_v9_send_pending_snapshot(),
                        v9_send_state=_v9_send_snapshot(),state=_snapshot()),202
-    _queue_v9_send(task_url,result_url,mode,generation,str(payload.get('production_authority') or ''))
+    _queue_v9_send(task_url,result_url,mode,generation,authority,failover_control_url)
     if _start_pending_v9_send():
         return jsonify(status='STARTED',mode=mode,v9_send_state=_v9_send_snapshot()),202
     return jsonify(status='QUEUED',mode=mode,resource_owner=_resource_owner(),
