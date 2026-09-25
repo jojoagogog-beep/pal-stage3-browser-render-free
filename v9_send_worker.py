@@ -68,6 +68,12 @@ def _production_control_ok():
  if AUTHORITY=='FAILOVER_BLOB_V1':return _failover_control_ok()
  return False
 
+def _proof_control_ok(task,min_remaining_ms=30000):
+ exp=task.get('proof_expires_at')
+ if exp in (None,'',0):return True
+ try:return int(exp)>int(time.time()*1000)+int(min_remaining_ms)
+ except Exception:return False
+
 def _payload_match(payload,message,email):
  if not payload:return False
  vals=[str(payload),unquote_plus(str(payload))]
@@ -252,6 +258,7 @@ async def process_task(browser,t):
  out={'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time())}
  if not out['token_id'] or not t.get('canonical_url') or not t.get('message_body'):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'INVALID_TASK','evidence':{'pre_submit':True}}
  if MODE=='PRODUCTION' and t.get('submit_started') is not True:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_BARRIER_MISSING','evidence':{'pre_submit':True}}
+ if MODE=='PRODUCTION' and not _proof_control_ok(t,60000):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PROOF_EXPIRED_PRE_BROWSER','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
  if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True,'control_recheck':True}}
  url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(url));ctx=None
  try:
@@ -288,6 +295,7 @@ async def process_task(browser,t):
   if final is None and confirm is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_CONTROL_NOT_FOUND','evidence':{'pre_submit':True,'form_action':form_action[:500]}}
   if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'form_index':fi,'form_action':form_action[:500],'final_control':bool(final),'confirm_control':bool(confirm)}}
   before=txt
+  if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PROOF_EXPIRED_PRE_CLICK','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True,'control_recheck':True}}
   if confirm is not None:
    outcome,cev=await click_and_evidence(page,confirm[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
@@ -309,6 +317,7 @@ async def process_task(browser,t):
    form,final=final_forms[0]
    before=await body_text(page,3500) or ''
    if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_ON_CONFIRM_PAGE','evidence':{**cev,'confirm_navigation':True}}
+   if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PROOF_EXPIRED_BEFORE_FINAL','evidence':{**cev,'proof_expires_at':t.get('proof_expires_at')}}
    if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**cev,'control_recheck':True}}
   outcome,ev=await click_and_evidence(page,final[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
   return {**out,'outcome':outcome,'reason':'FINAL_CLICK_'+outcome,'evidence':ev}
