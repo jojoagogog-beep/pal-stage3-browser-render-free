@@ -178,8 +178,30 @@ async def choose_form(page):
   fi=int(rows[0]['fi']);return (int(rows[0]['score']),fi,page.locator('form').nth(fi))
  except:return None
 
-async def choose_form_any_frame(page,proof_frame_index=None,proof_form_index=None):
- frames=list(page.frames)[:12]
+def ordered_form_frames(page,domain=''):
+ all_frames=list(page.frames);main=page.main_frame;same=[];provider=[];other=[];domain=domain or host(page.url)
+ provider_re=re.compile(r'(form|contact|hubspot|jotform|typeform|wufoo|formstack|marketo|pardot|salesforce)',re.I)
+ for fr in all_frames:
+  if fr is main:continue
+  fu=str(getattr(fr,'url','') or '')
+  if host(fu)==domain:same.append(fr)
+  elif provider_re.search(fu):provider.append(fr)
+  else:other.append(fr)
+ return ([main]+same+provider+other)[:12]
+async def proof_form_shape_ok(form,proof_submit_text=''):
+ try:
+  ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d);M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
+  if not ok:return False
+  expected=' '.join(str(proof_submit_text or '').split()).lower()
+  if not expected:return True
+  xs=form.locator('button,input[type=submit],input[type=button],input[type=image]')
+  for i in range(min(await xs.count(),40)):
+   d=' '.join((await desc(xs.nth(i))).split()).lower()
+   if d and (expected==d or expected in d or d in expected):return True
+  return False
+ except:return False
+async def choose_form_any_frame(page,proof_frame_index=None,proof_form_index=None,proof_submit_text=''):
+ frames=ordered_form_frames(page)
  try:pfr=int(proof_frame_index) if proof_frame_index is not None else -1
  except:pfr=-1
  try:pfi=int(proof_form_index) if proof_form_index is not None else -1
@@ -190,15 +212,13 @@ async def choose_form_any_frame(page,proof_frame_index=None,proof_form_index=Non
    forms=root.locator('form')
    if 0<=pfi<await forms.count():
     pf=forms.nth(pfi)
-    if await pf.is_visible() and await pf.locator('textarea').count()>0 and await pf.locator('input[type=email]').count()>0:
-     return (1000,pfr,pfi,pf)
+    if await pf.is_visible() and await proof_form_shape_ok(pf,proof_submit_text):return (1000,pfr,pfi,pf)
   except Exception:pass
  best=None
  for fri,root in enumerate(frames):
   c=await choose_form(root)
   if not c:continue
-  score,fi,form=c
-  cand=(int(score),fri,int(fi),form)
+  score,fi,form=c;cand=(int(score),fri,int(fi),form)
   if best is None or cand[0]>best[0]:best=cand
  return best
 
@@ -461,11 +481,11 @@ async def process_task(browser,t):
    if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500],'late_form_wait_ms':3000}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
-  chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'))
+  chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),t.get('proof_submit_text'))
   if not chosen:
    await page.wait_for_timeout(1800)
    if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'late_render':True}}
-   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'))
+   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),t.get('proof_submit_text'))
   if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True}}
   _,frame_i,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
   if fill.get('timed_out'):return {**out,'outcome':'TECH_RETRY','reason':'FILL_TIMEOUT_PRE_SUBMIT','evidence':{**fill,'pre_submit':True}}
