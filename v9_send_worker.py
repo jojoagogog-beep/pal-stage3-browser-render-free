@@ -279,8 +279,8 @@ async def process_task(browser,t):
  out={'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time())}
  if not out['token_id'] or not t.get('canonical_url') or not t.get('message_body'):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'INVALID_TASK','evidence':{'pre_submit':True}}
  if MODE=='PRODUCTION' and t.get('submit_started') is not True:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_BARRIER_MISSING','evidence':{'pre_submit':True}}
- if MODE=='PRODUCTION' and not _proof_control_ok(t,60000):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PROOF_EXPIRED_PRE_BROWSER','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
- if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True,'control_recheck':True}}
+ if MODE=='PRODUCTION' and not _proof_control_ok(t,60000):return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_BROWSER','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
+ if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True,'control_recheck':True}}
  canonical_url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(canonical_url));proof_url=str(t.get('proof_url') or '')
  url=proof_url if proof_url and host(proof_url)==domain else canonical_url;ctx=None
  try:
@@ -292,11 +292,11 @@ async def process_task(browser,t):
   await page.wait_for_timeout(600 if nav_timeout else (800 if str(t.get('proof_lane') or '')=='FAST_DOM' else 1600))
   if host(page.url)!=domain:return {**out,'outcome':'SAFETY_BLOCKED','reason':'DOMAIN_CHANGED','evidence':{'final_url':page.url[:500]}}
   txt=await body_text(page,3500)
-  if txt is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BODY_UNREADABLE_PRE_SUBMIT','evidence':{'pre_submit':True,'navigation_timeout':nav_timeout,'final_url':page.url[:500]}}
+  if txt is None:return {**out,'outcome':'TECH_RETRY','reason':'BODY_UNREADABLE_PRE_SUBMIT','evidence':{'pre_submit':True,'navigation_timeout':nav_timeout,'final_url':page.url[:500]}}
   if nav_timeout:
    try:has_form=await page.locator('form').count()>0
    except:has_form=False
-   if not has_form:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500]}}
+   if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500]}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
   chosen=None
@@ -330,8 +330,8 @@ async def process_task(browser,t):
   if final is None and confirm is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_CONTROL_NOT_FOUND','evidence':{'pre_submit':True,'form_action':form_action[:500]}}
   if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'form_index':fi,'form_action':form_action[:500],'final_control':bool(final),'confirm_control':bool(confirm)}}
   before=txt
-  if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PROOF_EXPIRED_PRE_CLICK','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
-  if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True,'control_recheck':True}}
+  if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_CLICK','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
+  if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True,'control_recheck':True}}
   if confirm is not None:
    outcome,cev=await click_and_evidence(page,confirm[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
    if outcome=='SENT_CONFIRMED':return {**out,'outcome':outcome,'reason':'CONFIRM_CLICK_SENT','evidence':cev}
@@ -352,8 +352,8 @@ async def process_task(browser,t):
    form,final=final_forms[0]
    before=await body_text(page,3500) or ''
    if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_ON_CONFIRM_PAGE','evidence':{**cev,'confirm_navigation':True}}
-   if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PROOF_EXPIRED_BEFORE_FINAL','evidence':{**cev,'proof_expires_at':t.get('proof_expires_at')}}
-   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**cev,'control_recheck':True}}
+   if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PROOF_EXPIRED_BEFORE_FINAL','evidence':{**cev,'proof_expires_at':t.get('proof_expires_at')}}
+   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**cev,'control_recheck':True}}
   outcome,ev=await click_and_evidence(page,final[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
   return {**out,'outcome':outcome,'reason':'FINAL_CLICK_'+outcome,'evidence':ev}
  except Exception as e:
