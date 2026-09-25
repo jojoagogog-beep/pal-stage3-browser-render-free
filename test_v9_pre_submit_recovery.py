@@ -38,7 +38,7 @@ class VisibleFieldRecoveryTests(unittest.IsolatedAsyncioTestCase):
         start=src.index('value=None;is_email_field=False;is_message_field=False')
         end=src.index('except Exception as ex:',start)
         block=src[start:end]
-        self.assertLess(block.index('await target.fill(value,timeout=3000)'),block.index("if is_email_field:filled['email']=True"))
+        self.assertLess(block.rindex('await sticky_fill(target,value)'),block.index("if is_email_field:filled['email']=True"))
         self.assertNotIn("EMAIL.search(d) or EMAIL_EXAMPLE.search(d):value=email;filled['email']=True",block)
         self.assertNotIn("form.locator(f'[name=",block)
 
