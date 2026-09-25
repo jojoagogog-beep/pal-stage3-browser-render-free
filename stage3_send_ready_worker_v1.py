@@ -48,6 +48,8 @@ MAX_ROWS=max(1,min(240,int(os.environ.get('PAL_STAGE3_MAX_ROWS','240') or 240)))
 ROUTE_TIMEOUT_SECONDS=max(8,min(60,int(os.environ.get('PAL_STAGE3_ROUTE_TIMEOUT_SECONDS','46') or 46)))
 RETRY_TIMEOUT_SECONDS=max(8,min(75,int(os.environ.get('PAL_STAGE3_RETRY_TIMEOUT_SECONDS','58') or 58)))
 RETRY_LIMIT=max(0,min(48,int(os.environ.get('PAL_STAGE3_RETRY_LIMIT','48') or 48)))
+CONFIRM_READY_WAIT_MS=max(2000,min(6000,int(os.environ.get('PAL_STAGE3_CONFIRM_READY_WAIT_MS','4500') or 4500)))
+CONFIRM_RETRY_WAIT_MS=max(1500,min(5000,int(os.environ.get('PAL_STAGE3_CONFIRM_RETRY_WAIT_MS','3000') or 3000)))
 UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/153 Safari/537.36'
 PRIORITY_MARKETS=[x.strip() for x in os.environ.get('PAL_STAGE3_PRIORITY_MARKETS','').split(',') if x.strip()]
 # Deterministic multi-service sharding. The default is two shards. Render clones
@@ -1464,7 +1466,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                             continue
                 if not clicked:
                     return {**base,'status':'TECH_DEFER','code':'CONFIRM_CONTROL_NOT_FOUND','final_url':final_url,'stage3_send_ready':False}
-                settle=await wait_for_confirmation_ready(page,confirm_before_url,7500)
+                settle=await wait_for_confirmation_ready(page,confirm_before_url,CONFIRM_READY_WAIT_MS)
                 if not settle.get('ready'):
                     try:
                         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -1533,7 +1535,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                                   e.form.requestSubmit(e);
                                 }""")
                                 confirm_retry_used=True
-                                await wait_for_confirmation_ready(page,retry_before_url,7500)
+                                await wait_for_confirmation_ready(page,retry_before_url,CONFIRM_RETRY_WAIT_MS)
                                 final_url=page.url
                                 if host(final_url)!=domain:
                                     return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED_AFTER_CONFIRM_RETRY','final_url':final_url,'stage3_send_ready':False}
