@@ -58,6 +58,14 @@ def strong_http_accept(status,payload_cleared):
  try:return int(status) in {201,202} and bool(payload_cleared)
  except:return False
 
+def pre_submit_http_verdict(status):
+ try:s=int(status)
+ except:return None
+ if s in {401,403,451}:return ('SAFETY_BLOCKED','SITE_ACCESS_DENIED_PRE_SUBMIT')
+ if s==429 or 500<=s<=599:return ('TECH_RETRY','SITE_TEMPORARY_HTTP_PRE_SUBMIT')
+ if 400<=s<=499:return ('CONFIRMED_NOT_SENT','ROUTE_HTTP_4XX_PRE_SUBMIT')
+ return None
+
 def field_required_hint(explicit=False,cls='',desc=''):
  tokens=str(cls or '').split()
  class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in tokens)
@@ -695,9 +703,10 @@ async def process_task(browser,t):
  try:
   ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(3000)
   await page.route('**/*',lambda route: route.abort() if route.request.resource_type in {'image','media','font'} else route.continue_())
-  nav_timeout=False;nav_alias_fallback=False
+  nav_timeout=False;nav_alias_fallback=False;nav_http_status=None
   try:
-   await page.goto(url,wait_until='domcontentloaded',timeout=14000)
+   nav_resp=await page.goto(url,wait_until='domcontentloaded',timeout=14000)
+   nav_http_status=(int(nav_resp.status) if nav_resp is not None else None)
   except PlaywrightTimeoutError:
    nav_timeout=True
   except Exception as nav_exc:
@@ -707,12 +716,18 @@ async def process_task(browser,t):
     fallback=u._replace(netloc='www.'+str(u.netloc)).geturl()
    if fallback and host(fallback)==domain:
     nav_alias_fallback=True;url=fallback
-    try:await page.goto(fallback,wait_until='domcontentloaded',timeout=14000)
+    try:
+     nav_resp=await page.goto(fallback,wait_until='domcontentloaded',timeout=14000)
+     nav_http_status=(int(nav_resp.status) if nav_resp is not None else None)
     except PlaywrightTimeoutError:nav_timeout=True
    else:
     raise
   await page.wait_for_timeout(600 if nav_timeout else (800 if str(t.get('proof_lane') or '')=='FAST_DOM' else 1600))
   if host(page.url)!=domain:return {**out,'outcome':'SAFETY_BLOCKED','reason':'DOMAIN_CHANGED','evidence':{'final_url':page.url[:500]}}
+  http_verdict=pre_submit_http_verdict(nav_http_status)
+  if http_verdict:
+   outcome,reason=http_verdict
+   return {**out,'outcome':outcome,'reason':reason,'evidence':{'pre_submit':True,'http_status':nav_http_status,'final_url':page.url[:500],'navigation_timeout':nav_timeout}}
   txt=await body_text(page,3500)
   if txt is None:return {**out,'outcome':'TECH_RETRY','reason':'BODY_UNREADABLE_PRE_SUBMIT','evidence':{'pre_submit':True,'navigation_timeout':nav_timeout,'final_url':page.url[:500]}}
   if nav_timeout:
