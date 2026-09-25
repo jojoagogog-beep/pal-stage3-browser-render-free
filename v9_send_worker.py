@@ -317,9 +317,14 @@ async def click_and_evidence(page,loc,message,email,before_text):
   except:pass
  try:after=' '.join((await page.locator('body').inner_text(timeout=2500)).split())
  except:after=''
- new_success=bool(SUCCESS.search(after) and (not SUCCESS.search(before_text) or SUCCESS.search(after).group(0)!=SUCCESS.search(before_text).group(0)))
+ after_success=SUCCESS.search(after)
+ before_success_text=SUCCESS.search(before_text or '')
+ new_success=bool(after_success and (not before_success_text or after_success.group(0)!=before_success_text.group(0)))
  before_fail=FAIL.search(before_text or ''); after_fail=FAIL.search(after)
  new_validation_text=bool(after_fail and (not before_fail or after_fail.group(0)!=before_fail.group(0)))
+ success_match=(after_success.group(0)[:240] if after_success else '')
+ failure_match=(after_fail.group(0)[:240] if after_fail else '')
+ final_text_excerpt=after[:1600]
  try: invalid_control_count=await page.locator('input:invalid,textarea:invalid,select:invalid').count()
  except: invalid_control_count=0
  validation=bool(new_validation_text or invalid_control_count>0)
@@ -338,7 +343,7 @@ async def click_and_evidence(page,loc,message,email,before_text):
   bu=urlsplit(before_url);au=urlsplit(str(page.url or ''));path_changed=(bu.netloc==au.netloc and (bu.path.rstrip('/') or '/')!=(au.path.rstrip('/') or '/'))
  except:path_changed=False
  correlated_2xx_navigation=bool(corr2xx and path_changed and not pathmatch(CONFIRM_PATH,page.url))
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'correlated_2xx_navigation':correlated_2xx_navigation,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'correlated_2xx_navigation':correlated_2xx_navigation,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
  if (provider_success or new_success or corr204 or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
