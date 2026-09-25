@@ -372,6 +372,7 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
             'PAL_CANDIDATE_ROUTE_LANE_INDEX':'0',
             'PAL_CANDIDATE_ROUTE_WORKERS':str(max(4,min(24,int(workers)))),
             'PAL_CANDIDATE_ROUTE_BATCH':str(max(16,min(128,int(batch)))),
+            'PAL_ROUTE_RESULT_KEEP':'48',
             'PAL_CANDIDATE_ROUTE_STATE_FILE':'/tmp/pal_candidate_route_state_v1.json',
             # Render is the high-throughput read-only verifier. Bound fallback
             # sitemap breadth so one bad site cannot consume the whole 220s run.

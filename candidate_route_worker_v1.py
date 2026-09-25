@@ -24,6 +24,7 @@ LANE_COUNT=max(1,int(os.environ.get('PAL_CANDIDATE_ROUTE_LANE_COUNT','1') or 1))
 LANE_INDEX=max(0,min(LANE_COUNT-1,int(os.environ.get('PAL_CANDIDATE_ROUTE_LANE_INDEX','0') or 0)))
 LANE_WORKERS=max(4,min(48,int(os.environ.get('PAL_CANDIDATE_ROUTE_WORKERS','8') or 8)))
 LANE_BATCH=max(16,min(256,int(os.environ.get('PAL_CANDIDATE_ROUTE_BATCH','32') or 32)))
+RESULT_KEEP=max(16,min(96,int(os.environ.get('PAL_ROUTE_RESULT_KEEP','48') or 48)))
 LANE_DEPTH=max(2,min(8,int(os.environ.get('PAL_CANDIDATE_ROUTE_DEPTH','4') or 4)))
 SITEMAP_ROOT_LIMIT=max(1,min(5,int(os.environ.get('PAL_CANDIDATE_ROUTE_SITEMAP_ROOTS','5') or 5)))
 SITEMAP_CHILD_LIMIT=max(0,min(8,int(os.environ.get('PAL_CANDIDATE_ROUTE_SITEMAP_CHILDREN','8') or 8)))
@@ -267,7 +268,7 @@ def publish_messages(msgs):
             keys={(str(x.get('kind') or ''),str(x.get('run_id') or ''),str(x.get('task_id') or ''),int(x.get('batch_index') or -1)) for x in msgs}
             prior=[x for x in prior if (str(x.get('kind') or ''),str(x.get('run_id') or ''),str(x.get('task_id') or ''),int(x.get('batch_index') or -1)) not in keys]
             payload={'schema':'PAL_ROUTE_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),
-                     'messages':(prior+list(msgs))[-256:]}
+                     'messages':(prior+list(msgs))[-RESULT_KEEP:]}
             _blob_put(RESULT_BLOB,payload)
             return 'SUPERJSONBLOB_V1',True
         except Exception:
