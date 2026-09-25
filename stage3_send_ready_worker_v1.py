@@ -529,6 +529,25 @@ def host(u):
     try:return (urlsplit(str(u or '')).hostname or '').lower().removeprefix('www.')
     except Exception:return ''
 
+def fetch_same_origin_text(url,expected_domain,limit=300000):
+    req=urllib.request.Request(str(url),headers={
+        'User-Agent':UA,
+        'Accept':'text/html,application/xhtml+xml;q=0.9,text/plain;q=0.8,*/*;q=0.1',
+        'Accept-Encoding':'identity',
+        'Cache-Control':'no-cache',
+    })
+    with urllib.request.urlopen(req,timeout=4,context=ssl.create_default_context()) as resp:
+        if host(resp.geturl())!=str(expected_domain or '').lower().removeprefix('www.'):
+            return ''
+        ctype=str(resp.headers.get('Content-Type') or '').lower()
+        if ctype and not any(x in ctype for x in ('text/','html','xhtml','xml')):
+            return ''
+        raw=resp.read(max(1,int(limit))+1)[:max(1,int(limit))]
+        charset='utf-8'
+        try:charset=resp.headers.get_content_charset() or 'utf-8'
+        except Exception:pass
+        return raw.decode(charset,errors='ignore')
+
 def sensitive_kind(text):
     d=str(text or '')
     if re.search(r'(\bphone\b|\btelephone\b|\btel\b|\bmobile\b|携帯|電話)',d,re.I):return 'phone'
@@ -966,10 +985,14 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     timeout=4.0,
                 )
             except Exception:
+                # If the renderer's JS execution is wedged, a second DOM call
+                # usually stalls on the same process. Fall back to one bounded,
+                # same-origin HTTP read for the page-level prohibition scan.
+                # Form/captcha/sendability proof still comes from Playwright.
                 try:
                     raw_text=await asyncio.wait_for(
-                        page.locator('body').text_content(timeout=3000),
-                        timeout=3.5,
+                        asyncio.to_thread(fetch_same_origin_text,final_url,domain),
+                        timeout=4.5,
                     )
                 except Exception:
                     return {**base,'status':'TECH_DEFER','code':'BODY_TEXT_TIMEOUT',
