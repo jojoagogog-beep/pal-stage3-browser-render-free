@@ -120,14 +120,14 @@ IDLE_SLEEP_SECONDS=max(2,min(30,int(os.environ.get('PAL_RENDER_IDLE_SLEEP_SECOND
 # FAST_DOM may process up to four routes *serially inside the same Chromium
 # process* so high-confidence send-reproof candidates amortize browser launch
 # overhead without increasing concurrent memory pressure. Proof/safety gates are unchanged.
-LANE_MAX_ROWS={'DYNAMIC_JS':3,'IFRAME_DEEP':2,'DEEP':2,'FAST_DOM':6}
+LANE_MAX_ROWS={'DYNAMIC_JS':3,'IFRAME_DEEP':2,'DEEP':2,'FAST_DOM':8}
 LANE_CONCURRENCY={'DYNAMIC_JS':1,'IFRAME_DEEP':1,'DEEP':1,'FAST_DOM':1}
 # The per-route budget must exceed the internal navigation + render budget.
 # Previously 16-18s wrapped a page.goto() that could itself wait 30s, making
 # OVERALL_ROUTE_TIMEOUT_OR_ERROR inevitable on otherwise valid slower sites.
 LANE_DEADLINE_SECONDS={'DYNAMIC_JS':165,'IFRAME_DEEP':110,'DEEP':150,'FAST_DOM':165}
-LANE_ROUTE_TIMEOUT_SECONDS={'DYNAMIC_JS':50,'IFRAME_DEEP':50,'DEEP':55,'FAST_DOM':25}
-LANE_RETRY_TIMEOUT_SECONDS={'DYNAMIC_JS':50,'IFRAME_DEEP':50,'DEEP':55,'FAST_DOM':25}
+LANE_ROUTE_TIMEOUT_SECONDS={'DYNAMIC_JS':50,'IFRAME_DEEP':50,'DEEP':55,'FAST_DOM':18}
+LANE_RETRY_TIMEOUT_SECONDS={'DYNAMIC_JS':50,'IFRAME_DEEP':50,'DEEP':55,'FAST_DOM':18}
 app=Flask(__name__)
 
 def allowed():
@@ -748,8 +748,8 @@ def execute_lane(lane):
             # shard 1 continuously. Deterministic route-id sharding prevents the
             # two services from duplicating Browser work while preserving all
             # proof/safety gates.
-            'PAL_STAGE3_SHARD_COUNT':'2',
-            'PAL_STAGE3_SHARD_INDEX':('0' if STAGE2_PRIMARY_ROLE else '1'),
+            'PAL_STAGE3_SHARD_COUNT':str(max(1,min(16,int(os.environ.get('PAL_STAGE3_SHARD_COUNT','2') or 2)))),
+            'PAL_STAGE3_SHARD_INDEX':str(max(0,int(os.environ.get('PAL_STAGE3_SHARD_INDEX',('0' if STAGE2_PRIMARY_ROLE else '1')) or ('0' if STAGE2_PRIMARY_ROLE else '1')))),
         })
         cp=subprocess.run(
             [sys.executable,str(WORKER)],env=env,text=True,
