@@ -239,10 +239,21 @@ async def click_and_evidence(page,loc,message,email,before_text):
   try:page.remove_listener('request',on_req);page.remove_listener('response',on_resp)
   except:pass
  provider_success=False;provider_fail=False;bodies=[]
+ before_success=SUCCESS.search(before_text or ''); before_failure=FAIL.search(before_text or '')
  for resp in resp_objs[:6]:
   try:
-   raw=(await asyncio.wait_for(resp.text(),1.5))[:65536];o=json.loads(raw);st=str(o.get('status') or '').lower() if isinstance(o,dict) else ''
-   provider_success|=st in {'mail_sent','sent','success','1'};provider_fail|=st in {'validation_failed','spam','mail_failed','aborted','acceptance_missing','failed','error'};bodies.append({'status':int(resp.status),'app_status':st[:80]})
+   raw=(await asyncio.wait_for(resp.text(),1.5))[:65536]
+   st='';body_success=False;body_fail=False
+   try:
+    o=json.loads(raw);st=str(o.get('status') or '').lower() if isinstance(o,dict) else ''
+   except Exception:
+    clean=' '.join(re.sub(r'<[^>]+>',' ',raw).split())
+    sm=SUCCESS.search(clean);fm=FAIL.search(clean)
+    body_success=bool(sm and (not before_success or sm.group(0)!=before_success.group(0)))
+    body_fail=bool(fm and (not before_failure or fm.group(0)!=before_failure.group(0)))
+   provider_success|=st in {'mail_sent','sent','success','1'} or body_success
+   provider_fail|=st in {'validation_failed','spam','mail_failed','aborted','acceptance_missing','failed','error'} or body_fail
+   bodies.append({'status':int(resp.status),'app_status':st[:80],'body_success':body_success,'body_fail':body_fail})
   except:pass
  try:after=' '.join((await page.locator('body').inner_text(timeout=2500)).split())
  except:after=''
@@ -377,16 +388,16 @@ async def main():
   browser=await p.chromium.launch(**launch_kw)
   deferred=0
   try:
-   armed_all=await asyncio.gather(*(await_submit_barrier(t,65.0) for t in tasks))
+   armed_all=await asyncio.gather(*(await_submit_barrier(t,20.0) for t in tasks))
    ready=[x for x in armed_all if x is not None]
    deferred=len(tasks)-len(ready)
    sem=asyncio.Semaphore(SEND_CONCURRENCY)
    async def run_one(t):
     async with sem:
      try:
-      return await asyncio.wait_for(process_task(browser,t),timeout=60.0)
+      return await asyncio.wait_for(process_task(browser,t),timeout=90.0)
      except asyncio.TimeoutError:
-      return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':'AMBIGUOUS_HOLD','reason':'TASK_WALL_TIMEOUT_HOLD','evidence':{'wall_timeout_seconds':60,'resend_safe':False}}
+      return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':'AMBIGUOUS_HOLD','reason':'TASK_WALL_TIMEOUT_HOLD','evidence':{'wall_timeout_seconds':90,'resend_safe':False}}
    if ready:
     results.extend(await asyncio.gather(*(run_one(t) for t in ready)))
   finally:
