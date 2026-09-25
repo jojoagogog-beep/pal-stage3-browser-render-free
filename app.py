@@ -980,7 +980,9 @@ def v9_stage2_wake():
     for x in payload.get('priority_markets') or []:
         x=str(x or '').strip()
         if x and x not in markets:markets.append(x)
-    workers=max(4,min(24,int(payload.get('workers') or 8)));batch=max(16,min(128,int(payload.get('batch') or 64)))
+    # Shard1 is the only production sender. Keep Stage2 turns short so
+    # Browser proof and Sender can reclaim the shared heavy slot promptly.
+    workers=max(4,min(8,int(payload.get('workers') or 8)));batch=max(16,min(32,int(payload.get('batch') or 32)))
     _queue_v9_stage2(task_url,result_url,markets,workers,batch)
     if (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()) or _v9_send_pending_snapshot() is not None:
         return jsonify(status='QUEUED_BEHIND_SENDER',revision=V9_STAGE2_SHARD1_REVISION,v9_stage2_pending=_v9_stage2_pending_snapshot()),202
