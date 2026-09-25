@@ -134,11 +134,22 @@ def safe_select_value(options):
 
 async def sticky_fill(loc,value):
  target=str(value)
+ async def accepted():
+  try:
+   actual=str(await loc.input_value(timeout=1200))
+   if actual==target:return True
+   # HTML single-line INPUT controls normalize CR/LF to spaces. Accept only
+   # that browser-defined transformation; all other content differences still fail.
+   try:tag=str(await loc.evaluate("e=>e.tagName") or '').upper()
+   except Exception:tag=''
+   if tag=='INPUT':
+    normalized=target.replace('\r\n',' ').replace('\r',' ').replace('\n',' ')
+    return actual==normalized
+  except Exception:pass
+  return False
  try:await loc.fill(target,timeout=2500)
  except Exception:pass
- try:
-  if str(await loc.input_value(timeout=1200))==target:return
- except Exception:pass
+ if await accepted():return
  await loc.evaluate(r"""(e,v)=>{
    const proto=e.tagName==='TEXTAREA' ? HTMLTextAreaElement.prototype :
                (e.tagName==='SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype);
@@ -148,9 +159,7 @@ async def sticky_fill(loc,value):
    e.dispatchEvent(new Event('input',{bubbles:true}));
    e.dispatchEvent(new Event('change',{bubbles:true}));
  }""",target)
- try:
-  if str(await loc.input_value(timeout=1200))==target:return
- except Exception:pass
+ if await accepted():return
  raise RuntimeError('STICKY_FILL_FAILED')
 
 def same_form_redirect_failure(before_url,responses,payload_values_remaining,has_success=False):
