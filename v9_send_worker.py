@@ -550,8 +550,6 @@ async def fill_form(page,form,message,email,market):
    if not m.get('visible') or not m.get('enabled'):continue
    i=int(m.get('i') or 0);e=fields.nth(i);tag=str(m.get('tag') or '');typ=str(m.get('typ') or tag);d=' '.join(str(m.get('d') or '').split())[:500];cls=str(m.get('cls') or '')
    field_name=str(m.get('name') or '');field_id=str(m.get('id') or '')
-   live=await reacquire_visible_field(form,field_name,field_id,i)
-   if live is not None:e=live
    kind=sensitive_kind(d)
    req=field_required_hint(bool(m.get('required')),cls,d) or bool(kind and kind in script_required)
    if time.monotonic()>fill_deadline:return {'ok':False,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'timed_out':True}
@@ -568,6 +566,8 @@ async def fill_form(page,form,message,email,market):
     safe_check=bool((CONSENT_OK.search(d) and not CONSENT_BAD.search(d)) or SUBMIT_CONFIRM_CHECK.search(d))
     if safe_check:
      if await safe_checkbox_check(e,form,m):continue
+     retry=await reacquire_visible_field(form,field_name,field_id,i)
+     if retry is not None and await safe_checkbox_check(retry,form,m):continue
      if req:required_unknown.append(d[:160] or typ)
      continue
     if not req:continue
