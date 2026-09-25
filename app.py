@@ -424,12 +424,17 @@ def _stage2_runner(task_url,result_url,priority_markets,workers,batch):
         except RuntimeError: pass
         try: RUN_LOCK.release()
         except RuntimeError: pass
-        # Sender is the highest-priority revenue lane. If a production send was
-        # queued while Stage2 held the shared Render lock, hand the lock to the
-        # sender immediately when this bounded Stage2 quantum finishes.
+        # Heavy-lane priority is Sender > Browser proof > Stage2 supply.
         sender_started=_start_pending_v9_send()
-        stage2_started=False if sender_started else _start_pending_v9_stage2()
-        print(json.dumps({'event':'STAGE2_STOPPED','v9_sender_started':bool(sender_started),'v9_stage2_started':bool(stage2_started)},separators=(',',':')),flush=True)
+        browser_started=False
+        if not sender_started and _browser_demand_remaining()>0:
+            try:
+                body,_=start_or_extend('STAGE2_HANDOFF')
+                browser_started=str(body.get('status') or '')=='STARTED'
+            except Exception:
+                browser_started=False
+        stage2_started=False if (sender_started or browser_started) else _start_pending_v9_stage2()
+        print(json.dumps({'event':'STAGE2_STOPPED','v9_sender_started':bool(sender_started),'browser_started':bool(browser_started),'v9_stage2_started':bool(stage2_started)},separators=(',',':')),flush=True)
 
 def _v9_stage2_pending_snapshot():
     with V9_STAGE2_PENDING_LOCK:
@@ -568,11 +573,16 @@ def _v9_send_runner(task_url,result_url,mode,generation=0,authority='',failover_
         V9_SEND_THREAD=None
         try: RUN_LOCK.release()
         except RuntimeError: pass
-        # Resume one bounded Stage2 turn only after the sender has fully released
-        # the shared lock. _start_pending_v9_stage2() itself refuses to run if
-        # another sender is pending, preserving Sender > Browser > Stage2 priority.
-        stage2_started=_start_pending_v9_stage2()
-        print(json.dumps({'event':'V9_SEND_STOPPED','v9_stage2_started':bool(stage2_started)},separators=(',',':')),flush=True)
+        # After a send, resume Browser proof before Stage2 supply.
+        browser_started=False
+        if _browser_demand_remaining()>0:
+            try:
+                body,_=start_or_extend('SENDER_HANDOFF')
+                browser_started=str(body.get('status') or '')=='STARTED'
+            except Exception:
+                browser_started=False
+        stage2_started=False if browser_started else _start_pending_v9_stage2()
+        print(json.dumps({'event':'V9_SEND_STOPPED','browser_started':bool(browser_started),'v9_stage2_started':bool(stage2_started)},separators=(',',':')),flush=True)
 
 def _v9_send_snapshot():
     with V9_SEND_STATE_LOCK:
