@@ -26,6 +26,7 @@ NAME=re.compile(r'(full.?name|your.?name|contact.?name|お名前|氏名|\bname\b
 SUBJECT=re.compile(r'(subject|件名|title)',re.I)
 URLRX=re.compile(r'(website|web.?site|url|サイト)',re.I)
 CAPTCHA_SEL='.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey],iframe[src*="recaptcha"],iframe[src*="hcaptcha"]'
+BOT_HINT=re.compile(r'(?:captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|chk[-_ ]?not[-_ ]?robot|human[-_ ]?(?:check|verification))',re.I)
 SUCCESS=re.compile(r'(送信が完了|送信完了|お問い合わせ.{0,30}(?:ありがとう|受け付け|受付)|thank\s+you.{0,80}(?:message|inquir|contact)|(?:message|inquir(?:y|ies)|request).{0,80}(?:sent|received|submitted)|successfully\s+(?:sent|submitted))',re.I)
 FAIL=re.compile(r'(入力してください|未入力|required field|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid)',re.I)
 FINAL=re.compile(r'(この内容で送信|内容を送信|確認して送信|送信する|^送信$|send\s*(?:message|inquiry|enquiry)?$|submit\s*(?:message|inquiry|enquiry|form)?$)',re.I)
@@ -96,6 +97,19 @@ async def visible_captcha(page):
   xs=page.locator(CAPTCHA_SEL)
   for i in range(min(await xs.count(),12)):
    if await xs.nth(i).is_visible():return True
+ except:pass
+ # Some sites use a custom visible checkbox rather than a standard CAPTCHA
+ # widget. Treat robot/human-verification controls as anti-bot challenges.
+ try:
+  xs=page.locator('input,button,label')
+  for i in range(min(await xs.count(),120)):
+   e=xs.nth(i)
+   if not await e.is_visible():continue
+   meta=await e.evaluate("""e=>[
+     e.name,e.id,e.className,e.value,e.innerText,e.getAttribute('aria-label'),
+     e.getAttribute('for')
+   ].filter(Boolean).join(' ')""")
+   if BOT_HINT.search(str(meta or '')):return True
  except:pass
  return False
 async def body_text(page,timeout=3500):
@@ -172,7 +186,7 @@ async def control(form,kind='final'):
   e=xs.nth(i)
   try:
    if not await e.is_visible() or not await e.is_enabled():continue
-   d=await desc(e); compact=re.sub(r'\\s+','',d); typ=(await e.get_attribute('type') or '').lower()
+   d=await desc(e); compact=re.sub(r'\s+','',d); typ=(await e.get_attribute('type') or '').lower()
    if REJECT_CONTROL.search(d):continue
    is_confirm=bool(CONFIRM.search(d) and not re.search(r'(送\\s*信|send|submit)',d,re.I))
    if kind=='confirm':

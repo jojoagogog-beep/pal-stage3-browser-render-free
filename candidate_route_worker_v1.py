@@ -65,6 +65,7 @@ def _priority_filter(tasks):
 SENSITIVE_FIELD=re.compile(r'(phone|tel|mobile|address|postal|postcode|zip|電話|住所|郵便|都道府県|市区町村|番地)',re.I)
 SUBMIT_HINT=re.compile(r'(send|submit|contact|inquiry|enquiry|送信|確認|次へ)',re.I)
 CAPTCHA=re.compile(r'(recaptcha|hcaptcha|turnstile|captcha)',re.I)
+BOT_FIELD=re.compile(r'(?:captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|chk[-_ ]?not[-_ ]?robot|human[-_ ]?(?:check|verification))',re.I)
 PROHIBIT=re.compile(r'(no unsolicited|no sales solicit|sales solicitations? (?:are )?(?:not|prohibited)|営業(?:目的|勧誘).{0,12}(禁止|お断り)|セールス.{0,12}(禁止|お断り))',re.I)
 COMMON=('vendor','vendors','supplier','suppliers','procurement','partnership','partnerships','business/inquiry','business/contact','sales/contact','commercial','request-a-quote','proposal','contact','contact-us','contactus','inquiry','enquiry','get-in-touch','quote','sales','business','お問い合わせ')
 
@@ -128,6 +129,15 @@ def strict_static_form_proof(doc,page_url,contact_intent=False):
     if not page_host:return None
     for form in re.findall(r'<form\b.*?</form>',raw,re.I|re.S)[:12]:
         if re.search(r'(search|newsletter|subscribe|login|career|recruit|comment|review)',form,re.I):continue
+        # Reject custom anti-bot controls even when they do not use a standard
+        # reCAPTCHA/hCaptcha widget. Example: id/name like chkNotRobot.
+        anti_bot_attrs=' '.join(
+            m.group(0) for m in re.finditer(
+                r'<(?:input|button|select|textarea)\b[^>]*(?:id|name|class|aria-label)\s*=\s*["\'][^"\']+["\'][^>]*>',
+                form,re.I|re.S
+            )
+        )
+        if BOT_FIELD.search(anti_bot_attrs):continue
         opener=re.search(r'<form\b[^>]*>',form,re.I|re.S)
         if not opener or not re.search(r"\bmethod\s*=\s*[\"']?post\b",opener.group(0),re.I):continue
         action=_html_attr(opener.group(0),'action')
