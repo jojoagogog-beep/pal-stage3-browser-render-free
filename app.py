@@ -1037,7 +1037,7 @@ def health():
                    lane_skip_until=LANE_SKIP_UNTIL,
                    v9_sender_enabled=True,
                    v9_sender_control_revision='DUAL_AUTHORITY_DUAL_SHARD_FAILOVER_V2',
-                   v9_sender_worker_revision='V9_SENDER_DEDICATED_2X_V14_TABLE_LABELS_QUERY_CREATED',
+                   v9_sender_worker_revision='V9_SENDER_DEDICATED_2X_V15_ASYNC_CONFIRMATION',
                    v9_sender_production_enabled=True,
                    v9_sender_pending=_v9_send_pending_snapshot(),
                    v9_send_state=_v9_send_snapshot(),
