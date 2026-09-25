@@ -393,6 +393,15 @@ async def settle_correlated_click_timeout(page,click_error,mutations):
  except:pass
  return True
 
+async def provider_confirmation_visible(page):
+ for sel in ('[id^="gform_confirmation_message_"]','.gform_confirmation_message','.wpforms-confirmation-container-full','.mw_wp_form_complete'):
+  try:
+   xs=page.locator(sel)
+   for i in range(min(await xs.count(),4)):
+    if await xs.nth(i).is_visible():return True
+  except:pass
+ return False
+
 async def click_and_evidence(page,loc,message,email,before_text):
  before_url=str(page.url or '')
  mutations=[];responses=[];resp_objs=[]
@@ -417,6 +426,14 @@ async def click_and_evidence(page,loc,message,email,before_text):
   click_error=type(e).__name__+':'+str(e)[:180]
   await settle_correlated_click_timeout(page,click_error,mutations)
  finally:
+  # Some iframe/AJAX providers acknowledge the correlated POST after the
+  # visible click returns. Keep listeners alive briefly, without re-clicking.
+  if any(bool(x.get('matches_form_payload')) for x in mutations) and not any(bool(x.get('matches_form_payload')) for x in responses):
+   for _ in range(5):
+    try:await page.wait_for_timeout(500)
+    except:break
+    if any(bool(x.get('matches_form_payload')) for x in responses):break
+    if await provider_confirmation_visible(page):break
   try:page.remove_listener('request',on_req);page.remove_listener('response',on_resp)
   except:pass
  provider_success=False;provider_fail=False;bodies=[]
@@ -438,6 +455,8 @@ async def click_and_evidence(page,loc,message,email,before_text):
   except:pass
  try:after=' '.join((await page.locator('body').inner_text(timeout=2500)).split())
  except:after=''
+ correlated_mutation=any(bool(x.get('matches_form_payload')) for x in mutations)
+ provider_confirmation_dom=bool(correlated_mutation and await provider_confirmation_visible(page))
  after_success=SUCCESS.search(after)
  before_success_text=SUCCESS.search(before_text or '')
  new_success=bool(after_success and (not before_success_text or after_success.group(0)!=before_success_text.group(0)))
@@ -452,7 +471,7 @@ async def click_and_evidence(page,loc,message,email,before_text):
   payload_values_remaining=await page.locator('input,textarea').evaluate_all("(els,a)=>els.filter(e=>{const v=String(e.value||'');return v===String(a.email||'')||v===String(a.message||'')}).length",{'email':email,'message':message})
  except: payload_values_remaining=-1
  payload_cleared=(payload_values_remaining==0)
- validation=post_submit_validation(new_validation_text,invalid_control_count,provider_success,new_success,payload_cleared)
+ validation=post_submit_validation(new_validation_text,invalid_control_count,(provider_success or provider_confirmation_dom),new_success,payload_cleared)
  corr2xx=any(x['matches_form_payload'] and 200<=x['status']<300 for x in responses);corr4xx=any(x['matches_form_payload'] and x['status'] in {400,401,403,404,405,410,415,422} for x in responses)
  def pathmatch(rx,u):
   try:return bool(rx.search(urlsplit(str(u or '')).path or '/'))
@@ -470,8 +489,8 @@ async def click_and_evidence(page,loc,message,email,before_text):
  except:path_changed=False
  correlated_2xx_navigation=bool(corr2xx and path_changed and not is_confirm_url(page.url))
  correlated_3xx_cleared=bool(corr3xx and payload_cleared and not redirect_confirm and not is_confirm_url(page.url))
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_request_created':corr_created,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
- if (provider_success or new_success or corr204 or corr_created or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation or correlated_3xx_cleared) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':correlated_mutation,'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_request_created':corr_created,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'server_success':provider_success,'provider_confirmation_dom':provider_confirmation_dom,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ if (provider_success or provider_confirmation_dom or new_success or corr204 or corr_created or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation or correlated_3xx_cleared) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):
