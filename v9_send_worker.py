@@ -405,7 +405,7 @@ async def process_task(browser,t):
    try:await asyncio.wait_for(ctx.close(),timeout=4.0)
    except:pass
 async def main():
- q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1' and int(x.get('sender_shard',1) or 1)==SENDER_SHARD][:MAX_TASKS_PER_TURN];results=[]
+ q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1' and (0 if str(x.get('sender_shard',1)).strip()=='0' else 1)==SENDER_SHARD][:MAX_TASKS_PER_TURN];results=[]
  if not tasks:
   print(json.dumps({'status':'PASS','mode':MODE,'sender_shard':SENDER_SHARD,'tasks':0,'results':[]},ensure_ascii=False));return
  async with async_playwright() as p:
