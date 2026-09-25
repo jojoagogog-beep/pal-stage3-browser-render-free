@@ -6,6 +6,7 @@ class EmailClientFormTests(unittest.TestCase):
     def test_email_client_copy_is_rejected_by_both_layers(self):
         samples = [
             "Opens your email client with the message ready to send.",
+            "OPEN IN EMAIL CLIENT",
             "Your email draft is ready — hit send in your mail client.",
             "mailto:sales@example.com",
         ]
