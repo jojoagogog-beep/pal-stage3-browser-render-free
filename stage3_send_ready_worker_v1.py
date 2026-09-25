@@ -374,6 +374,40 @@ def retryable_confirm_control(target,control,frame_index):
         and confirm_control_matches(target,control_semantic_text(control))
     )
 
+async def wait_for_confirmation_ready(page,before_url,timeout_ms=4500):
+    deadline=time.monotonic()+max(0.5,float(timeout_ms)/1000.0)
+    saw_url_change=False; last_controls=[]
+    while True:
+        try:
+            if str(page.url or '')!=str(before_url or ''):
+                saw_url_change=True
+        except Exception:
+            pass
+        controls=[]
+        try:
+            for fi,root in enumerate(list(page.frames)[:4]):
+                try:
+                    xs=await root.locator('button,input[type=submit],input[type=button],input[type=image]').evaluate_all(r"""els=>els.map((e,i)=>{
+                      const s=getComputedStyle(e),r=e.getBoundingClientRect();
+                      const visible=!e.disabled&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;
+                      const label=((e.innerText||'')+' '+(e.value||'')+' '+(e.getAttribute('aria-label')||'')).trim();
+                      return {i,visible,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),label,
+                        text:(label+' '+(e.name||'')+' '+(e.id||'')).trim()};
+                    }).filter(x=>x.visible)""")
+                    for x in xs:x['frame_index']=fi
+                    controls.extend(xs)
+                except Exception:
+                    continue
+            last_controls=controls
+            if final_control_candidates(controls):
+                return {'ready':True,'url_changed':saw_url_change,'controls':controls}
+        except Exception:
+            pass
+        if time.monotonic()>=deadline:
+            return {'ready':False,'url_changed':saw_url_change,'controls':last_controls}
+        try:await page.wait_for_timeout(200)
+        except Exception:await asyncio.sleep(.2)
+
 
 def strong_main_form_candidate(cand,frame_index):
     if not isinstance(cand,dict) or int(frame_index)!=0:
@@ -1357,6 +1391,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             if control_kind=='CONFIRM_STEP':
                 phase('confirmation_step')
                 target=str(control.get('text') or '')
+                confirm_before_url=page.url
                 clicked=False
                 # Use the DOM index captured by the post-fill scan first. That
                 # scan already verified this exact control as a safe confirm
@@ -1393,17 +1428,14 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                             continue
                 if not clicked:
                     return {**base,'status':'TECH_DEFER','code':'CONFIRM_CONTROL_NOT_FOUND','final_url':final_url,'stage3_send_ready':False}
-                try:
-                    await page.wait_for_load_state('domcontentloaded',timeout=5000)
-                except Exception:
-                    pass
-                try:
-                    await page.wait_for_timeout(700)
-                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    await page.wait_for_timeout(700)
-                    await page.evaluate("window.scrollTo(0, 0)")
-                    await page.wait_for_timeout(500)
-                except Exception:pass
+                settle=await wait_for_confirmation_ready(page,confirm_before_url,4500)
+                if not settle.get('ready'):
+                    try:
+                        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        await page.wait_for_timeout(350)
+                        await page.evaluate("window.scrollTo(0, 0)")
+                        await page.wait_for_timeout(250)
+                    except Exception:pass
                 final_url=page.url
                 if host(final_url)!=domain:
                     return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED_AFTER_CONFIRM','final_url':final_url,'stage3_send_ready':False}
@@ -1459,16 +1491,13 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                                     retry_loc=loc2
                                     break
                             if retry_loc is not None:
+                                retry_before_url=page.url
                                 await retry_loc.evaluate("""e=>{
                                   if(!e.form || typeof e.form.requestSubmit!=='function') throw new Error('NO_REQUEST_SUBMIT');
                                   e.form.requestSubmit(e);
                                 }""")
                                 confirm_retry_used=True
-                                try:
-                                    await page.wait_for_load_state('domcontentloaded',timeout=5000)
-                                except Exception:
-                                    pass
-                                await page.wait_for_timeout(900)
+                                await wait_for_confirmation_ready(page,retry_before_url,4500)
                                 final_url=page.url
                                 if host(final_url)!=domain:
                                     return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED_AFTER_CONFIRM_RETRY','final_url':final_url,'stage3_send_ready':False}
