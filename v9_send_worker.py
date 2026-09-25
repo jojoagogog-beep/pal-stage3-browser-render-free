@@ -16,6 +16,7 @@ FAILOVER_SECRET=os.environ.get('PAL_V9_FAILOVER_SECRET','')
 UA='Practical-AI-Lab-V9-Sender/1.0'
 MAX_TASKS_PER_TURN=max(1,min(8,int(os.environ.get('PAL_V9_SEND_MAX_TASKS','4') or 4)))
 SEND_CONCURRENCY=max(1,min(4,int(os.environ.get('PAL_V9_SEND_CONCURRENCY','2') or 2)))
+TASK_WALL_TIMEOUT=max(90.0,min(220.0,float(os.environ.get('PAL_V9_TASK_WALL_TIMEOUT','180') or 180)))
 SENDER_SHARD=0 if str(os.environ.get('PAL_V9_SENDER_SHARD','1')).strip()=='0' else 1
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
 SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
@@ -478,10 +479,10 @@ async def main():
    async def run_one(t):
     async with sem:
      try:
-      res=await asyncio.wait_for(process_task(browser,t),timeout=90.0)
+      res=await asyncio.wait_for(process_task(browser,t),timeout=TASK_WALL_TIMEOUT)
      except asyncio.TimeoutError:
       clicked=t.get('click_started') is True
-      res={'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':('TASK_WALL_TIMEOUT_HOLD' if clicked else 'TASK_WALL_TIMEOUT_PRE_CLICK'),'evidence':({'wall_timeout_seconds':90,'resend_safe':False,'click_started':True} if clicked else {'wall_timeout_seconds':90,'pre_submit':True,'click_started':False})}
+      res={'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':('TASK_WALL_TIMEOUT_HOLD' if clicked else 'TASK_WALL_TIMEOUT_PRE_CLICK'),'evidence':({'wall_timeout_seconds':TASK_WALL_TIMEOUT,'resend_safe':False,'click_started':True} if clicked else {'wall_timeout_seconds':TASK_WALL_TIMEOUT,'pre_submit':True,'click_started':False})}
      await publish_one(res)
      return res
    if ready:
