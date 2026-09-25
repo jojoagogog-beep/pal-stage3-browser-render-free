@@ -58,9 +58,11 @@ def strong_http_accept(status,payload_cleared):
  except:return False
 
 def field_required_hint(explicit=False,cls='',desc=''):
- class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in str(cls or '').split())
+ tokens=str(cls or '').split()
+ class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in tokens)
+ framework_required=any(tok.lower()=='ng-invalid' for tok in tokens)
  d=str(desc or '')
- return bool(explicit or class_required or (re.search(r'(必須|required|mandatory|※)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
+ return bool(explicit or class_required or framework_required or (re.search(r'(必須|required|mandatory|※)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
 
 def same_form_redirect_failure(before_url,responses,payload_values_remaining,has_success=False):
  if has_success or int(payload_values_remaining or 0)<=0:return False

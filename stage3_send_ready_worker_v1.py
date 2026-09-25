@@ -882,8 +882,10 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                         const allFields=[...f.querySelectorAll('input,textarea,select')];
                         const fs=allFields.map((e,all_i)=>({e,all_i})).filter(x=>vis(x.e)||choiceProxyVisible(x.e)).map(({e,all_i})=>{const d=desc(e);
                           const reqText=(d.self+' '+d.rowLabel+' '+d.local);
-                          const classRequired=String(e.className||'').split(/\\s+/).some(c=>/^(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)$/i.test(c));
-                          const req=!!e.required||e.getAttribute('aria-required')==='true'||d.rowRequiredIcon===true||classRequired||(/[※＊*]/.test(d.rowLabel+' '+d.local)&&!/(任意|optional)/i.test(reqText))||(/(必須|required|mandatory)/i.test(reqText)&&!/(任意|optional)/i.test(reqText));
+                          const classes=String(e.className||'').split(/\\s+/);
+                          const classRequired=classes.some(c=>/^(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)$/i.test(c));
+                          const frameworkRequired=classes.some(c=>/^ng-invalid$/i.test(c));
+                          const req=!!e.required||e.getAttribute('aria-required')==='true'||d.rowRequiredIcon===true||classRequired||frameworkRequired||(/[※＊*]/.test(d.rowLabel+' '+d.local)&&!/(任意|optional)/i.test(reqText))||(/(必須|required|mandatory)/i.test(reqText)&&!/(任意|optional)/i.test(reqText));
                           return {i:all_i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),name:e.name||'',id:e.id||'',required:req,
                             checked:!!e.checked,value:e.value||'',self_desc:d.self.slice(0,500),local_desc:d.local.slice(0,500),row_label:d.rowLabel.slice(0,500),
                             desc:(d.self+' '+d.rowLabel+' '+d.local).slice(0,900)}});
