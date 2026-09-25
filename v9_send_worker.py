@@ -616,6 +616,20 @@ async def final_control_matching_text(form,expected_text=''):
   except:continue
  return hits[0] if len(hits)==1 else None
 
+async def form_contains_payload(form,email,message):
+ try:
+  found=await form.locator('input,textarea').evaluate_all("""(els,a)=>{
+    let email=false,message=false;
+    for(const e of els){
+      const v=String(e.value||'');
+      if(v===String(a.email||''))email=true;
+      if(v===String(a.message||''))message=true;
+    }
+    return {email,message};
+  }""",{'email':email,'message':message})
+  return bool(found.get('email') and found.get('message'))
+ except Exception:return False
+
 async def refresh_actionable_control(form,item,kind='final',expected_text=''):
  if await control_actionable(item):return item
  for delay in (0.2,0.5):
@@ -885,6 +899,15 @@ async def process_task(browser,t):
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
   if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':{**fill,'pre_submit':True}}
   await page.wait_for_timeout(250)
+  # Frameworks such as Contact Form 7 can reorder forms after field updates.
+  # A positional nth() locator can then silently point at an unrelated search
+  # form. Re-resolve the contact form and require the exact filled payload to
+  # still be present before any submit control is considered.
+  refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+  if not refreshed:return {**out,'outcome':'TECH_RETRY','reason':'FORM_IDENTITY_LOST_AFTER_FILL','evidence':{'pre_submit':True,'resend_safe':True}}
+  _,frame_i,fi,form=refreshed
+  if not await form_contains_payload(form,str(t.get('reply_address') or ''),str(t['message_body'])):
+   return {**out,'outcome':'TECH_RETRY','reason':'FORM_PAYLOAD_LOST_AFTER_FILL','evidence':{'pre_submit':True,'resend_safe':True,'frame_index':frame_i,'form_index':fi}}
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_AFTER_FILL','evidence':{'pre_submit':True}}
   try:form_action=str(await form.get_attribute('action') or '')
   except:form_action=''
