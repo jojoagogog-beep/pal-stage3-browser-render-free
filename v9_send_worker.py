@@ -177,6 +177,45 @@ async def choose_form(page):
   if not rows:return None
   fi=int(rows[0]['fi']);return (int(rows[0]['score']),fi,page.locator('form').nth(fi))
  except:return None
+
+async def choose_form_any_frame(page,proof_frame_index=None,proof_form_index=None):
+ frames=list(page.frames)[:12]
+ try:pfr=int(proof_frame_index) if proof_frame_index is not None else -1
+ except:pfr=-1
+ try:pfi=int(proof_form_index) if proof_form_index is not None else -1
+ except:pfi=-1
+ if 0<=pfr<len(frames):
+  root=frames[pfr]
+  try:
+   forms=root.locator('form')
+   if 0<=pfi<await forms.count():
+    pf=forms.nth(pfi)
+    if await pf.is_visible() and await pf.locator('textarea').count()>0 and await pf.locator('input[type=email]').count()>0:
+     return (1000,pfr,pfi,pf)
+  except Exception:pass
+ best=None
+ for fri,root in enumerate(frames):
+  c=await choose_form(root)
+  if not c:continue
+  score,fi,form=c
+  cand=(int(score),fri,int(fi),form)
+  if best is None or cand[0]>best[0]:best=cand
+ return best
+
+async def visible_captcha_any(page):
+ for root in list(page.frames)[:12]:
+  try:
+   if await visible_captcha(root):return True
+  except Exception:pass
+ return False
+
+async def has_any_form(page):
+ for root in list(page.frames)[:12]:
+  try:
+   if await root.locator('form').count()>0:return True
+  except Exception:pass
+ return False
+
 async def fill_form(page,form,message,email,market):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
  fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False};fill_deadline=time.monotonic()+25.0
@@ -410,32 +449,22 @@ async def process_task(browser,t):
   txt=await body_text(page,3500)
   if txt is None:return {**out,'outcome':'TECH_RETRY','reason':'BODY_UNREADABLE_PRE_SUBMIT','evidence':{'pre_submit':True,'navigation_timeout':nav_timeout,'final_url':page.url[:500]}}
   if nav_timeout:
-   try:has_form=await page.locator('form').count()>0
-   except:has_form=False
+   has_form=await has_any_form(page)
    if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500]}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
-  if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
-  chosen=None
-  try:
-   pfi=int(t.get('proof_form_index')) if t.get('proof_form_index') is not None else -1
-   forms=page.locator('form')
-   if 0<=pfi<await forms.count():
-    pf=forms.nth(pfi)
-    if await pf.is_visible() and await pf.locator('textarea').count()>0 and await pf.locator('input[type=email]').count()>0:
-     chosen=(1000,pfi,pf)
-  except Exception: chosen=None
-  if not chosen: chosen=await choose_form(page)
+  if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
+  chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'))
   if not chosen:
    await page.wait_for_timeout(1800)
-   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'late_render':True}}
-   chosen=await choose_form(page)
+   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'late_render':True}}
+   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'))
   if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True}}
-  _,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
+  _,frame_i,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
   if fill.get('timed_out'):return {**out,'outcome':'TECH_RETRY','reason':'FILL_TIMEOUT_PRE_SUBMIT','evidence':{**fill,'pre_submit':True}}
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
   if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':{**fill,'pre_submit':True}}
   await page.wait_for_timeout(250)
-  if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_AFTER_FILL','evidence':{'pre_submit':True}}
+  if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_AFTER_FILL','evidence':{'pre_submit':True}}
   try:form_action=str(await form.get_attribute('action') or '')
   except:form_action=''
   confirm_action=bool(re.search(r'(confirm|review|check|kakunin|確認)',unquote_plus(form_action),re.I))
@@ -445,7 +474,7 @@ async def process_task(browser,t):
   elif confirm is not None:
    final=None
   if final is None and confirm is None:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_CONTROL_NOT_FOUND','evidence':{'pre_submit':True,'form_action':form_action[:500]}}
-  if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'form_index':fi,'form_action':form_action[:500],'final_control':bool(final),'confirm_control':bool(confirm)}}
+  if MODE!='PRODUCTION':return {**out,'outcome':'SHADOW_PREPARED','reason':'PRE_SUBMIT_ONLY','evidence':{'frame_index':frame_i,'form_index':fi,'form_action':form_action[:500],'final_control':bool(final),'confirm_control':bool(confirm)}}
   before=txt
   if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_CLICK','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
   if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True,'control_recheck':True}}
@@ -460,17 +489,20 @@ async def process_task(browser,t):
     return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'CONFIRM_AMBIGUOUS','evidence':cev}
    await page.wait_for_timeout(500)
    final_forms=[]
-   for j in range(min(await page.locator('form').count(),12)):
-    f2=page.locator('form').nth(j)
-    try:
-     if not await f2.is_visible():continue
-     c2=await control(f2,'final')
-     if c2 is not None:final_forms.append((f2,c2))
-    except:continue
+   for fri,root in enumerate(list(page.frames)[:12]):
+    try:n=min(await root.locator('form').count(),12)
+    except Exception:continue
+    for j in range(n):
+     f2=root.locator('form').nth(j)
+     try:
+      if not await f2.is_visible():continue
+      c2=await control(f2,'final')
+      if c2 is not None:final_forms.append((fri,j,f2,c2))
+     except:continue
    if len(final_forms)!=1:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'CONFIRM_NO_UNIQUE_FINAL_CONTROL','evidence':{**cev,'confirm_navigation':True,'final_candidates':len(final_forms)}}
-   form,final=final_forms[0]
+   final_frame_i,final_form_i,form,final=final_forms[0]
    before=await body_text(page,3500) or ''
-   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_ON_CONFIRM_PAGE','evidence':{**cev,'confirm_navigation':True}}
+   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_ON_CONFIRM_PAGE','evidence':{**cev,'confirm_navigation':True,'frame_index':final_frame_i,'form_index':final_form_i}}
    if MODE=='PRODUCTION' and not _proof_control_ok(t,30000):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PROOF_EXPIRED_BEFORE_FINAL','evidence':{**cev,'proof_expires_at':t.get('proof_expires_at')}}
    if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**cev,'control_recheck':True}}
   if MODE=='PRODUCTION' and not click_barrier:
