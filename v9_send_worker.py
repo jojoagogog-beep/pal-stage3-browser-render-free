@@ -463,12 +463,29 @@ async def provider_confirmation_visible(page):
   except:pass
  return False
 
+async def recover_correlated_request_responses(req_objs,responses,resp_objs):
+ seen={(str(x.get('method') or ''),str(x.get('url') or ''),int(x.get('status') or 0)) for x in (responses or [])}
+ added=0
+ for req in list(req_objs or [])[:8]:
+  try:
+   resp=await req.response()
+   if resp is None:continue
+   method=str(req.method);url=str(req.url)[:500];status=int(resp.status);key=(method,url,status)
+   if key in seen:continue
+   hdrs=resp.headers or {}
+   responses.append({'method':method,'url':url,'status':status,'location':str(hdrs.get('location') or '')[:500],'matches_form_payload':True})
+   resp_objs.append(resp);seen.add(key);added+=1
+  except Exception:pass
+ return added
+
 async def click_and_evidence(page,loc,message,email,before_text):
  before_url=str(page.url or '')
- mutations=[];responses=[];resp_objs=[]
+ mutations=[];responses=[];resp_objs=[];correlated_req_objs=[]
  def on_req(req):
   try:
-   if str(req.method).upper() not in {'GET','HEAD','OPTIONS'}:mutations.append({'method':req.method,'url':req.url[:500],'matches_form_payload':_payload_match(req.post_data or '',message,email)})
+   if str(req.method).upper() not in {'GET','HEAD','OPTIONS'}:
+    m=_payload_match(req.post_data or '',message,email);mutations.append({'method':req.method,'url':req.url[:500],'matches_form_payload':m})
+    if m:correlated_req_objs.append(req)
   except:pass
  def on_resp(resp):
   try:
@@ -495,6 +512,11 @@ async def click_and_evidence(page,loc,message,email,before_text):
     except:break
     if any(bool(x.get('matches_form_payload')) for x in responses):break
     if await provider_confirmation_visible(page):break
+  # The response event can be lost when a navigation destroys the old page
+  # after the POST has already left. Ask the correlated Request objects for
+  # their eventual Response before removing listeners; never re-submit.
+  if correlated_req_objs:
+   await recover_correlated_request_responses(correlated_req_objs,responses,resp_objs)
   try:page.remove_listener('request',on_req);page.remove_listener('response',on_resp)
   except:pass
  provider_success=False;provider_fail=False;bodies=[]
