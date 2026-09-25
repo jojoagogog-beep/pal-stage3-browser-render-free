@@ -27,4 +27,9 @@ class SenderFrameIdentityTests(unittest.TestCase):
         for text in ('入力にエラーがあります','【社名】は必須項目です','下記をご確認の上「戻る」ボタンにて修正'):
             self.assertIsNotNone(w.FAIL.search(text))
 
+    def test_mail_field_alias_is_email(self):
+        self.assertIsNotNone(w.EMAIL.search('mail'))
+        self.assertIsNotNone(w.EMAIL.search('contact_mail'))
+        self.assertIsNone(w.EMAIL.search('mailing_address'))
+
 if __name__=='__main__': unittest.main()

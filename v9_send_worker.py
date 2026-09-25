@@ -20,7 +20,7 @@ TASK_WALL_TIMEOUT=max(90.0,min(220.0,float(os.environ.get('PAL_V9_TASK_WALL_TIME
 SENDER_SHARD=0 if str(os.environ.get('PAL_V9_SENDER_SHARD','1')).strip()=='0' else 1
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
 SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
-EMAIL=re.compile(r'(e-?mail|メール)',re.I)
+EMAIL=re.compile(r'(e-?mail|(?:^|[_\-\s])mail(?:$|[_\-\s])|メール)',re.I)
 MESSAGE=re.compile(r'(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)',re.I)
 COMPANY=re.compile(r'(company|organization|organisation|会社|法人|企業)',re.I)
 FIRST_NAME=re.compile(r'(first.?name|given.?name|名(?:前)?$)',re.I)
