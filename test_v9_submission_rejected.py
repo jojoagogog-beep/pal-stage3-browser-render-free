@@ -6,8 +6,8 @@ class SubmissionRejectedTests(unittest.TestCase):
         self.assertIsNotNone(w.FAIL.search('Submission Rejected'))
         self.assertIsNotNone(w.FAIL.search('Form submission rejected'))
 
-    def test_other_explicit_failure_text_is_failure(self):
-        self.assertIsNotNone(w.FAIL.search('Something went wrong'))
+    def test_generic_ui_error_is_not_enough_by_itself(self):
+        self.assertIsNone(w.FAIL.search('Something went wrong'))
 
     def test_error_path_is_negative_evidence(self):
         self.assertIsNotNone(w.ERROR_PATH.search('/contact/error.htm'))
