@@ -447,6 +447,22 @@ async def reveal_candidate_forms(page,proof_frame_index=None,proof_form_index=No
  except Exception:pass
  return moved
 
+async def safe_checkbox_check(loc):
+ try:
+  await loc.check(timeout=1500)
+  if await loc.is_checked(timeout=1000):return True
+ except Exception:pass
+ try:
+  await loc.evaluate(r"""e=>{
+    const labs=[...(e.labels||[])];
+    const visible=l=>{const s=getComputedStyle(l),r=l.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
+    const lab=labs.find(visible)||e.closest('label');
+    if(!lab || !visible(lab)) throw new Error('NO_VISIBLE_LABEL');
+    lab.click();
+  }""")
+  return bool(await loc.is_checked(timeout=1200))
+ except Exception:return False
+
 async def fill_form(page,form,message,email,market):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
  fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False};fill_deadline=time.monotonic()+25.0
@@ -484,7 +500,9 @@ async def fill_form(page,form,message,email,market):
    if typ=='checkbox':
     safe_check=bool((CONSENT_OK.search(d) and not CONSENT_BAD.search(d)) or SUBMIT_CONFIRM_CHECK.search(d))
     if safe_check:
-     await e.check(timeout=1500);continue
+     if await safe_checkbox_check(e):continue
+     if req:required_unknown.append(d[:160] or typ)
+     continue
     if not req:continue
     required_unknown.append(d[:160] or typ);continue
    if typ=='radio':

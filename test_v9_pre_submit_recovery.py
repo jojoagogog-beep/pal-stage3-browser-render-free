@@ -16,5 +16,26 @@ class PreSubmitRecoveryTests(unittest.TestCase):
         self.assertIn('async def reveal_candidate_forms',src)
         self.assertIn('await reveal_candidate_forms(page',src)
 
+    def test_privacy_policy_is_safe_consent(self):
+        text='By checking this box, I agree to the Privacy Policy'
+        self.assertIsNotNone(w.CONSENT_OK.search(text))
+        self.assertIsNone(w.CONSENT_BAD.search(text))
+
+class SafeCheckboxTests(unittest.IsolatedAsyncioTestCase):
+    async def test_visible_label_fallback_checks_consent(self):
+        class Loc:
+            def __init__(self): self.checked=False
+            async def check(self,timeout=None): raise RuntimeError('native hidden')
+            async def is_checked(self,timeout=None): return self.checked
+            async def evaluate(self,script): self.checked=True
+        self.assertTrue(await w.safe_checkbox_check(Loc()))
+
+    async def test_failed_label_fallback_returns_false(self):
+        class Loc:
+            async def check(self,timeout=None): raise RuntimeError('native hidden')
+            async def is_checked(self,timeout=None): return False
+            async def evaluate(self,script): raise RuntimeError('no label')
+        self.assertFalse(await w.safe_checkbox_check(Loc()))
+
 if __name__=='__main__':
     unittest.main()
