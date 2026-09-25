@@ -465,7 +465,7 @@ async def settle_correlated_click_timeout(page,click_error,mutations):
  return True
 
 async def provider_confirmation_visible(page):
- for sel in ('[id^="gform_confirmation_message_"]','.gform_confirmation_message','.wpforms-confirmation-container-full','.mw_wp_form_complete'):
+ for sel in ('[id^="gform_confirmation_message_"]','.gform_confirmation_message','.wpforms-confirmation-container-full','.mw_wp_form_complete','.form__holder.form-success.success','.form-success.success'):
   try:
    xs=page.locator(sel)
    for i in range(min(await xs.count(),4)):

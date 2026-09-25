@@ -20,6 +20,12 @@ class ProviderConfirmationTests(unittest.IsolatedAsyncioTestCase):
         p=Page({'[id^="gform_confirmation_message_"]':[True]})
         self.assertTrue(await w.provider_confirmation_visible(p))
 
+    async def test_siteplus_confirmation_visible_only_after_reveal(self):
+        p=Page({'.form__holder.form-success.success':[False,True]})
+        self.assertTrue(await w.provider_confirmation_visible(p))
+        p=Page({'.form__holder.form-success.success':[False]})
+        self.assertFalse(await w.provider_confirmation_visible(p))
+
     async def test_no_provider_confirmation(self):
         p=Page({})
         self.assertFalse(await w.provider_confirmation_visible(p))
