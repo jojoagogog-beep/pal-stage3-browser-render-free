@@ -39,6 +39,7 @@ RESULT_BLOB=(os.environ.get('PAL_BROWSER_RESULT_BLOB_URL','')
 STATE=Path(os.environ.get('PAL_STAGE3_STATE_FILE','pal_offload/stage3_send_ready_state_v1.json'))
 LANE_MODE=str(os.environ.get('PAL_STAGE3_LANE_MODE','FAST_DOM') or 'FAST_DOM').upper()
 PRODUCER=str(os.environ.get('PAL_STAGE3_PRODUCER','PAL_STAGE3_BROWSER_WORKER_V1') or 'PAL_STAGE3_BROWSER_WORKER_V1')
+PROOF_VERSION='STAGE3_FULL_SEND_READY_V4'
 LANE_CONCURRENCY=max(1,min(8,int(os.environ.get('PAL_STAGE3_CONCURRENCY','4') or 4)))
 # Local fallback passes bounded budgets so one 8GB-Mac browser lane can finish
 # and publish useful proof before the resource supervisor needs to reclaim it.
@@ -695,7 +696,7 @@ def publish(msgs):
 def base_result(rec):
     return {'kind':'PAL_BROWSER_PREFLIGHT_V1','route_id':int(rec.get('route_id') or 0),
       'market':str(rec.get('market') or ''),'official_domain':str(rec.get('official_domain') or '').lower().removeprefix('www.'),
-      'last_seen_epoch':int(time.time()),'pages_checked':1,'proof_version':'STAGE3_FULL_SEND_READY_V3','lane_mode':LANE_MODE,
+      'last_seen_epoch':int(time.time()),'pages_checked':1,'proof_version':PROOF_VERSION,'lane_mode':LANE_MODE,
       'producer':PRODUCER}
 
 async def sticky_fill(loc,value):
