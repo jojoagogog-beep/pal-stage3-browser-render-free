@@ -394,7 +394,7 @@ async def fill_form(page,form,message,email,market):
     const s=getComputedStyle(e),r=e.getBoundingClientRect();
     return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
       enabled:!e.disabled,name:e.name||'',id:e.id||'',tag:e.tagName.toLowerCase(),typ:(e.getAttribute('type')||e.tagName).toLowerCase(),
-      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,e.closest('dd')?.previousElementSibling?.innerText,e.closest('dl')?.querySelector('dt')?.innerText,e.closest('.contactConfirmWrap')?.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
+      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,e.closest('dd')?.previousElementSibling?.innerText,e.closest('dl')?.querySelector('dt')?.innerText,e.closest('.contactConfirmWrap')?.innerText,e.parentElement?.querySelector(':scope > label')?.innerText,e.closest('.form-group,.form-row,.field,.contact_area')?.querySelector('label')?.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
       cls:String(e.className||''),required:!!e.required||e.getAttribute('aria-required')==='true',
       options:e.tagName==='SELECT'?[...e.options].map(o=>o.textContent||''):[]};
   })""")
