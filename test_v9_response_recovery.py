@@ -35,5 +35,13 @@ class ResponseRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(n,0)
         self.assertEqual(len(responses),1)
 
+class SuccessPhraseTests(unittest.TestCase):
+    def test_received_message_phrases_are_success(self):
+        self.assertIsNotNone(w.SUCCESS.search('THANK YOU! We have received your email and will be in touch shortly.'))
+        self.assertIsNotNone(w.SUCCESS.search('We have received your message.'))
+
+    def test_generic_thank_you_is_not_success(self):
+        self.assertIsNone(w.SUCCESS.search('Thank you for visiting our contact page.'))
+
 if __name__=='__main__':
     unittest.main()
