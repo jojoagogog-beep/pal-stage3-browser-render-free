@@ -297,6 +297,17 @@ def _browser_queue_has_tasks(url=None):
 
 _LANE_QUEUE_CACHE={'at':0.0,'url':'','priority':(),'shard':-1,'counts':None}
 
+def _lane_done_ids(lane):
+    # The Browser worker checkpoints completed task IDs per lane. The task Blob
+    # remains controller-owned until the next Mac cycle, so count only tasks
+    # that this Render service has not already durably completed.
+    try:
+        p=Path('/tmp/pal_stage3_'+str(lane).lower()+'_dual_shard_v3.json')
+        d=json.loads(p.read_text())
+        return {str(x) for x in (d.get('processed_task_ids') or []) if str(x)}
+    except Exception:
+        return set()
+
 def _browser_queue_lane_counts(url=None, max_age=3.0):
     # Scheduling only: count authoritative queued Browser routes for this
     # deterministic Render shard. Proof/safety/send contracts are untouched.
@@ -327,11 +338,15 @@ def _browser_queue_lane_counts(url=None, max_age=3.0):
         data=json.loads(raw.decode('utf-8','ignore'))
         all_counts={lane:0 for lane in BROWSER_LANES}
         priority_counts={lane:0 for lane in BROWSER_LANES}
+        done_by_lane={lane:_lane_done_ids(lane) for lane in BROWSER_LANES}
         for task in (data.get('tasks') or []):
             if not isinstance(task,dict) or str(task.get('kind') or '')!='PAL_BROWSER_PREFLIGHT_TASK_V1':
                 continue
             lane=str(task.get('lane_hint') or '').upper()
             if lane not in all_counts:
+                continue
+            tid=str(task.get('task_id') or '')
+            if tid and tid in done_by_lane.get(lane,set()):
                 continue
             task_market=str(task.get('market') or '')
             for rec in (task.get('routes') or []):
