@@ -327,6 +327,10 @@ async def click_and_evidence(page,loc,message,email,before_text):
  final_text_excerpt=after[:1600]
  try: invalid_control_count=await page.locator('input:invalid,textarea:invalid,select:invalid').count()
  except: invalid_control_count=0
+ try:
+  payload_values_remaining=await page.locator('input,textarea').evaluate_all("(els,a)=>els.filter(e=>{const v=String(e.value||'');return v===String(a.email||'')||v===String(a.message||'')}).length",{'email':email,'message':message})
+ except: payload_values_remaining=-1
+ payload_cleared=(payload_values_remaining==0)
  validation=bool(new_validation_text or invalid_control_count>0)
  corr2xx=any(x['matches_form_payload'] and 200<=x['status']<300 for x in responses);corr4xx=any(x['matches_form_payload'] and x['status'] in {400,401,403,404,405,410,415,422} for x in responses)
  def pathmatch(rx,u):
@@ -343,8 +347,9 @@ async def click_and_evidence(page,loc,message,email,before_text):
   bu=urlsplit(before_url);au=urlsplit(str(page.url or ''));path_changed=(bu.netloc==au.netloc and (bu.path.rstrip('/') or '/')!=(au.path.rstrip('/') or '/'))
  except:path_changed=False
  correlated_2xx_navigation=bool(corr2xx and path_changed and not pathmatch(CONFIRM_PATH,page.url))
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'correlated_2xx_navigation':correlated_2xx_navigation,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
- if (provider_success or new_success or corr204 or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
+ correlated_3xx_cleared=bool(corr3xx and payload_cleared and not redirect_confirm and not pathmatch(CONFIRM_PATH,page.url))
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ if (provider_success or new_success or corr204 or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation or correlated_3xx_cleared) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):
