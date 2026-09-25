@@ -100,7 +100,9 @@ async def fill_form(page,form,message,email,market):
   e=fields.nth(i)
   try:
    if not await e.is_visible() or not await e.is_enabled():continue
-   tag=await e.evaluate('e=>e.tagName.toLowerCase()'); typ=(await e.get_attribute('type') or tag).lower(); d=await desc(e); req=bool(await e.evaluate("e=>!!e.required||e.getAttribute('aria-required')==='true'"))
+   tag=await e.evaluate('e=>e.tagName.toLowerCase()'); typ=(await e.get_attribute('type') or tag).lower(); d=await desc(e); cls=str(await e.get_attribute('class') or '')
+   class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in cls.split())
+   req=bool(await e.evaluate("e=>!!e.required||e.getAttribute('aria-required')==='true'") or class_required or (re.search(r'(必須|required|mandatory)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
    if typ in {'hidden','submit','button','image','reset','password','file'}:
     if req and typ=='file':required_unknown.append(d or 'file')
     continue
