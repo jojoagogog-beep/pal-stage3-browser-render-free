@@ -41,9 +41,17 @@ CONSENT_OK=re.compile(r'(privacy|terms|policy|consent|agree(?:ment)?|個人情�
 CONSENT_BAD=re.compile(r'(newsletter|marketing|promotional|メルマガ|広告|案内を受け取|subscribe)',re.I)
 COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
 CONFIRM_PATH=re.compile(r'/(?:confirm|confirmation|review|check)(?:/|$)',re.I)
+CONFIRM_QUERY=re.compile(r'(?:[?&](?:mode|step|action)=)(?:check|confirm|confirmation|review)(?:&|#|$)',re.I)
 SUCCESS_QUERY=re.compile(r'(?:[?&](?:contact-form-sent|form[-_]?sent|submitted|submission[-_]?success|success)=)(?:1|true|yes|sent|success|\d+)(?:&|$)',re.I)
 
 def host(u):return (urlsplit(str(u or '')).hostname or '').lower().removeprefix('www.')
+def is_confirm_url(u):
+ s=str(u or '')
+ try:return bool(CONFIRM_PATH.search(urlsplit(s).path or '/') or CONFIRM_QUERY.search(s))
+ except:return bool(CONFIRM_QUERY.search(s))
+def strong_http_accept(status,payload_cleared):
+ try:return int(status) in {201,202} and bool(payload_cleared)
+ except:return False
 def sender_start_url(task):
  canonical=str((task or {}).get('canonical_url') or '');domain=str((task or {}).get('official_domain') or host(canonical));proof=str((task or {}).get('proof_url') or '')
  if bool((task or {}).get('proof_confirm_step')):return canonical
@@ -437,18 +445,19 @@ async def click_and_evidence(page,loc,message,email,before_text):
   except:return False
  corr3xx=[x for x in responses if x['matches_form_payload'] and 300<=x['status']<400]
  corr204=any(x['matches_form_payload'] and x['status']==204 for x in responses)
+ corr_created=any(x['matches_form_payload'] and strong_http_accept(x['status'],payload_cleared) for x in responses)
  redirect_completion=any(pathmatch(COMPLETION_PATH,x.get('location')) for x in corr3xx)
  redirect_success_query=any(bool(SUCCESS_QUERY.search(str(x.get('location') or ''))) for x in corr3xx)
- redirect_confirm=any(pathmatch(CONFIRM_PATH,x.get('location')) for x in corr3xx)
+ redirect_confirm=any(is_confirm_url(x.get('location')) for x in corr3xx)
  final_completion=pathmatch(COMPLETION_PATH,page.url)
  final_success_query=bool(SUCCESS_QUERY.search(str(page.url or '')))
  try:
   bu=urlsplit(before_url);au=urlsplit(str(page.url or ''));path_changed=(bu.netloc==au.netloc and (bu.path.rstrip('/') or '/')!=(au.path.rstrip('/') or '/'))
  except:path_changed=False
- correlated_2xx_navigation=bool(corr2xx and path_changed and not pathmatch(CONFIRM_PATH,page.url))
- correlated_3xx_cleared=bool(corr3xx and payload_cleared and not redirect_confirm and not pathmatch(CONFIRM_PATH,page.url))
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
- if (provider_success or new_success or corr204 or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation or correlated_3xx_cleared) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
+ correlated_2xx_navigation=bool(corr2xx and path_changed and not is_confirm_url(page.url))
+ correlated_3xx_cleared=bool(corr3xx and payload_cleared and not redirect_confirm and not is_confirm_url(page.url))
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':any(x['matches_form_payload'] for x in mutations),'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_request_created':corr_created,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'server_success':provider_success,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ if (provider_success or new_success or corr204 or corr_created or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation or correlated_3xx_cleared) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):

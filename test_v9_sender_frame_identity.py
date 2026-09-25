@@ -65,5 +65,16 @@ class SenderFrameIdentityTests(unittest.TestCase):
         src=Path('v9_send_worker.py').read_text()
         self.assertGreaterEqual(src.count("closest('td')?.previousElementSibling?.innerText"),3)
 
+    def test_query_confirmation_url_is_detected(self):
+        self.assertTrue(w.is_confirm_url('https://example.com/contact/?mode=check#form'))
+        self.assertTrue(w.is_confirm_url('https://example.com/contact/confirm/'))
+        self.assertFalse(w.is_confirm_url('https://example.com/contact/?mode=send'))
+
+    def test_created_response_requires_payload_clear(self):
+        self.assertTrue(w.strong_http_accept(201,True))
+        self.assertTrue(w.strong_http_accept(202,True))
+        self.assertFalse(w.strong_http_accept(200,True))
+        self.assertFalse(w.strong_http_accept(201,False))
+
 if __name__=='__main__':
     unittest.main()
