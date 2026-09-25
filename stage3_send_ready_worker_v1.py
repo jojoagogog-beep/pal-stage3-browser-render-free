@@ -306,15 +306,16 @@ def safe_consent_radio_choice(members):
     return None
 
 def normalized_control_text(value):
-    return re.sub(r'\s+',' ',str(value or '')).strip().casefold()
+    return re.sub(r'\s+','',str(value or '')).strip().casefold()
 
 def safe_confirm_text(value):
-    text=str(value or '')
-    if not CONFIRM.search(text):
+    text=str(value or '');compact=re.sub(r'\s+','',text)
+    if not (CONFIRM.search(text) or CONFIRM.search(compact)):
         return False
     # A control that already explicitly says "send/submit" is a final action,
     # not a harmless confirmation step.
-    if re.search(r'(この内容で送信|内容を送信|送信する|確認して送信|送信$|\bsend\b|\bsubmit\b|確定)',text,re.I):
+    if (re.search(r'(この内容で送信|内容を送信|送信する|確認して送信|送信$|\bsend\b|\bsubmit\b|確定)',text,re.I)
+            or re.search(r'(この内容で送信|内容を送信|送信する|確認して送信|送信$|send|submit|確定)',compact,re.I)):
         return False
     return True
 
@@ -337,12 +338,12 @@ def final_control_candidates(controls):
     controls=[x for x in (controls or []) if isinstance(x,dict)]
     finals=[]
     for x in controls:
-        semantic=control_semantic_text(x)
-        if not FINAL.search(semantic):
+        semantic=control_semantic_text(x);compact=re.sub(r'\s+','',semantic)
+        if not (FINAL.search(semantic) or FINAL.search(compact)):
             continue
-        if NONFINAL.search(semantic) and not re.search(
+        if (NONFINAL.search(semantic) or NONFINAL.search(compact)) and not re.search(
                 r'(確認して送信|確認のうえ送信|confirm.{0,12}send|send.{0,12}confirm)',
-                semantic,re.I):
+                compact,re.I):
             continue
         # Explicitly-labelled JS final buttons are common after a confirm
         # step. Keep image inputs excluded because their semantic label can
@@ -354,8 +355,8 @@ def final_control_candidates(controls):
         return finals
     fallback=[]
     for x in controls:
-        semantic=control_semantic_text(x)
-        if NONFINAL.search(semantic):
+        semantic=control_semantic_text(x);compact=re.sub(r'\s+','',semantic)
+        if NONFINAL.search(semantic) or NONFINAL.search(compact):
             continue
         if re.search(r'(コメント|comment|レビュー|review|reset|clear)',semantic,re.I):
             continue

@@ -35,7 +35,7 @@ BOT_HINT=re.compile(r'(?:captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?r
 SUCCESS=re.compile(r'(送信が完了|送信完了|お問い合わせ.{0,30}(?:ありがとう|受け付け|受付)|thank\s+you.{0,80}(?:for\s+(?:your\s+)?(?:message|inquir(?:y|ies)|enquir(?:y|ies)|contacting\s+us)|we\s+(?:have|\'ve)\s+received|(?:message|inquir(?:y|ies)|request).{0,30}(?:received|sent|submitted))|we(?:\'ve|\s+have)\s+received\s+your\s+(?:e-?mail|message|inquir(?:y|ies)|enquir(?:y|ies)|request)|(?:message|inquir(?:y|ies)|request).{0,80}(?:sent|received|submitted)|successfully\s+(?:sent|submitted))',re.I)
 FAIL=re.compile(r'(入力してください|未入力|入力.{0,20}エラー|エラーがあります|必須(?:項目)?です|必須項目|正しく入力|入力内容.{0,20}(?:誤|エラー)|ご確認の上.{0,40}(?:修正|戻る)|required field|(?:phone(?:\s+number)?|telephone|mobile|address|postal(?:\s+code)?|postcode|zip).{0,30}(?:is\s+)?required|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid|submission.{0,24}(?:rejected|failed|declined))',re.I)
 FINAL=re.compile(r'(この内容で送信|内容を送信|確認して送信|送信する|^送信$|send\s*(?:message|inquiry|enquiry)?$|submit\s*(?:message|inquiry|enquiry|form)?$)',re.I)
-CONFIRM=re.compile(r'(確認画面(?:へ|に(?:進む|進める)?)|入力内容を確認|内容を確認|確認する|confirm|review|next|次へ)',re.I)
+CONFIRM=re.compile(r'(確認画面(?:へ|に(?:進む|進める)?)|入力内容(?:を)?確認|内容(?:を)?確認|確認(?:する|へ)?|confirm|review|next|次へ)',re.I)
 CONFIRM_PAGE_TEXT=re.compile(r'(入力内容.{0,40}(?:ご確認|確認)|入力内容のご確認|よろしければ.{0,30}(?:送信|send)|(?:review|confirm).{0,50}(?:information|details|内容).{0,80}(?:send|submit)|please.{0,60}(?:review|confirm).{0,80}(?:send|submit))',re.I)
 REJECT_CONTROL=re.compile(r'(戻る|back|cancel|修正|reset|clear|クリア)',re.I)
 SAFE_CHOICE=re.compile(r'(general|other|business|partnership|collaboration|inquiry|enquiry|contact|その他|一般|法人|協業|提携|ご相談)',re.I)
@@ -522,14 +522,17 @@ async def fill_form(page,form,message,email,market):
   except Exception as ex:
    if req:required_unknown.append((d or type(ex).__name__)[:160])
  return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}
+def compact_control_text(value):
+ return re.sub(r'\s+','',str(value or '')).casefold()
+
 def control_is_confirm(label,desc_text=''):
  label=' '.join(str(label or '').split())[:300]
  d=' '.join(str(desc_text or '').split())[:500]
- probe=label or d
- if not CONFIRM.search(probe):return False
+ probe=label or d;compact=compact_control_text(probe);label_compact=compact_control_text(label)
+ if not (CONFIRM.search(probe) or CONFIRM.search(compact)):return False
  # Visible wording wins over internal names such as submitConfirm.
  # A genuinely final label such as 「確認して送信」 remains final.
- if FINAL.search(label):return False
+ if FINAL.search(label) or FINAL.search(label_compact):return False
  return True
 
 async def control(form,kind='final'):
@@ -551,7 +554,7 @@ async def control(form,kind='final'):
   if kind=='confirm':
    if is_confirm:semantic.append((i,xs.nth(i),d))
    continue
-  explicit_final=bool(FINAL.search(d) or re.fullmatch(r'送信',compact,re.I))
+  explicit_final=bool(FINAL.search(d) or FINAL.search(compact) or re.fullmatch(r'送信',compact,re.I))
   if explicit_final and not is_confirm:semantic.append((i,xs.nth(i),d))
   elif typ=='submit' and not is_confirm:fallback.append((i,xs.nth(i),d))
  if len(semantic)==1:return semantic[0]
