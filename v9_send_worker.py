@@ -43,6 +43,7 @@ UNSAFE_CHOICE=re.compile(r'(job|career|employment|採用|求人|support|customer
 CONSENT_OK=re.compile(r'(privacy|terms|policy|consent|agree(?:ment)?|個人情報|プライバシー|規約|同意)',re.I)
 CONSENT_BAD=re.compile(r'(newsletter|marketing|promotional|メルマガ|広告|案内を受け取|subscribe)',re.I)
 SUBMIT_CONFIRM_CHECK=re.compile(r'(上記の内容でよろしければ|チェック.{0,40}(?:送信|send)|(?:送信|send).{0,40}(?:チェック|check)|confirm.{0,30}(?:submit|send))',re.I)
+EMAIL_CLIENT_FORM=re.compile(r'(opens?\s+(?:your\s+)?email\s+client|email\s+draft.{0,50}(?:ready|send)|hit\s+send\s+in\s+your\s+mail\s+client|mailto:)',re.I)
 COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
 ERROR_PATH=re.compile(r'/(?:error|failed|failure|invalid|reject(?:ed)?)(?:[._/-]|$)',re.I)
 CONFIRM_PATH=re.compile(r'/(?:confirm|confirmation|review|check)(?:/|$)',re.I)
@@ -95,6 +96,14 @@ def is_confirm_url(u):
 def strong_http_accept(status,payload_cleared):
  try:return int(status) in {201,202} and bool(payload_cleared)
  except:return False
+
+def provider_app_status(payload):
+ if not isinstance(payload,dict):return ''
+ for key in ('status','result','state'):
+  v=payload.get(key)
+  if v not in (None,''):
+   return str(v).strip().lower()
+ return ''
 
 def pre_submit_http_verdict(status):
  try:s=int(status)
@@ -254,7 +263,7 @@ async def choose_form(page):
   rows=await page.evaluate("""() => {
     const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};
     const email=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;
-    const contact=/(contact|inquiry|enquiry|お問い合わせ|お問合せ|ご相談)/i;
+    const contact=/(contact|inquiry|enquiry|お問い合わせ|お問合せ|ご相談)/i,emailClient=/(opens?\\s+(?:your\\s+)?email\\s+client|email\\s+draft.{0,50}(?:ready|send)|hit\\s+send\\s+in\\s+your\\s+mail\\s+client|mailto:)/i;
     return [...document.querySelectorAll('form')].slice(0,20).map((f,fi)=>{
       const fs=getComputedStyle(f);if(fs.display==='none'||fs.visibility==='hidden') return null;
       let hasE=false,hasM=false;
@@ -265,6 +274,7 @@ async def choose_form(page):
         hasE=hasE||typ==='email'||email.test(d)||d.includes('@');hasM=hasM||e.tagName==='TEXTAREA'||msg.test(d);
       }
       const txt=(f.innerText||'').slice(0,5000);
+      if(emailClient.test(txt)) return null;
       return {fi,hasE,hasM,score:(hasE?5:0)+(hasM?5:0)+(contact.test(txt)?3:0)};
     }).filter(x=>x&&x.hasE&&x.hasM).sort((a,b)=>b.score-a.score);
   }""")
@@ -297,6 +307,9 @@ async def submitted_form_invalid_count(control):
   return 0
 async def proof_form_shape_ok(form,proof_submit_text=''):
  try:
+  try: form_text=' '.join((await form.inner_text(timeout=1200)).split())[:5000]
+  except Exception: form_text=''
+  if EMAIL_CLIENT_FORM.search(form_text):return False
   ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,...[...(e.labels||[])].map(l=>l.innerText||'')].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d)||d.includes('@');M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
   if not ok:return False
   expected=normalize_proof_submit_text(proof_submit_text)
@@ -666,7 +679,7 @@ async def click_and_evidence(page,loc,message,email,before_text):
    raw=(await asyncio.wait_for(resp.text(),1.5))[:65536]
    st='';body_success=False;body_fail=False
    try:
-    o=json.loads(raw);st=str(o.get('status') or '').lower() if isinstance(o,dict) else ''
+    o=json.loads(raw);st=provider_app_status(o)
    except Exception:
     clean=' '.join(re.sub(r'<[^>]+>',' ',raw).split())
     sm=SUCCESS.search(clean);fm=FAIL.search(clean)
