@@ -783,11 +783,10 @@ def background_pump():
             body,code=execute_lane(lane)
             summary=body.get('worker_summary') or {}
             _record_lane_result(lane,summary,code)
-            # Shard1 must not starve the revenue sender behind an indefinitely
-            # renewed Browser lease. A queued sender gets the next heavy slot
-            # after exactly one completed Browser quantum. RUN_LOCK still
-            # guarantees Browser and sender can never overlap.
-            if not STAGE2_PRIMARY_ROLE and _v9_send_pending_snapshot() is not None:
+            # Revenue sender outranks Browser proof on both shards. A queued
+            # sender gets the next heavy slot after one completed Browser quantum.
+            # RUN_LOCK still guarantees Browser and sender never overlap.
+            if _v9_send_pending_snapshot() is not None:
                 _release_idle_browser_priority()
                 with STATE_LOCK:
                     STATE['idle_exit_reason']='YIELD_TO_WAITING_V9_SENDER'
