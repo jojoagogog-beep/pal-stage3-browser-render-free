@@ -228,6 +228,14 @@ def normalize_proof_submit_text(v):
  return re.sub(r'\s*__[A-Z0-9_]+__\s*$','',s,flags=re.I).strip().lower()
 def post_submit_validation(new_validation_text,invalid_control_count,provider_success,new_success,payload_cleared):
  return bool(new_validation_text or (int(invalid_control_count or 0)>0 and not ((provider_success or new_success) and payload_cleared)))
+
+async def submitted_form_invalid_count(control):
+ # Scope validation to the form actually submitted. Unrelated newsletter/login
+ # forms may be :invalid and must not turn a successful contact submit into a failure.
+ try:
+  return int(await control.evaluate("""e=>{const f=e&&e.closest?e.closest('form'):null;return f?f.querySelectorAll('input:invalid,textarea:invalid,select:invalid').length:0}"""))
+ except Exception:
+  return 0
 async def proof_form_shape_ok(form,proof_submit_text=''):
  try:
   ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,...[...(e.labels||[])].map(l=>l.innerText||'')].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d)||d.includes('@');M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
@@ -548,8 +556,7 @@ async def click_and_evidence(page,loc,message,email,before_text):
  success_match=(after_success.group(0)[:240] if after_success else '')
  failure_match=(after_fail.group(0)[:240] if after_fail else '')
  final_text_excerpt=after[:1600]
- try: invalid_control_count=await page.locator('input:invalid,textarea:invalid,select:invalid').count()
- except: invalid_control_count=0
+ invalid_control_count=await submitted_form_invalid_count(loc)
  try:
   payload_values_remaining=await page.locator('input,textarea').evaluate_all("(els,a)=>els.filter(e=>{const v=String(e.value||'');return v===String(a.email||'')||v===String(a.message||'')}).length",{'email':email,'message':message})
  except: payload_values_remaining=-1

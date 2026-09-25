@@ -70,6 +70,12 @@ class SenderFrameIdentityTests(unittest.TestCase):
         self.assertTrue(w.is_confirm_url('https://example.com/contact/confirm/'))
         self.assertFalse(w.is_confirm_url('https://example.com/contact/?mode=send'))
 
+    def test_submit_validation_is_scoped_to_clicked_form(self):
+        src=Path('v9_send_worker.py').read_text()
+        self.assertIn("invalid_control_count=await submitted_form_invalid_count(loc)",src)
+        self.assertIn("e.closest('form')",src)
+        self.assertNotIn("invalid_control_count=await page.locator('input:invalid,textarea:invalid,select:invalid').count()",src)
+
     def test_created_response_requires_payload_clear(self):
         self.assertTrue(w.strong_http_accept(201,True))
         self.assertTrue(w.strong_http_accept(202,True))
