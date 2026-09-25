@@ -360,6 +360,16 @@ async def fill_form(page,form,message,email,market):
   except Exception as ex:
    if req:required_unknown.append((d or type(ex).__name__)[:160])
  return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}
+def control_is_confirm(label,desc_text=''):
+ label=' '.join(str(label or '').split())[:300]
+ d=' '.join(str(desc_text or '').split())[:500]
+ probe=label or d
+ if not CONFIRM.search(probe):return False
+ # Visible wording wins over internal names such as submitConfirm.
+ # A genuinely final label such as 「確認して送信」 remains final.
+ if FINAL.search(label):return False
+ return True
+
 async def control(form,kind='final'):
  xs=form.locator('button,input[type=submit],input[type=button],input[type=image]');semantic=[];fallback=[]
  try:
@@ -367,14 +377,15 @@ async def control(form,kind='final'):
     const s=getComputedStyle(e),r=e.getBoundingClientRect();
     return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
       enabled:!e.disabled,d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' '),
+      label:[e.getAttribute('aria-label'),e.value,e.innerText,e.placeholder].filter(Boolean).join(' '),
       typ:(e.getAttribute('type')||'').toLowerCase()};
   })""")
  except Exception:return None
  for m in meta:
   if not m.get('visible') or not m.get('enabled'):continue
-  i=int(m.get('i') or 0);d=' '.join(str(m.get('d') or '').split())[:500];typ=str(m.get('typ') or '');compact=re.sub(r'\s+','',d)
+  i=int(m.get('i') or 0);d=' '.join(str(m.get('d') or '').split())[:500];label=' '.join(str(m.get('label') or '').split())[:300];typ=str(m.get('typ') or '');compact=re.sub(r'\s+','',d)
   if REJECT_CONTROL.search(d):continue
-  is_confirm=bool(CONFIRM.search(d) and not re.search(r'(送\\s*信|send|submit)',d,re.I))
+  is_confirm=control_is_confirm(label,d)
   if kind=='confirm':
    if is_confirm:semantic.append((i,xs.nth(i),d))
    continue
@@ -392,9 +403,9 @@ async def final_control_matching_text(form,expected_text=''):
   e=xs.nth(i)
   try:
    if not await e.is_visible() or not await e.is_enabled():continue
-   d=' '.join((await desc(e)).split());low=d.lower();typ=(await e.get_attribute('type') or '').lower();compact=re.sub(r'\\s+','',d)
+   d=' '.join((await desc(e)).split());label=' '.join(str(await e.evaluate("e=>[e.getAttribute('aria-label'),e.value,e.innerText,e.placeholder].filter(Boolean).join(' ')") or '').split());low=d.lower();typ=(await e.get_attribute('type') or '').lower();compact=re.sub(r'\\s+','',d)
    if REJECT_CONTROL.search(d):continue
-   is_confirm=bool(CONFIRM.search(d) and not re.search(r'(送\\s*信|send|submit)',d,re.I))
+   is_confirm=control_is_confirm(label,d)
    is_final=bool(FINAL.search(d) or re.fullmatch(r'送信',compact,re.I) or typ=='submit') and not is_confirm
    if is_final and low and (expected==low or expected in low or low in expected):hits.append((i,e,d))
   except:continue
