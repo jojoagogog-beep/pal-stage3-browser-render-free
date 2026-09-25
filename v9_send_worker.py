@@ -35,6 +35,7 @@ SUCCESS=re.compile(r'(送信が完了|送信完了|お問い合わせ.{0,30}(?:�
 FAIL=re.compile(r'(入力してください|未入力|入力.{0,20}エラー|エラーがあります|必須(?:項目)?です|必須項目|正しく入力|入力内容.{0,20}(?:誤|エラー)|ご確認の上.{0,40}(?:修正|戻る)|required field|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid)',re.I)
 FINAL=re.compile(r'(この内容で送信|内容を送信|確認して送信|送信する|^送信$|send\s*(?:message|inquiry|enquiry)?$|submit\s*(?:message|inquiry|enquiry|form)?$)',re.I)
 CONFIRM=re.compile(r'(確認画面(?:へ|に(?:進む|進める)?)|入力内容を確認|内容を確認|確認する|confirm|review|next|次へ)',re.I)
+CONFIRM_PAGE_TEXT=re.compile(r'(入力内容.{0,40}(?:ご確認|確認)|入力内容のご確認|よろしければ.{0,30}(?:送信|send)|(?:review|confirm).{0,50}(?:information|details|内容).{0,80}(?:send|submit)|please.{0,60}(?:review|confirm).{0,80}(?:send|submit))',re.I)
 REJECT_CONTROL=re.compile(r'(戻る|back|cancel|修正|reset|clear|クリア)',re.I)
 SAFE_CHOICE=re.compile(r'(general|other|business|partnership|collaboration|inquiry|enquiry|contact|その他|一般|法人|協業|提携|ご相談)',re.I)
 UNSAFE_CHOICE=re.compile(r'(job|career|employment|採用|求人|support|customer service|technical support|newsletter|marketing|subscribe|個人|患者|student)',re.I)
@@ -687,7 +688,8 @@ async def process_task(browser,t):
    corr_redirect=any(x.get('matches_form_payload') and 300<=int(x.get('status') or 0)<400 for x in (cev.get('network_responses') or []))
    try:confirm_landed=bool(CONFIRM_PATH.search(urlsplit(str(cev.get('final_url') or '')).path or '/'))
    except Exception:confirm_landed=False
-   confirm_transition=bool(cev.get('submit_redirect_confirm') or confirm_landed or corr_redirect)
+   confirm_text=bool(CONFIRM_PAGE_TEXT.search(str(cev.get('final_text_excerpt') or '')))
+   confirm_transition=bool(cev.get('submit_redirect_confirm') or confirm_landed or corr_redirect or confirm_text)
    if not (confirm_transition and not cev.get('validation_error') and not cev.get('server_not_sent')):
     return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'CONFIRM_AMBIGUOUS','evidence':{**cev,'confirm_action':confirm_action,'confirm_transition':confirm_transition}}
    await page.wait_for_timeout(500)
