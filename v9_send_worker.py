@@ -37,7 +37,7 @@ CONFIRM=re.compile(r'(確認画面へ|入力内容を確認|内容を確認|確�
 REJECT_CONTROL=re.compile(r'(戻る|back|cancel|修正|reset|clear|クリア)',re.I)
 SAFE_CHOICE=re.compile(r'(general|other|business|partnership|collaboration|inquiry|enquiry|contact|その他|一般|法人|協業|提携|ご相談)',re.I)
 UNSAFE_CHOICE=re.compile(r'(job|career|employment|採用|求人|support|customer service|technical support|newsletter|marketing|subscribe|個人|患者|student)',re.I)
-CONSENT_OK=re.compile(r'(privacy|terms|policy|個人情報|プライバシー|規約|同意)',re.I)
+CONSENT_OK=re.compile(r'(privacy|terms|policy|consent|agree(?:ment)?|個人情報|プライバシー|規約|同意)',re.I)
 CONSENT_BAD=re.compile(r'(newsletter|marketing|promotional|メルマガ|広告|案内を受け取|subscribe)',re.I)
 COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
 CONFIRM_PATH=re.compile(r'/(?:confirm|confirmation|review|check)(?:/|$)',re.I)
@@ -185,7 +185,7 @@ async def fill_form(page,form,message,email,market):
     const s=getComputedStyle(e),r=e.getBoundingClientRect();
     return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
       enabled:!e.disabled,tag:e.tagName.toLowerCase(),typ:(e.getAttribute('type')||e.tagName).toLowerCase(),
-      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' '),
+      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
       cls:String(e.className||''),required:!!e.required||e.getAttribute('aria-required')==='true',
       options:e.tagName==='SELECT'?[...e.options].map(o=>o.textContent||''):[]};
   })""")
@@ -375,9 +375,22 @@ async def process_task(browser,t):
  try:
   ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(3000)
   await page.route('**/*',lambda route: route.abort() if route.request.resource_type in {'image','media','font'} else route.continue_())
-  nav_timeout=False
-  try:await page.goto(url,wait_until='domcontentloaded',timeout=14000)
-  except PlaywrightTimeoutError:nav_timeout=True
+  nav_timeout=False;nav_alias_fallback=False
+  try:
+   await page.goto(url,wait_until='domcontentloaded',timeout=14000)
+  except PlaywrightTimeoutError:
+   nav_timeout=True
+  except Exception as nav_exc:
+   msg=str(nav_exc);u=urlsplit(url);fallback=''
+   if (u.scheme.lower()=='https' and u.hostname and not u.hostname.lower().startswith('www.')
+       and re.search(r'net::ERR_(?:CERT_AUTHORITY_INVALID|CERT_COMMON_NAME_INVALID|NAME_NOT_RESOLVED)',msg,re.I)):
+    fallback=u._replace(netloc='www.'+str(u.netloc)).geturl()
+   if fallback and host(fallback)==domain:
+    nav_alias_fallback=True;url=fallback
+    try:await page.goto(fallback,wait_until='domcontentloaded',timeout=14000)
+    except PlaywrightTimeoutError:nav_timeout=True
+   else:
+    raise
   await page.wait_for_timeout(600 if nav_timeout else (800 if str(t.get('proof_lane') or '')=='FAST_DOM' else 1600))
   if host(page.url)!=domain:return {**out,'outcome':'SAFETY_BLOCKED','reason':'DOMAIN_CHANGED','evidence':{'final_url':page.url[:500]}}
   txt=await body_text(page,3500)
@@ -452,7 +465,10 @@ async def process_task(browser,t):
   outcome,ev=await click_and_evidence(page,final[1],str(t['message_body']),str(t.get('reply_address') or ''),before)
   return {**out,'outcome':outcome,'reason':'FINAL_CLICK_'+outcome,'evidence':ev}
  except Exception as e:
-  if MODE=='PRODUCTION' and not click_barrier:return {**out,'outcome':'TECH_RETRY','reason':'WORKER_EXCEPTION_PRE_CLICK_'+type(e).__name__.upper(),'evidence':{'pre_submit':True,'detail':str(e)[:240]}}
+  detail=str(e)[:240]
+  if MODE=='PRODUCTION' and not click_barrier and re.search(r'ERR_CERT_(?:AUTHORITY_INVALID|COMMON_NAME_INVALID|DATE_INVALID|INVALID)',detail,re.I):
+   return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'TLS_INVALID_PRE_SUBMIT','evidence':{'pre_submit':True,'detail':detail}}
+  if MODE=='PRODUCTION' and not click_barrier:return {**out,'outcome':'TECH_RETRY','reason':'WORKER_EXCEPTION_PRE_CLICK_'+type(e).__name__.upper(),'evidence':{'pre_submit':True,'detail':detail}}
   return {**out,'outcome':('AMBIGUOUS_HOLD' if MODE=='PRODUCTION' else 'SHADOW_PREPARED'),'reason':'WORKER_EXCEPTION_'+type(e).__name__.upper(),'evidence':{'detail':str(e)[:240],'click_started':bool(click_barrier)}}
  finally:
   if ctx:
