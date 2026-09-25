@@ -1,6 +1,6 @@
 from __future__ import annotations
 import asyncio,json,os,re,time,hashlib,hmac,threading
-from urllib.parse import urlsplit,unquote_plus
+from urllib.parse import urlsplit,unquote_plus,urljoin
 from pathlib import Path
 import requests
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
@@ -54,6 +54,27 @@ def is_confirm_url(u):
 def strong_http_accept(status,payload_cleared):
  try:return int(status) in {201,202} and bool(payload_cleared)
  except:return False
+
+def field_required_hint(explicit=False,cls='',desc=''):
+ class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in str(cls or '').split())
+ d=str(desc or '')
+ return bool(explicit or class_required or (re.search(r'(必須|required|mandatory|※)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
+
+def same_form_redirect_failure(before_url,responses,payload_values_remaining,has_success=False):
+ if has_success or int(payload_values_remaining or 0)<=0:return False
+ try:
+  b=urlsplit(str(before_url or ''));bp=(b.path.rstrip('/') or '/')
+ except:return False
+ for x in responses or []:
+  try:
+   if not x.get('matches_form_payload') or not (300<=int(x.get('status') or 0)<400):continue
+   loc=str(x.get('location') or '')
+   if not loc:continue
+   absolute=urljoin(str(before_url or ''),loc);u=urlsplit(absolute);up=(u.path.rstrip('/') or '/')
+   if host(absolute)==host(before_url) and up==bp:return True
+  except:continue
+ return False
+
 def sender_start_url(task):
  canonical=str((task or {}).get('canonical_url') or '');domain=str((task or {}).get('official_domain') or host(canonical));proof=str((task or {}).get('proof_url') or '')
  if bool((task or {}).get('proof_confirm_step')):return canonical
@@ -286,7 +307,7 @@ async def fill_form(page,form,message,email,market):
     const s=getComputedStyle(e),r=e.getBoundingClientRect();
     return {i,visible:s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0,
       enabled:!e.disabled,name:e.name||'',id:e.id||'',tag:e.tagName.toLowerCase(),typ:(e.getAttribute('type')||e.tagName).toLowerCase(),
-      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,e.closest('.contactConfirmWrap')?.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
+      d:[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,e.closest('dd')?.previousElementSibling?.innerText,e.closest('dl')?.querySelector('dt')?.innerText,e.closest('.contactConfirmWrap')?.innerText,...[...(e.labels||[])].map(l=>l.innerText||''),e.closest('label')?.innerText||''].filter(Boolean).join(' '),
       cls:String(e.className||''),required:!!e.required||e.getAttribute('aria-required')==='true',
       options:e.tagName==='SELECT'?[...e.options].map(o=>o.textContent||''):[]};
   })""")
@@ -297,8 +318,7 @@ async def fill_form(page,form,message,email,market):
   try:
    if not m.get('visible') or not m.get('enabled'):continue
    i=int(m.get('i') or 0);e=fields.nth(i);tag=str(m.get('tag') or '');typ=str(m.get('typ') or tag);d=' '.join(str(m.get('d') or '').split())[:500];cls=str(m.get('cls') or '')
-   class_required=any(re.fullmatch(r'(?:required|mandatory|hissu(?:val)?|req(?:uired)?(?:field)?)',tok,re.I) for tok in cls.split())
-   req=bool(m.get('required') or class_required or (re.search(r'(必須|required|mandatory)',d,re.I) and not re.search(r'(任意|optional)',d,re.I)))
+   req=field_required_hint(bool(m.get('required')),cls,d)
    if time.monotonic()>fill_deadline:return {'ok':False,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'timed_out':True}
    core=bool(typ in {'email','url'} or EMAIL.search(d) or EMAIL_EXAMPLE.search(d) or tag=='textarea' or MESSAGE.search(d)
              or COMPANY.search(d) or FIRST_NAME.search(d) or LAST_NAME.search(d)
@@ -530,9 +550,10 @@ async def click_and_evidence(page,loc,message,email,before_text):
  except:path_changed=False
  correlated_2xx_navigation=bool(corr2xx and path_changed and not is_confirm_url(page.url))
  correlated_3xx_cleared=bool(corr3xx and payload_cleared and not redirect_confirm and not is_confirm_url(page.url))
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':correlated_mutation,'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_request_created':corr_created,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'server_success':provider_success,'provider_confirmation_dom':provider_confirmation_dom,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ same_form_reject=same_form_redirect_failure(before_url,responses,payload_values_remaining,bool(provider_success or provider_confirmation_dom or new_success))
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':correlated_mutation,'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_request_created':corr_created,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'same_form_redirect_failure':same_form_reject,'server_success':provider_success,'provider_confirmation_dom':provider_confirmation_dom,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
  if (provider_success or provider_confirmation_dom or new_success or corr204 or corr_created or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation or correlated_3xx_cleared) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
- if provider_fail or corr4xx or validation:return 'CONFIRMED_NOT_SENT',ev
+ if provider_fail or corr4xx or validation or same_form_reject:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):
  if MODE!='PRODUCTION' or task.get('submit_started') is True:return task
