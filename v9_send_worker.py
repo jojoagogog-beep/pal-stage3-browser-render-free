@@ -33,7 +33,7 @@ URLRX=re.compile(r'(website|web.?site|url|サイト)',re.I)
 CAPTCHA_SEL='.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey],iframe[src*="recaptcha"],iframe[src*="hcaptcha"]'
 BOT_HINT=re.compile(r'(?:captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|chk[-_ ]?not[-_ ]?robot|human[-_ ]?(?:check|verification)|help\s+us\s+prevent\s+spam|anti[- ]?spam|spam\s+(?:check|question|protection)|security\s+(?:question|check)|which\s+is\s+(?:bigger|larger|smaller)|what\s+is\s+\d+\s*[+\-x×*]\s*\d+|\bquiz\b)',re.I)
 SUCCESS=re.compile(r'(送信が完了|送信完了|お問い合わせ.{0,30}(?:ありがとう|受け付け|受付)|thank\s+you.{0,80}(?:for\s+(?:your\s+)?(?:message|inquir(?:y|ies)|enquir(?:y|ies)|contacting\s+us)|we\s+(?:have|\'ve)\s+received|(?:message|inquir(?:y|ies)|request).{0,30}(?:received|sent|submitted))|we\s+(?:have|\'ve)\s+received\s+your\s+(?:e-?mail|message|inquir(?:y|ies)|enquir(?:y|ies)|request)|(?:message|inquir(?:y|ies)|request).{0,80}(?:sent|received|submitted)|successfully\s+(?:sent|submitted))',re.I)
-FAIL=re.compile(r'(入力してください|未入力|入力.{0,20}エラー|エラーがあります|必須(?:項目)?です|必須項目|正しく入力|入力内容.{0,20}(?:誤|エラー)|ご確認の上.{0,40}(?:修正|戻る)|required field|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid)',re.I)
+FAIL=re.compile(r'(入力してください|未入力|入力.{0,20}エラー|エラーがあります|必須(?:項目)?です|必須項目|正しく入力|入力内容.{0,20}(?:誤|エラー)|ご確認の上.{0,40}(?:修正|戻る)|required field|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid|submission\s+rejected|something\s+went\s+wrong)',re.I)
 FINAL=re.compile(r'(この内容で送信|内容を送信|確認して送信|送信する|^送信$|send\s*(?:message|inquiry|enquiry)?$|submit\s*(?:message|inquiry|enquiry|form)?$)',re.I)
 CONFIRM=re.compile(r'(確認画面(?:へ|に(?:進む|進める)?)|入力内容を確認|内容を確認|確認する|confirm|review|next|次へ)',re.I)
 CONFIRM_PAGE_TEXT=re.compile(r'(入力内容.{0,40}(?:ご確認|確認)|入力内容のご確認|よろしければ.{0,30}(?:送信|send)|(?:review|confirm).{0,50}(?:information|details|内容).{0,80}(?:send|submit)|please.{0,60}(?:review|confirm).{0,80}(?:send|submit))',re.I)
@@ -44,6 +44,7 @@ CONSENT_OK=re.compile(r'(privacy|terms|policy|consent|agree(?:ment)?|個人情�
 CONSENT_BAD=re.compile(r'(newsletter|marketing|promotional|メルマガ|広告|案内を受け取|subscribe)',re.I)
 SUBMIT_CONFIRM_CHECK=re.compile(r'(上記の内容でよろしければ|チェック.{0,40}(?:送信|send)|(?:送信|send).{0,40}(?:チェック|check)|confirm.{0,30}(?:submit|send))',re.I)
 COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
+ERROR_PATH=re.compile(r'/(?:error|failed|failure|invalid|reject(?:ed)?)(?:[._/-]|$)',re.I)
 CONFIRM_PATH=re.compile(r'/(?:confirm|confirmation|review|check)(?:/|$)',re.I)
 CONFIRM_QUERY=re.compile(r'(?:[?&](?:mode|step|action)=)(?:check|confirm|confirmation|review)(?:&|#|$)',re.I)
 SUCCESS_QUERY=re.compile(r'(?:[?&](?:contact-form-sent|form[-_]?sent|submitted|submission[-_]?success|success)=)(?:1|true|yes|sent|success|\d+)(?:&|$)',re.I)
@@ -595,17 +596,19 @@ async def click_and_evidence(page,loc,message,email,before_text):
  redirect_confirm=any(is_confirm_url(x.get('location')) for x in corr3xx)
  final_completion=pathmatch(COMPLETION_PATH,page.url)
  final_success_query=bool(SUCCESS_QUERY.search(str(page.url or '')))
+ final_error_path=pathmatch(ERROR_PATH,page.url)
+ redirect_error=any(pathmatch(ERROR_PATH,x.get('location')) for x in corr3xx)
  try:
   bu=urlsplit(before_url);au=urlsplit(str(page.url or ''));path_changed=(bu.netloc==au.netloc and (bu.path.rstrip('/') or '/')!=(au.path.rstrip('/') or '/'))
  except:path_changed=False
- correlated_2xx_navigation=bool(corr2xx and path_changed and not is_confirm_url(page.url))
- correlated_3xx_cleared=bool(corr3xx and payload_cleared and not redirect_confirm and not is_confirm_url(page.url))
+ correlated_2xx_navigation=bool(corr2xx and path_changed and not is_confirm_url(page.url) and not final_error_path)
+ correlated_3xx_cleared=bool(corr3xx and payload_cleared and not redirect_confirm and not is_confirm_url(page.url) and not redirect_error and not final_error_path)
  has_success=bool(provider_success or provider_confirmation_dom or new_success)
  same_form_reject=same_form_redirect_failure(before_url,responses,payload_values_remaining,has_success)
  home_no_submit=home_navigation_without_submission(before_url,page.url,mutations,payload_values_remaining,has_success)
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':correlated_mutation,'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_request_created':corr_created,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'same_form_redirect_failure':same_form_reject,'home_navigation_without_submission':home_no_submit,'server_success':provider_success,'provider_confirmation_dom':provider_confirmation_dom,'server_not_sent':provider_fail or corr4xx,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':correlated_mutation,'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_request_created':corr_created,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'final_error_path':final_error_path,'redirect_error':redirect_error,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'same_form_redirect_failure':same_form_reject,'home_navigation_without_submission':home_no_submit,'server_success':provider_success,'provider_confirmation_dom':provider_confirmation_dom,'server_not_sent':provider_fail or corr4xx or final_error_path or redirect_error,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
  if (provider_success or provider_confirmation_dom or new_success or corr204 or corr_created or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation or correlated_3xx_cleared) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
- if provider_fail or corr4xx or validation or same_form_reject or home_no_submit:return 'CONFIRMED_NOT_SENT',ev
+ if ev['server_not_sent'] or validation or same_form_reject or home_no_submit:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):
  if MODE!='PRODUCTION' or task.get('submit_started') is True:return task

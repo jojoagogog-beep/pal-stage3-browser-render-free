@@ -256,6 +256,15 @@ FINAL=re.compile(r'(この内容で送信|内容を送信|送信する|送信|se
 NONFINAL=re.compile(r'(確認|confirm|next|次へ|preview|戻る|back|cancel|修正)',re.I)
 CONFIRM=re.compile(r'(確認画面(?:へ|に(?:進む|進める)?)|入力内容(?:を)?確認|内容(?:を)?確認|確認(?:する|へ)?|confirm|review|next|次へ)',re.I)
 COMPLETION_PATH=re.compile(r'/(?:thanks?|thank[-_]?you|complete(?:d)?|completion|success|sent)(?:/|$)',re.I)
+CONTACT_ROUTE_HINT=re.compile(r'(?:^|/)(?:contact|inquiry|enquiry)(?:[./_-]|$)',re.I)
+
+def contact_route_lost_to_home(before_url,after_url):
+    try:
+        b=urlsplit(str(before_url or '')); a=urlsplit(str(after_url or ''))
+        bp=b.path.rstrip('/') or '/'; ap=a.path.rstrip('/') or '/'
+        return host(before_url)==host(after_url) and bp!='/' and ap=='/' and bool(CONTACT_ROUTE_HINT.search(bp))
+    except Exception:
+        return False
 
 def is_completion_route(url):
     try:
@@ -775,6 +784,8 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             final_url=page.url
             if host(final_url)!=domain:
                 return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED','final_url':final_url,'stage3_send_ready':False}
+            if contact_route_lost_to_home(url,final_url):
+                return {**base,'status':'NO_SAFE_FORM','code':'CONTACT_ROUTE_LOST_TO_HOME','final_url':final_url,'stage3_send_ready':False,'send_ready_proof_v2':False}
             phase('body_text')
             # innerText can force a full layout flush and stall on JS-heavy pages.
             # For the page-level prohibition/safety scan, textContent is sufficient
