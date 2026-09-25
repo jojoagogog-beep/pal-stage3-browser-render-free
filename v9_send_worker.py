@@ -297,6 +297,54 @@ async def has_any_form(page):
   except Exception:pass
  return False
 
+async def advance_safe_multistep(page,proof_frame_index=None,proof_form_index=None,max_steps=3):
+ frames=ordered_form_frames(page,host(page.url))
+ try:pfr=int(proof_frame_index) if proof_frame_index is not None else -1
+ except:pfr=-1
+ try:pfi=int(proof_form_index) if proof_form_index is not None else -1
+ except:pfi=-1
+ targets=[]
+ if 0<=pfr<len(frames):
+  try:
+   forms=frames[pfr].locator('form')
+   if 0<=pfi<await forms.count():targets=[forms.nth(pfi)]
+  except Exception:pass
+ if not targets:
+  for root in frames[:6]:
+   try:
+    forms=root.locator('form')
+    for i in range(min(await forms.count(),4)):targets.append(forms.nth(i))
+   except Exception:pass
+ steps=0
+ for _ in range(max(0,int(max_steps))):
+  advanced=False
+  for form in targets:
+   try:
+    # Stop once the actual contact fields are visible; normal sender logic
+    # takes over from here.
+    core=await form.locator('input,textarea').evaluate_all("""els=>{
+      const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.disabled&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
+      let email=false,msg=false;
+      for(const e of els){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label')].filter(Boolean).join(' ');const t=(e.type||'').toLowerCase();email=email||t==='email'||/(e-?mail|メール)/i.test(d);msg=msg||e.tagName==='TEXTAREA'||/(message|inquir|enquir|お問い合わせ内容|問い合わせ内容|内容)/i.test(d)}
+      return {email,msg};
+    }""")
+    if core.get('email') and core.get('msg'):return steps
+    xs=form.locator('button,input[type=button]')
+    hits=[]
+    for i in range(min(await xs.count(),30)):
+     e=xs.nth(i)
+     if not await e.is_visible() or not await e.is_enabled():continue
+     typ=(await e.get_attribute('type') or 'button').lower()
+     if typ=='submit':continue
+     label=' '.join(str(await e.evaluate("e=>[e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ')") or '').split())
+     if re.fullmatch(r'(continue|next|次へ|続ける|進む)',label,re.I):hits.append(e)
+    if len(hits)!=1:continue
+    await hits[0].click(timeout=4000);await page.wait_for_timeout(500)
+    steps+=1;advanced=True;break
+   except Exception:continue
+  if not advanced:break
+ return steps
+
 async def reveal_candidate_forms(page,proof_frame_index=None,proof_form_index=None):
  frames=ordered_form_frames(page,host(page.url));targets=[]
  try:pfr=int(proof_frame_index);pfi=int(proof_form_index)
@@ -679,9 +727,15 @@ async def process_task(browser,t):
    if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'late_render':True}}
    chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
   if not chosen:
+   multistep_steps=await advance_safe_multistep(page,t.get('proof_frame_index'),t.get('proof_form_index'))
+   if multistep_steps:
+    chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+  else:
+   multistep_steps=0
+  if not chosen:
    await page.wait_for_timeout(900)
    chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
-  if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True}}
+  if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True,'multistep_steps':multistep_steps}}
   _,frame_i,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
   if fill.get('timed_out'):return {**out,'outcome':'TECH_RETRY','reason':'FILL_TIMEOUT_PRE_SUBMIT','evidence':{**fill,'pre_submit':True}}
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}

@@ -373,6 +373,63 @@ def strong_main_form_candidate(cand,frame_index):
     return ((kind=='DIRECT_SUBMIT' and score>=13)
             or (kind=='CONFIRM_STEP' and score>=12))
 
+async def advance_safe_multistep_roots(roots,max_steps=3):
+    """Advance only harmless non-submit wizard controls.
+
+    This is used for forms that hide the real contact fields behind one or more
+    Continue/Next steps. It never clicks submit/final controls.
+    """
+    steps=0
+    for _ in range(max(0,int(max_steps))):
+        advanced=False
+        for root in list(roots or [])[:8]:
+            try:
+                forms=root.locator('form')
+                for fi in range(min(await forms.count(),12)):
+                    form=forms.nth(fi)
+                    # If visible email + message fields already exist, normal
+                    # form scanning should take over without any more clicks.
+                    core=await form.locator('input,textarea').evaluate_all("""els=>{
+                      const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.disabled&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
+                      let email=false,msg=false;
+                      for(const e of els){if(!vis(e))continue;
+                        const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label')].filter(Boolean).join(' ');
+                        const t=(e.type||'').toLowerCase();
+                        email=email||t==='email'||/(e-?mail|メール)/i.test(d);
+                        msg=msg||e.tagName==='TEXTAREA'||/(message|inquir|enquir|お問い合わせ内容|問い合わせ内容|内容)/i.test(d);
+                      }
+                      return {email,msg};
+                    }""")
+                    if core.get('email') and core.get('msg'):
+                        return steps
+                    xs=form.locator('button,input[type=button]')
+                    hits=[]
+                    for i in range(min(await xs.count(),30)):
+                        e=xs.nth(i)
+                        if not await e.is_visible() or not await e.is_enabled():
+                            continue
+                        typ=(await e.get_attribute('type') or 'button').lower()
+                        if typ=='submit':
+                            continue
+                        label=' '.join(str(await e.evaluate(
+                            "e=>[e.getAttribute('aria-label'),e.value,e.innerText].filter(Boolean).join(' ')"
+                        ) or '').split())
+                        if re.fullmatch(r'(continue|next|次へ|続ける|進む)',label,re.I):
+                            hits.append(e)
+                    if len(hits)!=1:
+                        continue
+                    await hits[0].click(timeout=4000)
+                    await root.wait_for_timeout(450)
+                    steps+=1;advanced=True
+                    break
+                if advanced:
+                    break
+            except Exception:
+                continue
+        if not advanced:
+            break
+    return steps
+
 def lane_accept(rec):
     # Dispatcher emits lane-pure Browser tasks and stamps every route with the
     # authoritative lane_hint. Respect it first instead of re-deriving the lane
@@ -1048,9 +1105,26 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     best=cand
                 if strong_main_form_candidate(best,frame_index):
                     break
+            multistep_steps=0
+            if not best:
+                phase('safe_multistep')
+                multistep_steps=await advance_safe_multistep_roots(roots,3)
+                if multistep_steps:
+                    # Re-run the identical safety/form scan after harmless
+                    # non-submit wizard advancement.
+                    for frame_index,root in enumerate(roots):
+                        try:
+                            cand=await asyncio.wait_for(scan_root(root,frame_index),timeout=per_root_timeout)
+                        except Exception:
+                            cand=None
+                        if cand and (best is None or cand['score']>best['score']):
+                            best=cand
+                        if strong_main_form_candidate(best,frame_index):
+                            break
             if not best:
                 return {**base,'status':'NO_SAFE_FORM','code':'NO_DIRECT_SEND_READY_FORM',
                         'final_url':final_url,'stage3_send_ready':False,
+                        'multistep_steps':multistep_steps,
                         'form_scan_debug':scan_debug[:20]}
 
             active_root=roots[int(best.get('frame_index') or 0)]
