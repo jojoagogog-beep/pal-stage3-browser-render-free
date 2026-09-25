@@ -320,7 +320,7 @@ async def process_task(browser,t):
   if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True}}
   _,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
-  if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':fill}
+  if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':{**fill,'pre_submit':True}}
   await page.wait_for_timeout(250)
   if await visible_captcha(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_AFTER_FILL','evidence':{'pre_submit':True}}
   try:form_action=str(await form.get_attribute('action') or '')
