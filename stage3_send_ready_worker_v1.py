@@ -388,15 +388,23 @@ def retryable_confirm_control(target,control,frame_index):
         and confirm_control_matches(target,control_semantic_text(control))
     )
 
-async def wait_for_confirmation_ready(page,before_url,timeout_ms=4500):
+async def wait_for_confirmation_ready(page,before_url,timeout_ms=7500):
     deadline=time.monotonic()+max(0.5,float(timeout_ms)/1000.0)
-    saw_url_change=False; last_controls=[]
+    saw_url_change=False; last_controls=[]; load_state_waited=False
     while True:
         try:
             if str(page.url or '')!=str(before_url or ''):
                 saw_url_change=True
         except Exception:
             pass
+        if saw_url_change and not load_state_waited:
+            remaining=max(0.0,deadline-time.monotonic())
+            if remaining>0:
+                try:
+                    await page.wait_for_load_state('domcontentloaded',timeout=max(250,min(3500,int(remaining*1000))))
+                except Exception:
+                    pass
+            load_state_waited=True
         controls=[]
         try:
             for fi,root in enumerate(list(page.frames)[:4]):
@@ -1009,7 +1017,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                         return labs.some(l=>{const s=getComputedStyle(l),r=l.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0});
                       };
                       const desc=e=>{const id=e.id||'',lab=id?document.querySelector('label[for="'+CSS.escape(id)+'"]'):null;
-                        const labels=e.labels?[...e.labels].map(x=>x.innerText||'').join(' '):'';
+                        const labels=e.labels?[...e.labels].map(x=>(x.innerText||'').trim()).filter(Boolean).join(' ').trim():'';
                         const tr=e.closest('tr'),cell=e.closest('th,td');let rowLabel='',rowRequiredIcon=false,rowRequiredClass=false;
                         if(tr&&cell){const cells=[...tr.children],idx=cells.indexOf(cell);
                           const prior=(idx>0?cells.slice(0,idx):[]);
@@ -1043,7 +1051,13 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                             }
                           }}
                         const w=e.closest('label,.form-group,.form-row,.field,li,dl,dd,dt,p')||e.parentElement;
-                        let local=((lab&&lab.innerText)||labels||((w&&w.innerText)||'')).trim();if(local.length>300)local='';
+                        let local=(((lab&&lab.innerText)||'').trim()||labels||((w&&w.innerText)||'').trim());
+                        if(!local&&((e.type||'').toLowerCase()==='checkbox'||(e.type||'').toLowerCase()==='radio')){
+                          const gp=e.parentElement&&e.parentElement.parentElement;
+                          const gt=((gp&&gp.innerText)||'').trim();
+                          if(gt&&gt.length<=300)local=gt;
+                        }
+                        if(local.length>300)local='';
                         const self=[e.name||'',id,e.placeholder||'',e.getAttribute('aria-label')||'',(lab&&lab.innerText)||'',labels].join(' ');
                         return {self:self.slice(0,500),local:local.slice(0,500),rowLabel:rowLabel.slice(0,500),rowRequiredIcon:(rowRequiredIcon||rowRequiredClass)};
                       };
@@ -1447,7 +1461,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                             continue
                 if not clicked:
                     return {**base,'status':'TECH_DEFER','code':'CONFIRM_CONTROL_NOT_FOUND','final_url':final_url,'stage3_send_ready':False}
-                settle=await wait_for_confirmation_ready(page,confirm_before_url,4500)
+                settle=await wait_for_confirmation_ready(page,confirm_before_url,7500)
                 if not settle.get('ready'):
                     try:
                         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -1516,7 +1530,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                                   e.form.requestSubmit(e);
                                 }""")
                                 confirm_retry_used=True
-                                await wait_for_confirmation_ready(page,retry_before_url,4500)
+                                await wait_for_confirmation_ready(page,retry_before_url,7500)
                                 final_url=page.url
                                 if host(final_url)!=domain:
                                     return {**base,'status':'DOMAIN_CHANGED','code':'DOMAIN_CHANGED_AFTER_CONFIRM_RETRY','final_url':final_url,'stage3_send_ready':False}

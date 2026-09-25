@@ -55,5 +55,12 @@ class SemanticLabelTests(unittest.TestCase):
         for text in ('確認画面に進む','確認画面に進める','入力内容の確認画面へ'):
             self.assertIsNotNone(w.CONFIRM.search(text), text)
 
+    def test_choice_description_recovers_broken_nested_label_dom(self):
+        from pathlib import Path
+        src=Path('stage3_send_ready_worker_v1.py').read_text()
+        self.assertIn(".map(x=>(x.innerText||'').trim()).filter(Boolean).join(' ').trim()",src)
+        self.assertIn("const gp=e.parentElement&&e.parentElement.parentElement",src)
+        self.assertIn("if(gt&&gt.length<=300)local=gt",src)
+
 if __name__=="__main__":
     unittest.main()
