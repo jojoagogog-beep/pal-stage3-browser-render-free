@@ -14,8 +14,9 @@ AUTHORITY=os.environ.get('PAL_V9_PRODUCTION_AUTHORITY','GLOBAL_LEDGER_DO').strip
 FAILOVER_CONTROL_URL=os.environ.get('PAL_V9_FAILOVER_CONTROL_URL','').strip()
 FAILOVER_SECRET=os.environ.get('PAL_V9_FAILOVER_SECRET','')
 UA='Practical-AI-Lab-V9-Sender/1.0'
-MAX_TASKS_PER_TURN=max(1,min(8,int(os.environ.get('PAL_V9_SEND_MAX_TASKS','6') or 6)))
-SEND_CONCURRENCY=max(1,min(4,int(os.environ.get('PAL_V9_SEND_CONCURRENCY','3') or 3)))
+MAX_TASKS_PER_TURN=max(1,min(8,int(os.environ.get('PAL_V9_SEND_MAX_TASKS','4') or 4)))
+SEND_CONCURRENCY=max(1,min(4,int(os.environ.get('PAL_V9_SEND_CONCURRENCY','2') or 2)))
+SENDER_SHARD=0 if str(os.environ.get('PAL_V9_SENDER_SHARD','1')).strip()=='0' else 1
 PROHIBIT=re.compile(r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
 SENSITIVE=re.compile(r'(\bphone\b|\btel(?:ephone)?\b|\bmobile\b|携帯|電話|\baddress\b|\bpostal\b|\bzip\b|住所|都道府県|市区町村|番地|date of birth|生年月日|\bage\b|年齢)',re.I)
 EMAIL=re.compile(r'(e-?mail|メール)',re.I)
@@ -404,9 +405,9 @@ async def process_task(browser,t):
    try:await asyncio.wait_for(ctx.close(),timeout=4.0)
    except:pass
 async def main():
- q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1'][:MAX_TASKS_PER_TURN];results=[]
+ q=_get(TASK_URL);tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1' and int(x.get('sender_shard',1) or 1)==SENDER_SHARD][:MAX_TASKS_PER_TURN];results=[]
  if not tasks:
-  print(json.dumps({'status':'PASS','mode':MODE,'tasks':0,'results':[]},ensure_ascii=False));return
+  print(json.dumps({'status':'PASS','mode':MODE,'sender_shard':SENDER_SHARD,'tasks':0,'results':[]},ensure_ascii=False));return
  async with async_playwright() as p:
   chromium_path=(os.environ.get('PAL_CHROMIUM_PATH','').strip() or ('/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else ('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' if Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome').exists() else '')))
   launch_kw={'headless':True,'args':['--disable-dev-shm-usage','--no-sandbox']}
@@ -418,13 +419,28 @@ async def main():
    ready=[x for x in armed_all if x is not None]
    deferred=len(tasks)-len(ready)
    sem=asyncio.Semaphore(SEND_CONCURRENCY)
+   result_lock=asyncio.Lock()
+   async def publish_one(res):
+    async with result_lock:
+     for attempt in range(3):
+      try:
+       try:r=await asyncio.to_thread(_get,RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
+       except:prior=[]
+       tok=res.get('token_id');prior=[x for x in prior if x.get('token_id')!=tok]
+       await asyncio.to_thread(_put,RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+[res])[-256:]})
+       return True
+      except Exception:
+       if attempt<2:await asyncio.sleep(0.75*(attempt+1))
+     return False
    async def run_one(t):
     async with sem:
      try:
-      return await asyncio.wait_for(process_task(browser,t),timeout=90.0)
+      res=await asyncio.wait_for(process_task(browser,t),timeout=90.0)
      except asyncio.TimeoutError:
       clicked=t.get('click_started') is True
-      return {'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':('TASK_WALL_TIMEOUT_HOLD' if clicked else 'TASK_WALL_TIMEOUT_PRE_CLICK'),'evidence':({'wall_timeout_seconds':90,'resend_safe':False,'click_started':True} if clicked else {'wall_timeout_seconds':90,'pre_submit':True,'click_started':False})}
+      res={'kind':'PAL_V9_SEND_RESULT_V1','token_id':str(t.get('token_id') or ''),'company_key':str(t.get('company_key') or ''),'route_id':int(t.get('route_id') or 0),'at_epoch':int(time.time()),'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':('TASK_WALL_TIMEOUT_HOLD' if clicked else 'TASK_WALL_TIMEOUT_PRE_CLICK'),'evidence':({'wall_timeout_seconds':90,'resend_safe':False,'click_started':True} if clicked else {'wall_timeout_seconds':90,'pre_submit':True,'click_started':False})}
+     await publish_one(res)
+     return res
    if ready:
     results.extend(await asyncio.gather(*(run_one(t) for t in ready)))
   finally:
@@ -433,5 +449,5 @@ async def main():
  try:r=_get(RESULT_URL);prior=[x for x in (r.get('messages') or []) if isinstance(x,dict)]
  except:prior=[]
  keys={x.get('token_id') for x in results};prior=[x for x in prior if x.get('token_id') not in keys];_put(RESULT_URL,{'schema':'PAL_V9_SEND_RESULT_QUEUE_V1','updated_at_epoch':int(time.time()),'messages':(prior+results)[-256:]})
- print(json.dumps({'status':'PASS','mode':MODE,'tasks':len(tasks),'max_tasks':MAX_TASKS_PER_TURN,'concurrency':SEND_CONCURRENCY,'deferred_unarmed':deferred,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False))
+ print(json.dumps({'status':'PASS','mode':MODE,'sender_shard':SENDER_SHARD,'tasks':len(tasks),'max_tasks':MAX_TASKS_PER_TURN,'concurrency':SEND_CONCURRENCY,'deferred_unarmed':deferred,'results':[{k:x.get(k) for k in ('token_id','outcome','reason')} for x in results]},ensure_ascii=False))
 if __name__=='__main__':asyncio.run(main())

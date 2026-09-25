@@ -503,8 +503,6 @@ def _queue_v9_send(task_url,result_url,mode,generation=0,authority='',failover_c
 
 def _start_pending_v9_send():
     global V9_SEND_PENDING,V9_SEND_THREAD
-    if STAGE2_PRIMARY_ROLE:
-        return False
     with V9_SEND_PENDING_LOCK:
         pending=dict(V9_SEND_PENDING) if isinstance(V9_SEND_PENDING,dict) else None
     if not pending or (V9_SEND_THREAD and V9_SEND_THREAD.is_alive()):
@@ -548,7 +546,7 @@ def _v9_send_runner(task_url,result_url,mode,generation=0,authority='',failover_
     started=time.time()
     try:
         env=os.environ.copy()
-        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health'),'PAL_V9_PRODUCTION_AUTHORITY':str(authority),'PAL_V9_FAILOVER_CONTROL_URL':str(failover_control_url),'PAL_V9_FAILOVER_SECRET':TOKEN})
+        env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health'),'PAL_V9_PRODUCTION_AUTHORITY':str(authority),'PAL_V9_FAILOVER_CONTROL_URL':str(failover_control_url),'PAL_V9_FAILOVER_SECRET':TOKEN,'PAL_V9_SENDER_SHARD':'0' if STAGE2_PRIMARY_ROLE else '1','PAL_V9_SEND_MAX_TASKS':'2','PAL_V9_SEND_CONCURRENCY':'2'})
         cp=subprocess.run([sys.executable,str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=300)
         summary=_worker_summary(cp.stdout or '')
         completed={'status':'PASS' if cp.returncode==0 else 'ERROR','at':int(time.time()),
@@ -1022,10 +1020,10 @@ def health():
                    lane_deadline_seconds=LANE_DEADLINE_SECONDS,
                    lane_empty_streak=LANE_EMPTY_STREAK,
                    lane_skip_until=LANE_SKIP_UNTIL,
-                   v9_sender_enabled=not STAGE2_PRIMARY_ROLE,
-                   v9_sender_control_revision='DUAL_AUTHORITY_FAILOVER_V1',
-                   v9_sender_worker_revision='V9_SENDER_PARALLEL_V5_TECH_RETRY',
-                   v9_sender_production_enabled=not STAGE2_PRIMARY_ROLE,
+                   v9_sender_enabled=True,
+                   v9_sender_control_revision='DUAL_AUTHORITY_DUAL_SHARD_FAILOVER_V2',
+                   v9_sender_worker_revision='V9_SENDER_DUAL_SHARD_2X2_V6',
+                   v9_sender_production_enabled=True,
                    v9_sender_pending=_v9_send_pending_snapshot(),
                    v9_send_state=_v9_send_snapshot(),
                    worker_state=_snapshot())
@@ -1062,8 +1060,6 @@ def v9_send_wake():
     global V9_SEND_THREAD
     if not allowed():
         return ('unauthorized',401)
-    if STAGE2_PRIMARY_ROLE:
-        return jsonify(status='V9_SEND_SHARD1_ONLY'),409
     payload=request.get_json(silent=True) or {}
     task_url=str(payload.get('task_url') or '')
     result_url=str(payload.get('result_url') or '')
