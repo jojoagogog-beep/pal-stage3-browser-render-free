@@ -1080,7 +1080,33 @@ async def process_task(browser,t):
   if not refreshed:return {**out,'outcome':'TECH_RETRY','reason':'FORM_IDENTITY_LOST_AFTER_FILL','evidence':{'pre_submit':True,'resend_safe':True}}
   _,frame_i,fi,form=refreshed
   if not await form_contains_payload(form,str(t.get('reply_address') or ''),str(t['message_body'])):
-   return {**out,'outcome':'TECH_RETRY','reason':'FORM_PAYLOAD_LOST_AFTER_FILL','evidence':{'pre_submit':True,'resend_safe':True,'frame_index':frame_i,'form_index':fi}}
+   # Reactive/SPA forms may replace the live form after input events. Rebind the
+   # proven form and restore the exact payload before giving up. This remains
+   # pre-click and preserves all normal required/sensitive/captcha checks.
+   payload_restored=False
+   restore_attempts=0
+   restore_fill=None
+   for settle_ms in (120,320):
+    restore_attempts+=1
+    await page.wait_for_timeout(settle_ms)
+    refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
+    if not refreshed:
+     continue
+    _,frame_i,fi,form=refreshed
+    restore_fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''),proof_schema)
+    if restore_fill.get('timed_out'):
+     continue
+    if restore_fill.get('sensitive'):
+     return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE_AFTER_REHYDRATE','evidence':restore_fill}
+    if not restore_fill.get('ok'):
+     continue
+    if await visible_captcha_any(page):
+     return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_AFTER_REHYDRATE','evidence':{'pre_submit':True}}
+    if await form_contains_payload(form,str(t.get('reply_address') or ''),str(t['message_body'])):
+     payload_restored=True
+     break
+   if not payload_restored:
+    return {**out,'outcome':'TECH_RETRY','reason':'FORM_PAYLOAD_LOST_AFTER_REFILL','evidence':{'pre_submit':True,'resend_safe':True,'frame_index':frame_i,'form_index':fi,'restore_attempts':restore_attempts,'restore_fill':restore_fill}}
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA_AFTER_FILL','evidence':{'pre_submit':True}}
   try:form_action=str(await form.get_attribute('action') or '')
   except:form_action=''
