@@ -31,7 +31,7 @@ def v6_context(t):
     return route_meta,reservoir
 
 async def process_v6(bs,slot,t):
-    out=base(t); clicked=False
+    out=base(t); clicked=False; phase='init'
     try:
         if not out['token_id'] or not t.get('canonical_url') or not t.get('message_body'):
             return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'INVALID_TASK','evidence':{'pre_submit':True}}
@@ -44,21 +44,26 @@ async def process_v6(bs,slot,t):
         if not await asyncio.to_thread(ctl._production_control_ok):
             return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True}}
         meta,row=v6_context(t)
-        prep=await asyncio.wait_for(bs.prepare_same_page(slot,meta,row,str(t['message_body']),str(t.get('reply_address') or '')),timeout=22.0)
+        phase='prepare'
+        prep=await asyncio.wait_for(bs.prepare_same_page(slot,meta,row,str(t['message_body']),str(t.get('reply_address') or '')),timeout=14.0)
         if prep.get('safe') is not True or prep.get('prepared') is not True:
             outcome='SAFETY_BLOCKED' if prep.get('safety') is True else 'TECH_RETRY'
             return {**out,'outcome':outcome,'reason':str(prep.get('reason') or 'V6_PREPARE_FAILED'),'evidence':{'pre_submit':True,'v6_prepare':prep}}
         form_index=prep.get('target_form_index')
-        control=await bs.final_submit_control(slot,form_index)
+        phase='final_control'
+        control=await asyncio.wait_for(bs.final_submit_control(slot,form_index),timeout=4.0)
         confirm=None
         if control.get('ready') is not True:
-            confirm=await bs.confirmation_control(slot,form_index)
+            phase='confirmation_control'
+            confirm=await asyncio.wait_for(bs.confirmation_control(slot,form_index),timeout=4.0)
             if confirm.get('ready') is not True:
                 return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':str(control.get('reason') or confirm.get('reason') or 'SUBMIT_CONTROL_NOT_FOUND'),'evidence':{'pre_submit':True,'v6_prepare':prep}}
-        persist=await bs.revalidate_prepared_fields(slot,form_index,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
+        phase='persistence'
+        persist=await asyncio.wait_for(bs.revalidate_prepared_fields(slot,form_index,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or '')),timeout=5.0)
         if persist.get('ready') is not True:
             outcome='SAFETY_BLOCKED' if persist.get('safety') is True else 'TECH_RETRY'
             return {**out,'outcome':outcome,'reason':str(persist.get('reason') or 'V6_PERSISTENCE_FAILED'),'evidence':{'pre_submit':True,'v6_persistence':persist}}
+        phase='submit_barrier'
         async with bs.critical_submit:
             if not await asyncio.to_thread(ctl._production_control_ok):
                 return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_CLICK','evidence':{'pre_submit':True}}
@@ -83,7 +88,7 @@ async def process_v6(bs,slot,t):
         if oc not in {'SENT_CONFIRMED','CONFIRMED_NOT_SENT','AMBIGUOUS_HOLD','SAFETY_BLOCKED'}: oc='AMBIGUOUS_HOLD'
         return {**out,'outcome':oc,'reason':str(sub.get('reason') or ('V6_'+oc)),'evidence':sub.get('evidence') or {}}
     except asyncio.TimeoutError:
-        return {**out,'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':('V6_POST_CLICK_TIMEOUT' if clicked else 'V6_PRE_CLICK_TIMEOUT'),'evidence':{'click_started':clicked,'pre_submit':not clicked}}
+        return {**out,'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':(('V6_POST_CLICK_TIMEOUT_' if clicked else 'V6_PRE_CLICK_TIMEOUT_')+phase.upper()),'evidence':{'click_started':clicked,'pre_submit':not clicked,'phase':phase}}
     except Exception as e:
         return {**out,'outcome':('AMBIGUOUS_HOLD' if clicked else 'TECH_RETRY'),'reason':'V6_WORKER_'+type(e).__name__.upper(),'evidence':{'click_started':clicked,'detail':str(e)[:220]}}
 
