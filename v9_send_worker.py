@@ -16,7 +16,7 @@ FAILOVER_SECRET=os.environ.get('PAL_V9_FAILOVER_SECRET','')
 UA='Practical-AI-Lab-V9-Sender/1.0'
 MAX_TASKS_PER_TURN=max(1,min(16,int(os.environ.get('PAL_V9_SEND_MAX_TASKS','8') or 8)))
 SEND_CONCURRENCY=max(1,min(4,int(os.environ.get('PAL_V9_SEND_CONCURRENCY','2') or 2)))
-TASK_WALL_TIMEOUT=max(30.0,min(120.0,float(os.environ.get('PAL_V9_TASK_WALL_TIMEOUT','60') or 60)))
+TASK_WALL_TIMEOUT=max(12.0,min(30.0,float(os.environ.get('PAL_V9_TASK_WALL_TIMEOUT','15') or 15)))
 RESULT_IO_TIMEOUT=max(3.0,min(12.0,float(os.environ.get('PAL_V9_RESULT_IO_TIMEOUT','6') or 6)))
 TASK_BARRIER_IO_TIMEOUT=max(2.0,min(8.0,float(os.environ.get('PAL_V9_TASK_BARRIER_IO_TIMEOUT','4') or 4)))
 SENDER_SHARD=0 if str(os.environ.get('PAL_V9_SENDER_SHARD','1')).strip()=='0' else 1
@@ -149,6 +149,7 @@ async def sticky_fill(loc,value):
     return actual==normalized
   except Exception:pass
   return False
+ if await accepted():return
  try:await loc.fill(target,timeout=2500)
  except Exception:pass
  if await accepted():return
@@ -304,10 +305,17 @@ async def visible_captcha(page):
  except:return False
 async def body_text(page,timeout=3500):
  try:return ' '.join((await page.locator('body').inner_text(timeout=timeout)).split())
- except PlaywrightTimeoutError:
-  try:return ' '.join(str(await page.evaluate("() => document.body ? document.body.innerText : ''") or '').split())
-  except:return None
- except:return None
+ except PlaywrightTimeoutError:pass
+ except Exception:pass
+ try:
+  txt=' '.join(str(await page.evaluate("() => document.body ? (document.body.innerText || document.body.textContent || '') : ''") or '').split())
+  if txt:return txt
+ except Exception:pass
+ try:
+  html=str(await page.content() or '')
+  txt=' '.join(re.sub(r'<[^>]+>',' ',html).split())
+  return txt or None
+ except Exception:return None
 
 async def choose_form(page):
  # Score forms in one DOM pass; only return a Playwright locator for the winner.
@@ -682,6 +690,43 @@ async def fill_proof_schema(form,schema,message,email,market):
   if role=='message':out['message']=True
  return out
 
+async def batch_fill_core(form,message,email):
+ try:
+  out=await form.locator('input,textarea').evaluate_all(r"""(els,a)=>{
+    const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.disabled&&s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0};
+    const emailRx=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i;
+    const msgRx=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;
+    const done={email:false,message:false,indices:[]};
+    els.slice(0,60).forEach((e,i)=>{
+      if(!vis(e))return;
+      const typ=(e.getAttribute('type')||'').toLowerCase();
+      if(['hidden','submit','button','image','reset','password','file','checkbox','radio'].includes(typ))return;
+      const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),...[...(e.labels||[])].map(l=>l.innerText||'')].filter(Boolean).join(' ');
+      let role='',v='';
+      if(typ==='email'||emailRx.test(d)){role='email';v=String(a.email||'');}
+      else if(e.tagName==='TEXTAREA'||msgRx.test(d)){role='message';v=String(a.message||'');}
+      else return;
+      const ml=Number(e.maxLength||e.getAttribute('maxlength')||-1);
+      if(ml>0&&v.length>ml)v=v.slice(0,ml).trimEnd();
+      try{
+        const proto=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
+        const desc=Object.getOwnPropertyDescriptor(proto,'value');
+        if(!desc||!desc.set)return;
+        desc.set.call(e,v);
+        e.dispatchEvent(new Event('input',{bubbles:true}));
+        e.dispatchEvent(new Event('change',{bubbles:true}));
+        const actual=String(e.value||'');
+        const normalized=[...v].map(ch=>{const c=ch.charCodeAt(0);return c===10||c===13?' ':ch}).join('');
+        if(actual===v||(e.tagName==='INPUT'&&actual===normalized)){
+          done[role]=true;done.indices.push(i);
+        }
+      }catch(_){}
+    });
+    return done;
+  }""",{'email':email,'message':message})
+  return {'email':bool(out.get('email')),'message':bool(out.get('message')),'indices':set(int(x) for x in (out.get('indices') or []))}
+ except Exception:return {'email':False,'message':False,'indices':set()}
+
 async def fill_form(page,form,message,email,market,proof_field_schema=None):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
  fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False};fill_deadline=time.monotonic()+45.0
@@ -698,7 +743,8 @@ async def fill_form(page,form,message,email,market,proof_field_schema=None):
  except Exception:
   meta=[]
  mapped=await fill_proof_schema(form,proof_field_schema,message,email,market)
- filled['email']=bool(mapped.get('email'));filled['message']=bool(mapped.get('message'))
+ batched=await batch_fill_core(form,message,email)
+ filled['email']=bool(mapped.get('email') or batched.get('email'));filled['message']=bool(mapped.get('message') or batched.get('message'))
  if any(sensitive_kind(str(m.get('d') or '')) for m in meta):
   script_required=await same_origin_script_required_sensitive(page)
  for m in meta:
@@ -707,7 +753,7 @@ async def fill_form(page,form,message,email,market,proof_field_schema=None):
    if not m.get('visible') or not m.get('enabled'):continue
    i=int(m.get('i') or 0);e=fields.nth(i);tag=str(m.get('tag') or '');typ=str(m.get('typ') or tag);d=' '.join(str(m.get('d') or '').split())[:500];cls=str(m.get('cls') or '')
    field_name=str(m.get('name') or '');field_id=str(m.get('id') or '')
-   if ((field_id and field_id in mapped['ids']) or (field_name and field_name in mapped['names']) or i in mapped['indices']):
+   if ((field_id and field_id in mapped['ids']) or (field_name and field_name in mapped['names']) or i in mapped['indices'] or i in batched['indices']):
     continue
    kind=sensitive_kind(d)
    req=field_required_hint(bool(m.get('required')),cls,d) or bool(kind and kind in script_required)
