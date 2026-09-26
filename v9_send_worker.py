@@ -16,7 +16,7 @@ FAILOVER_SECRET=os.environ.get('PAL_V9_FAILOVER_SECRET','')
 UA='Practical-AI-Lab-V9-Sender/1.0'
 MAX_TASKS_PER_TURN=max(1,min(16,int(os.environ.get('PAL_V9_SEND_MAX_TASKS','8') or 8)))
 SEND_CONCURRENCY=max(1,min(4,int(os.environ.get('PAL_V9_SEND_CONCURRENCY','2') or 2)))
-TASK_WALL_TIMEOUT=max(20.0,min(90.0,float(os.environ.get('PAL_V9_TASK_WALL_TIMEOUT','30') or 30)))
+TASK_WALL_TIMEOUT=max(30.0,min(120.0,float(os.environ.get('PAL_V9_TASK_WALL_TIMEOUT','60') or 60)))
 RESULT_IO_TIMEOUT=max(3.0,min(12.0,float(os.environ.get('PAL_V9_RESULT_IO_TIMEOUT','6') or 6)))
 TASK_BARRIER_IO_TIMEOUT=max(2.0,min(8.0,float(os.environ.get('PAL_V9_TASK_BARRIER_IO_TIMEOUT','4') or 4)))
 SENDER_SHARD=0 if str(os.environ.get('PAL_V9_SENDER_SHARD','1')).strip()=='0' else 1
