@@ -692,11 +692,13 @@ async def final_control_matching_text(form,expected_text=''):
 async def form_contains_payload(form,email,message):
  try:
   found=await form.locator('input,textarea').evaluate_all("""(els,a)=>{
+    const norm=(v)=>String(v||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/[ \t]+$/gm,'').trim();
     let email=false,message=false;
+    const wantEmail=norm(a.email).toLowerCase(),wantMessage=norm(a.message);
     for(const e of els){
-      const v=String(e.value||'');
-      if(v===String(a.email||''))email=true;
-      if(v===String(a.message||''))message=true;
+      const v=norm(e.value);
+      if(v.toLowerCase()===wantEmail)email=true;
+      if(v===wantMessage)message=true;
     }
     return {email,message};
   }""",{'email':email,'message':message})
