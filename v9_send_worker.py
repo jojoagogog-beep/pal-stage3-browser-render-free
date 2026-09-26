@@ -1049,7 +1049,21 @@ async def process_task(browser,t):
      await page.wait_for_timeout(delay_ms)
      if await has_any_form(page):
       has_form=True;break
-   if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500],'late_form_wait_ms':3000}}
+   if not has_form:
+    # Some JS-heavy contact pages time out while the document is still usable.
+    # Retry the same official URL once with a lighter navigation condition,
+    # then rescan DOM/frames without clicking anything.
+    try:
+     retry_resp=await page.goto(url,wait_until='commit',timeout=5000)
+     if retry_resp is not None: nav_http_status=int(retry_resp.status)
+    except Exception:
+     pass
+    for delay_ms in (500,900,1400):
+     await page.wait_for_timeout(delay_ms)
+     if await has_any_form(page):
+      has_form=True
+      break
+   if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500],'late_form_wait_ms':5800}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
