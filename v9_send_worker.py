@@ -1157,7 +1157,22 @@ async def process_task(browser,t):
      nav_resp=await page.goto(fallback,wait_until='domcontentloaded',timeout=(8000 if fast_direct else 14000))
      nav_http_status=(int(nav_resp.status) if nav_resp is not None else None)
     except PlaywrightTimeoutError:nav_timeout=True
+    except Exception as fallback_exc:
+     fmsg=str(fallback_exc)
+     if re.search(r'net::ERR_NAME_NOT_RESOLVED',fmsg,re.I):
+      return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'ROUTE_DNS_UNRESOLVED','evidence':{'pre_submit':True,'detail':fmsg[:240]}}
+     if re.search(r'net::ERR_(?:SSL_PROTOCOL_ERROR|SSL_VERSION_OR_CIPHER_MISMATCH|CERT_AUTHORITY_INVALID|CERT_COMMON_NAME_INVALID)',fmsg,re.I):
+      return {**out,'outcome':'SAFETY_BLOCKED','reason':'TLS_INVALID_PRE_SUBMIT','evidence':{'pre_submit':True,'detail':fmsg[:240]}}
+     if re.search(r'net::ERR_CONNECTION_(?:CLOSED|REFUSED|RESET)',fmsg,re.I):
+      return {**out,'outcome':'TECH_RETRY','reason':'SITE_CONNECTION_FAILED_PRE_SUBMIT','evidence':{'pre_submit':True,'detail':fmsg[:240]}}
+     raise
    else:
+    if re.search(r'net::ERR_NAME_NOT_RESOLVED',msg,re.I):
+     return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'ROUTE_DNS_UNRESOLVED','evidence':{'pre_submit':True,'detail':msg[:240]}}
+    if re.search(r'net::ERR_(?:SSL_PROTOCOL_ERROR|SSL_VERSION_OR_CIPHER_MISMATCH|CERT_AUTHORITY_INVALID|CERT_COMMON_NAME_INVALID)',msg,re.I):
+     return {**out,'outcome':'SAFETY_BLOCKED','reason':'TLS_INVALID_PRE_SUBMIT','evidence':{'pre_submit':True,'detail':msg[:240]}}
+    if re.search(r'net::ERR_CONNECTION_(?:CLOSED|REFUSED|RESET)',msg,re.I):
+     return {**out,'outcome':'TECH_RETRY','reason':'SITE_CONNECTION_FAILED_PRE_SUBMIT','evidence':{'pre_submit':True,'detail':msg[:240]}}
     raise
   await page.wait_for_timeout(400 if fast_direct else (600 if nav_timeout else (800 if str(t.get('proof_lane') or '')=='FAST_DOM' else 1600)))
   if host(page.url)!=domain:return {**out,'outcome':'SAFETY_BLOCKED','reason':'DOMAIN_CHANGED','evidence':{'final_url':page.url[:500]}}
