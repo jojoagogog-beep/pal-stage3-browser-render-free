@@ -7,7 +7,7 @@ class SenderBatchCapacityTests(unittest.TestCase):
         self.assertIn("'PAL_V9_SEND_MAX_TASKS':'8'",src)
         self.assertIn("'PAL_V9_SEND_CONCURRENCY':'2'",src)
         self.assertIn("'PAL_V9_TASK_WALL_TIMEOUT':'15'",src)
-        self.assertIn("str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=100",src)
+        self.assertIn("str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=240",src)
 
 if __name__=='__main__':
     unittest.main()

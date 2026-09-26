@@ -8,7 +8,7 @@ from flask import Flask, jsonify, request
 HERE=Path(__file__).resolve().parent
 WORKER=HERE/'stage3_send_ready_worker_v1.py'
 STAGE2_WORKER=HERE/'candidate_route_worker_v1.py'
-V9_SEND_WORKER=HERE/'v9_send_worker.py'
+V9_SEND_WORKER=HERE/'v6_v9_send_worker.py'
 def _secret_text(path):
     try:return Path(path).read_text().strip()
     except Exception:return ''
@@ -56,7 +56,7 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # and Stage3 Browser never overlap. Shard1 keeps Stage3/Sender priority and may use idle time for bounded V9 Stage2.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
 SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V11_FAST_REPROOF'
-CODE_REVISION='V9_20260926_V6_TIMING_V8'
+CODE_REVISION='V9_20260926_V6_ENGINE_V9'
 V9_STAGE2_SHARD1_REVISION='V9_STAGE2_SHARD1_IDLE_ONLY_V1'
 V9_STRICT_STATIC_REVISION='V9_STAGE2_STRICT_STATIC_FULL_V1'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
@@ -587,7 +587,7 @@ def _v9_send_runner(task_url,result_url,mode,generation=0,authority='',failover_
     try:
         env=os.environ.copy()
         env.update({'PAL_V9_SEND_TASK_BLOB_URL':task_url,'PAL_V9_SEND_RESULT_BLOB_URL':result_url,'PAL_V9_SEND_MODE':mode,'PAL_V9_CUTOVER_GENERATION':str(int(generation or 0)),'PAL_V9_CONTROL_HEALTH_URL':os.environ.get('PAL_V9_CONTROL_HEALTH_URL','https://pal-b2b-v9-plane.jojoagogog.workers.dev/health'),'PAL_V9_PRODUCTION_AUTHORITY':str(authority),'PAL_V9_FAILOVER_CONTROL_URL':str(failover_control_url),'PAL_V9_FAILOVER_SECRET':TOKEN,'PAL_V9_SENDER_SHARD':str(0 if int(sender_shard or 0)==0 else 1),'PAL_V9_SEND_MAX_TASKS':'8','PAL_V9_SEND_CONCURRENCY':'2','PAL_V9_TASK_WALL_TIMEOUT':'15'})
-        cp=subprocess.run([sys.executable,str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=100)
+        cp=subprocess.run([sys.executable,str(V9_SEND_WORKER)],env=env,text=True,capture_output=True,timeout=240)
         summary=_worker_summary(cp.stdout or '')
         completed={'status':'PASS' if cp.returncode==0 else 'ERROR','at':int(time.time()),
                    'duration_seconds':round(time.time()-started,2),'returncode':cp.returncode,
