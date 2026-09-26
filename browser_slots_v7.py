@@ -1283,11 +1283,24 @@ class BrowserSlots:
             else None
         )
         form_detect_started = time.monotonic()
-        # Reproduce the render depth that produced the authoritative Stage-3 proof.
-        # Otherwise a dynamic/iframe/deep form can pass Stage 3 and disappear when
-        # Stage 4 reopens the route with a shallower timing profile.
+        # V9 handed us a fresh rendered SEND_READY proof. Reuse its exact
+        # frame/form coordinates first instead of rescanning every form. Only
+        # fall back to the legacy rendered-depth search when that exact target
+        # no longer exists on the live page.
+        target = None
+        if reservoir_row.get("_v9_preverified") is True and stage3_frame_index is not None and stage3_form_index is not None:
+            try:
+                roots=list(page.frames)[:20]
+                if 0 <= int(stage3_frame_index) < len(roots):
+                    forms=roots[int(stage3_frame_index)].locator("form")
+                    if 0 <= int(stage3_form_index) < await forms.count():
+                        target={"ready":True,"index":int(stage3_form_index),"score":1000,
+                                "action":str(await forms.nth(int(stage3_form_index)).get_attribute("action") or "")[:500],
+                                "frame_index":int(stage3_frame_index)}
+            except Exception:
+                target=None
         stage3_lane_mode = str(stage3_detail.get("lane_mode") or "").upper() if stage3_verified else ""
-        if stage3_verified and stage3_lane_mode:
+        if target is None and stage3_verified and stage3_lane_mode:
             try:
                 wait_ms={"FAST_DOM":900,"DYNAMIC_JS":1800,"IFRAME_DEEP":1500,"DEEP":2600}.get(stage3_lane_mode,900)
                 await page.wait_for_timeout(wait_ms)
@@ -1297,13 +1310,14 @@ class BrowserSlots:
                     await page.evaluate("window.scrollTo(0, 0)")
             except Exception:
                 pass
-        target = await self.select_contact_form(
-            page,
-            stage3_verified=stage3_verified,
-            preferred_frame_index=stage3_frame_index,
-            preferred_form_index=stage3_form_index,
-            preferred_proof_hint=static_stage3_hint,
-        )
+        if target is None:
+            target = await self.select_contact_form(
+                page,
+                stage3_verified=stage3_verified,
+                preferred_frame_index=stage3_frame_index,
+                preferred_form_index=stage3_form_index,
+                preferred_proof_hint=static_stage3_hint,
+            )
         if target.get("ready") is not True:
             try:
                 await page.wait_for_timeout(1800 if stage3_verified else 700)
