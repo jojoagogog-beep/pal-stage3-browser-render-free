@@ -90,10 +90,8 @@ async def process_v6(bs,slot,t):
 async def main():
     q=ctl._get(ctl.TASK_URL)
     tasks=[x for x in (q.get('tasks') or []) if isinstance(x,dict) and x.get('kind')=='PAL_V9_SEND_TASK_V1' and (0 if str(x.get('sender_shard',1)).strip()=='0' else 1)==ctl.SENDER_SHARD][:8]
-    ready=[]
-    for t in tasks:
-        x=await ctl.await_submit_barrier(t,20.0)
-        if x is not None: ready.append(x)
+    armed=await asyncio.gather(*(ctl.await_submit_barrier(t,5.0) for t in tasks))
+    ready=[x for x in armed if x is not None]
     if not ready:
         print(json.dumps({'status':'PASS','engine':'V6_BROWSER_SLOTS','tasks':0,'results':[]})); return
     bs=BrowserSlots(1); await bs.start(); results=[]; lock=asyncio.Lock(); queue=asyncio.Queue()
