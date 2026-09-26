@@ -34,7 +34,7 @@ SUBJECT=re.compile(r'(subject|件名|title)',re.I)
 URLRX=re.compile(r'(website|web.?site|url|サイト)',re.I)
 CAPTCHA_SEL='.g-recaptcha,.h-captcha,.cf-turnstile,[data-sitekey],iframe[src*="recaptcha"],iframe[src*="hcaptcha"]'
 BOT_HINT=re.compile(r'(?:captcha|recaptcha|hcaptcha|turnstile|not[-_ ]?a?[-_ ]?robot|not[-_ ]?robot|chk[-_ ]?not[-_ ]?robot|human[-_ ]?(?:check|verification)|help\s+us\s+prevent\s+spam|anti[- ]?spam|spam\s+(?:check|question|protection)|security\s+(?:question|check)|which\s+is\s+(?:bigger|larger|smaller)|what\s+is\s+\d+\s*[+\-x×*]\s*\d+|\bquiz\b)',re.I)
-SUCCESS=re.compile(r'(送信が完了|thanks?\s+for\s+contacting\s+us|送信完了|お問い合わせ.{0,30}(?:ありがとう|受け付け|受付)|thank\s+you.{0,80}(?:for\s+(?:your\s+)?(?:message|inquir(?:y|ies)|enquir(?:y|ies)|contacting\s+us)|we\s+(?:have|\'ve)\s+received|(?:message|inquir(?:y|ies)|request).{0,30}(?:received|sent|submitted))|we(?:\'ve|\s+have)\s+received\s+your\s+(?:e-?mail|message|inquir(?:y|ies)|enquir(?:y|ies)|request)|(?:message|inquir(?:y|ies)|request).{0,80}(?:sent|received|submitted)|successfully\s+(?:sent|submitted))',re.I)
+SUCCESS=re.compile(r'(送信が完了|thanks?\s+for\s+contacting\s+us|送信完了|お問い合わせ.{0,30}(?:ありがとう|受け付け|受付)|thank\s+you.{0,80}(?:for\s+(?:your\s+)?(?:message|inquir(?:y|ies)|enquir(?:y|ies)|contacting\s+us)|we\s+(?:have|\'ve)\s+received|(?:message|inquir(?:y|ies)|request).{0,30}(?:received|sent|submitted))|we(?:\'ve|\s+have)\s+received\s+your\s+(?:e-?mail|message|inquir(?:y|ies)|enquir(?:y|ies)|request)|(?:message|inquir(?:y|ies)|request).{0,80}(?:sent|received|submitted)|successfully\s+(?:sent|submitted)|(?:your\s+)?submission\s+(?:has\s+been\s+)?(?:received|submitted)|form\s+(?:has\s+been\s+)?submitted)',re.I)
 FAIL=re.compile(r'(入力してください|未入力|入力.{0,20}エラー|エラーがあります|必須(?:項目)?です|必須項目|正しく入力|入力内容.{0,20}(?:誤|エラー)|ご確認の上.{0,40}(?:修正|戻る)|required field|(?:phone(?:\s+number)?|telephone|mobile|address|postal(?:\s+code)?|postcode|zip).{0,30}(?:is\s+)?required|please.{0,30}(?:fill|enter|select|choose)|failed\s+to\s+send|unable\s+to\s+send|could\s+not\s+send|there\s+was\s+an\s+error.{0,60}send|validation error|invalid|submission.{0,24}(?:rejected|failed|declined)|exceeded\s+the\s+allowed\s+amount\s+of\s+characters|too\s+many\s+characters|character\s+limit|please\s+confirm\s+you(?:\s+are|\u2019re|\'re)\s+human|confirm\s+you(?:\s+are|\u2019re|\'re)\s+human|human\s+verification)',re.I)
 FINAL=re.compile(r'(この内容で送信|内容を送信|確認して送信|送信する|^送信$|send\s*(?:message|inquiry|enquiry)?$|submit\s*(?:message|inquiry|enquiry|form)?$)',re.I)
 CONFIRM=re.compile(r'(確認画面(?:へ|に(?:進む|進める)?)|入力内容(?:を)?確認|内容(?:を)?確認|確認(?:する|へ)?|confirm|review|next|次へ)',re.I)
@@ -1149,6 +1149,8 @@ async def process_task(browser,t):
       break
    if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500],'late_form_wait_ms':5800}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
+  if re.search(r'(protected\s+by\s+reCAPTCHA|please\s+confirm\s+you(?:\s+are|\'re)\s+human|human\s+verification)',txt,re.I):
+   return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'text_signal':True}}
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
   if not chosen:
@@ -1169,14 +1171,15 @@ async def process_task(browser,t):
   if fill.get('timed_out'):return {**out,'outcome':'TECH_RETRY','reason':'FILL_TIMEOUT_PRE_SUBMIT','evidence':{**fill,'pre_submit':True}}
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
   if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':{**fill,'pre_submit':True}}
-  await page.wait_for_timeout(250 if fast_direct else 500)
-  # Frameworks such as Contact Form 7 can reorder forms after field updates.
-  # A positional nth() locator can then silently point at an unrelated search
-  # form. Re-resolve the contact form and require the exact filled payload to
-  # still be present before any submit control is considered.
-  refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
-  if not refreshed:return {**out,'outcome':'TECH_RETRY','reason':'FORM_IDENTITY_LOST_AFTER_FILL','evidence':{'pre_submit':True,'resend_safe':True}}
-  _,frame_i,fi,form=refreshed
+  await page.wait_for_timeout(180 if fast_direct else 350)
+  # Keep the exact form that accepted the payload. Re-resolving every form
+  # after input can select a different search/newsletter form on reactive pages
+  # and wastes a sender slot. Rebind only when the original locator no longer
+  # contains the exact email+message payload.
+  if not await form_contains_payload(form,str(t.get('reply_address') or ''),str(t['message_body'])):
+   refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
+   if not refreshed:return {**out,'outcome':'TECH_RETRY','reason':'FORM_IDENTITY_LOST_AFTER_FILL','evidence':{'pre_submit':True,'resend_safe':True}}
+   _,frame_i,fi,form=refreshed
   if not await form_contains_payload(form,str(t.get('reply_address') or ''),str(t['message_body'])):
    # Reactive/SPA forms may replace the live form after input events. Rebind the
    # proven form and restore the exact payload before giving up. This remains
