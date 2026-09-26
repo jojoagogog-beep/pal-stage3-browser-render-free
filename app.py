@@ -55,8 +55,15 @@ SERVICE_NAME=str(os.environ.get('RENDER_SERVICE_NAME','') or '')
 # Primary is dual-role under one heavy-resource lock: Stage2 route verification
 # and Stage3 Browser never overlap. Shard1 keeps Stage3/Sender priority and may use idle time for bounded V9 Stage2.
 STAGE2_PRIMARY_ROLE=(SERVICE_NAME=='pal-stage3-browser-free-v1')
+STAGE3_SHARD_COUNT=4
+STAGE3_SHARD_INDEX={
+    'pal-stage3-browser-free-v1':0,
+    'pal-stage3-browser-free-shard1':1,
+    'pal-v9-sender-free-0':2,
+    'pal-v9-sender-free-1':3,
+}.get(SERVICE_NAME,0 if STAGE2_PRIMARY_ROLE else 1)
 SCHEDULER_REVISION='STAGE2_FAIR_HANDOFF_V11_FAST_REPROOF'
-CODE_REVISION='V9_20260926_V6_TARGETED_PREFLIGHT_V18'
+CODE_REVISION='V9_20260926_STAGE3_QUAD_SHARD_V19'
 V9_STAGE2_SHARD1_REVISION='V9_STAGE2_SHARD1_IDLE_ONLY_V1'
 V9_STRICT_STATIC_REVISION='V9_STAGE2_STRICT_STATIC_FULL_V1'
 # Browser proof yield is materially higher on DYNAMIC_JS/IFRAME_DEEP than DEEP.
@@ -279,7 +286,7 @@ def _browser_queue_has_tasks(url=None):
         if len(raw)>2000000:
             return None
         data=json.loads(raw.decode('utf-8','ignore'))
-        shard_index=0 if STAGE2_PRIMARY_ROLE else 1
+        shard_index=STAGE3_SHARD_INDEX
         for task in (data.get('tasks') or []):
             if not isinstance(task,dict):
                 continue
@@ -290,7 +297,7 @@ def _browser_queue_has_tasks(url=None):
                     continue
                 try: rid=int(rec.get('route_id') or 0)
                 except Exception: rid=0
-                if rid>0 and route_shard(rid,2)==shard_index:
+                if rid>0 and route_shard(rid,STAGE3_SHARD_COUNT)==shard_index:
                     return True
         return False
     except Exception:
@@ -303,7 +310,7 @@ def _lane_done_ids(lane):
     # remains controller-owned until the next Mac cycle, so count only tasks
     # that this Render service has not already durably completed.
     try:
-        p=Path('/tmp/pal_stage3_'+str(lane).lower()+'_dual_shard_v3.json')
+        p=Path('/tmp/pal_stage3_'+str(lane).lower()+'_quad_shard_v4_'+str(STAGE3_SHARD_INDEX)+'.json')
         d=json.loads(p.read_text())
         return {str(x) for x in (d.get('processed_task_ids') or []) if str(x)}
     except Exception:
@@ -315,7 +322,7 @@ def _browser_queue_lane_counts(url=None, max_age=3.0):
     u=str(url or ACTIVE_TASK_BLOB_URL or os.environ.get('PAL_ROUTE_TASK_BLOB_URL','')).strip()
     if not _valid_blob_url(u):
         return None
-    shard_index=0 if STAGE2_PRIMARY_ROLE else 1
+    shard_index=STAGE3_SHARD_INDEX
     priority=tuple(ACTIVE_PRIORITY_MARKETS)
     now=time.time()
     cached=_LANE_QUEUE_CACHE
@@ -355,7 +362,7 @@ def _browser_queue_lane_counts(url=None, max_age=3.0):
                     continue
                 try: rid=int(rec.get('route_id') or 0)
                 except Exception: rid=0
-                if rid<=0 or route_shard(rid,2)!=shard_index:
+                if rid<=0 or route_shard(rid,STAGE3_SHARD_COUNT)!=shard_index:
                     continue
                 market=str(rec.get('market') or task_market)
                 all_counts[lane]+=1
@@ -740,7 +747,7 @@ def execute_lane(lane):
             'PAL_STAGE3_RECENT_TECH_SECONDS':'600',
             # New topology namespace: never inherit task completion IDs from
             # the former single-owner worker after splitting the queue 2 ways.
-            'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'_dual_shard_v3.json',
+            'PAL_STAGE3_STATE_FILE':'/tmp/pal_stage3_'+lane.lower()+'_quad_shard_v4_'+str(STAGE3_SHARD_INDEX)+'.json',
             'PAL_STAGE3_DEADLINE_EPOCH':str(int(time.time())+lane_deadline),
             'PAL_STAGE3_PRODUCER':'PAL_RENDER_STAGE3_BROWSER_V1',
             # Both Render services now participate in Stage3. Primary is
@@ -748,8 +755,8 @@ def execute_lane(lane):
             # shard 1 continuously. Deterministic route-id sharding prevents the
             # two services from duplicating Browser work while preserving all
             # proof/safety gates.
-            'PAL_STAGE3_SHARD_COUNT':'2',
-            'PAL_STAGE3_SHARD_INDEX':('0' if STAGE2_PRIMARY_ROLE else '1'),
+            'PAL_STAGE3_SHARD_COUNT':str(STAGE3_SHARD_COUNT),
+            'PAL_STAGE3_SHARD_INDEX':str(STAGE3_SHARD_INDEX),
         })
         cp=subprocess.run(
             [sys.executable,str(WORKER)],env=env,text=True,

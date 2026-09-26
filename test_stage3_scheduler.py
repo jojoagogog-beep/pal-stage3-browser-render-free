@@ -206,7 +206,7 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         self.assertIn("'shard1' in _RENDER_SERVICE_NAME",src)
         self.assertIn("route_shard(rid,SHARD_COUNT)==SHARD_INDEX",src)
         self.assertIn("SHA256_ROUTE_ID_V1",src)
-        self.assertIn("route_shard(rid,2)==shard_index",app)
+        self.assertIn("route_shard(rid,STAGE3_SHARD_COUNT)==shard_index",app)
         self.assertIn("not shard_accept(rec) or not lane_accept(rec)",src)
         # Stable hash must not recreate the pathological even-ID skew that left
         # shard1 nearly idle in production. Keep this bounded but non-exact so
@@ -224,7 +224,7 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
             def __exit__(self,*a): return False
             def read(self,n=-1): return self.raw
         good='https://superjsonblob.com/api/jsonBlob/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
-        rid=next(x for x in range(100,300) if m.route_shard(x,2)==1)
+        rid=next(x for x in range(100,500) if m.route_shard(x,m.STAGE3_SHARD_COUNT)==m.STAGE3_SHARD_INDEX)
         payload={'tasks':[{'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1',
                            'routes':[{'route_id':rid}]}]}
         old_role=m.STAGE2_PRIMARY_ROLE
@@ -244,15 +244,16 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
             def __exit__(self,*a): return False
             def read(self,n=-1): return self.raw
         good='https://superjsonblob.com/api/jsonBlob/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
-        shard1=[rid for rid in range(1,512) if m.route_shard(rid,2)==1][:3]
-        shard0=[rid for rid in range(1,512) if m.route_shard(rid,2)==0][:2]
+        owned=[rid for rid in range(1,1024) if m.route_shard(rid,m.STAGE3_SHARD_COUNT)==m.STAGE3_SHARD_INDEX][:3]
+        other_index=(m.STAGE3_SHARD_INDEX+1)%m.STAGE3_SHARD_COUNT
+        other=[rid for rid in range(1,1024) if m.route_shard(rid,m.STAGE3_SHARD_COUNT)==other_index][:2]
         payload={'tasks':[
             {'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','market':'GB-EN','lane_hint':'FAST_DOM',
-             'routes':[{'route_id':shard0[0],'market':'GB-EN'}]},
+             'routes':[{'route_id':other[0],'market':'GB-EN'}]},
             {'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','market':'SG-EN','lane_hint':'DYNAMIC_JS',
-             'routes':[{'route_id':shard1[0],'market':'SG-EN'},{'route_id':shard1[1],'market':'SG-EN'}]},
+             'routes':[{'route_id':owned[0],'market':'SG-EN'},{'route_id':owned[1],'market':'SG-EN'}]},
             {'kind':'PAL_BROWSER_PREFLIGHT_TASK_V1','market':'NZ-EN','lane_hint':'DYNAMIC_JS',
-             'routes':[{'route_id':shard0[1],'market':'NZ-EN'}]},
+             'routes':[{'route_id':other[1],'market':'NZ-EN'}]},
         ]}
         old_priority=list(m.ACTIVE_PRIORITY_MARKETS)
         old_role=m.STAGE2_PRIMARY_ROLE
@@ -295,9 +296,9 @@ class Stage3AdaptiveSchedulerTests(unittest.TestCase):
         worker=(Path(__file__).resolve().parent/'stage3_send_ready_worker_v1.py').read_text()
         self.assertIn("if task_lane and task_lane!=LANE_MODE:",worker)
         self.assertIn("if task_lane==LANE_MODE:",worker)
-        self.assertIn("dual_shard_v3.json",app)
-        self.assertIn("'PAL_STAGE3_SHARD_COUNT':'2'",app)
-        self.assertIn("'PAL_STAGE3_SHARD_INDEX':('0' if STAGE2_PRIMARY_ROLE else '1')",app)
+        self.assertIn("quad_shard_v4_",app)
+        self.assertIn("'PAL_STAGE3_SHARD_COUNT':str(STAGE3_SHARD_COUNT)",app)
+        self.assertIn("'PAL_STAGE3_SHARD_INDEX':str(STAGE3_SHARD_INDEX)",app)
         self.assertIn("env['PAL_BROWSER_TASK_BLOB_URL']=ACTIVE_TASK_BLOB_URL",app)
 
     def test_network_route_handler_is_awaited_not_fire_and_forget(self):
