@@ -937,7 +937,7 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 # wait below. Requiring <body> immediately after commit caused
                 # valid JS-heavy pages to burn 5s and return BROWSER_TIMEOUT before
                 # their normal lane wait had a chance to hydrate the DOM.
-                await page.goto(target,wait_until='commit',timeout=nav_timeout)
+                resp=await page.goto(target,wait_until='commit',timeout=nav_timeout)
                 try:
                     await page.wait_for_load_state(
                         'domcontentloaded',
@@ -945,9 +945,10 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                     )
                 except PlaywrightTimeoutError:
                     pass
+                return resp
             try:
                 phase('navigate')
-                await navigate_ready(url)
+                nav_resp=await navigate_ready(url)
             except Exception as nav_exc:
                 # Discovery stores company domains normalized without www.
                 # Some official sites have no apex DNS or an apex certificate
@@ -958,9 +959,18 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 if (fallback and re.search(
                         r'net::ERR_(?:NAME_NOT_RESOLVED|CERT_COMMON_NAME_INVALID)',
                         nav_error,re.I)):
-                    await navigate_ready(fallback)
+                    nav_resp=await navigate_ready(fallback)
                 else:
                     raise
+            nav_status=(int(nav_resp.status) if nav_resp is not None else None)
+            if nav_status in {404,410}:
+                return {**base,'status':'NO_SAFE_FORM','code':'ROUTE_HTTP_NOT_FOUND',
+                        'http_status':nav_status,'final_url':str(page.url or url),
+                        'stage3_send_ready':False,'send_ready_proof_v2':False}
+            if nav_status in {401,403,406,451}:
+                return {**base,'status':'TECH_DEFER','code':'SITE_ACCESS_DENIED_PRE_SUBMIT',
+                        'http_status':nav_status,'final_url':str(page.url or url),
+                        'stage3_send_ready':False,'send_ready_proof_v2':False}
             # Four lane modes share the same safety gates but inspect different
             # render depths so one DOM assumption cannot dominate all results.
             try:
@@ -1263,6 +1273,18 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
                 # lanes. If the target form truly lives there, the explicit
                 # IFRAME_DEEP/DEEP lane remains responsible for it.
                 roots=([main]+same_origin+provider)[:frame_cap]
+            try:
+                body_probe=' '.join((await page.locator('body').inner_text(timeout=2200)).split())[:2400]
+            except Exception:
+                body_probe=''
+            soft404=bool(re.search(
+                r'(?:(?:404|page|resource).{0,50}(?:not found|could not be found)|'
+                r'the page could not be found|nothing was found at this location)',
+                body_probe,re.I))
+            if soft404:
+                return {**base,'status':'NO_SAFE_FORM','code':'SOFT_404_NO_CONTACT_FORM',
+                        'final_url':str(page.url or url),'stage3_send_ready':False,
+                        'send_ready_proof_v2':False}
             phase('form_scan')
             best=None
             # A valid direct-submit contact form is already sufficient once the
