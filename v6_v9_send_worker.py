@@ -13,7 +13,7 @@ def v6_context(t):
     domain=str(t.get('official_domain') or (urlsplit(url).hostname or '')).lower().removeprefix('www.')
     market=str(t.get('market') or '')
     detail={
-        'proof_source':str(t.get('proof_stage3_source') or 'RENDERED_BROWSER_V2'),
+        'proof_source':str(t.get('proof_stage3_source') or ('DURABLE_INVENTORY' if t.get('durable_inventory') else 'RENDERED_BROWSER_V2')),
         'lane_mode':str(t.get('proof_lane_mode') or 'FAST_DOM').upper(),
         'frame_index':t.get('proof_frame_index'),'form_index':t.get('proof_form_index'),
         'submit_text':t.get('proof_submit_text'),'form_fingerprint':t.get('proof_form_fingerprint'),
@@ -39,7 +39,8 @@ async def process_v6(bs,slot,t):
             return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'CLICK_ALREADY_STARTED_FAIL_CLOSED','evidence':{'click_started':True,'resend_safe':False}}
         if t.get('submit_started') is not True:
             return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'SUBMIT_BARRIER_MISSING','evidence':{'pre_submit':True}}
-        if not ctl._proof_control_ok(t,30000):
+        historical=bool(t.get('historical_revalidate'))
+        if not historical and not ctl._proof_control_ok(t,30000):
             return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_BROWSER','evidence':{'pre_submit':True}}
         if not await asyncio.to_thread(ctl._production_control_ok):
             return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True}}
