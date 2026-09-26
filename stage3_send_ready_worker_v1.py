@@ -1647,7 +1647,24 @@ async def inspect(browser,rec,sem,slow=False,progress=None):
             for row in proof_fields[:32]:
                 if not isinstance(row,dict) or row.get('visible') is False:
                     continue
-                field_schema.append({k:row.get(k) for k in ('id','name','tag','type','required','desc') if k in row})
+                desc=str(row.get('desc') or '')
+                typ=str(row.get('type') or '').lower()
+                tag=str(row.get('tag') or '').lower()
+                role=''
+                if typ=='email' or re.search(r'(e-?mail|メール)',desc,re.I): role='email'
+                elif tag=='textarea' or re.search(r'(message|inquir|enquir|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細|description)',desc,re.I): role='message'
+                elif re.search(r'(会社|法人|企業|company|organization|organisation)',desc,re.I): role='company'
+                elif re.search(r'(ふりがな|ひらがな)',desc,re.I): role='name_hiragana'
+                elif re.search(r'(フリガナ|カナ|kana|furigana)',desc,re.I): role='name_katakana'
+                elif re.search(r'(姓|苗字|名字|surname|family[ _.-]?name|last[ _.-]?name|\\blname\\b|(?:^|[\\[\\]_.-])last(?:$|[\\[\\]_.-]))',desc,re.I): role='last_name'
+                elif re.search(r'(名|given[ _.-]?name|first[ _.-]?name|\\bfname\\b|(?:^|[\\[\\]_.-])first(?:$|[\\[\\]_.-]))',desc,re.I): role='first_name'
+                elif re.search(r'(氏名|お名前|名前|担当者|full.?name|contact.?name|\\bname\\b)',desc,re.I): role='name'
+                elif re.search(r'(件名|subject|title)',desc,re.I): role='subject'
+                elif re.search(r'(部署|部門|department|designation|job.?title|position|役職|職種)',desc,re.I): role='department'
+                elif typ=='url' or re.search(r'(url|website|ホームページ)',desc,re.I): role='url'
+                item={k:row.get(k) for k in ('i','id','name','tag','type','required','desc') if k in row}
+                item['role']=role
+                field_schema.append(item)
             schema_has_email=any(str(x.get('type') or '')=='email' or re.search(r'(e-?mail|メール)',str(x.get('desc') or ''),re.I) for x in field_schema)
             schema_has_message=any(str(x.get('tag') or '')=='textarea' or re.search(r'(message|inquir|enquir|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)',str(x.get('desc') or ''),re.I) for x in field_schema)
             schema_has_captcha=any(CAPTCHA.search(' '.join(str(x.get(k) or '') for k in ('id','name','desc'))) for x in field_schema)

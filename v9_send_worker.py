@@ -355,13 +355,45 @@ async def submitted_form_invalid_count(control):
   return int(await control.evaluate("""e=>{const f=e&&e.closest?e.closest('form'):null;return f?f.querySelectorAll('input:invalid,textarea:invalid,select:invalid').length:0}"""))
  except Exception:
   return 0
-async def proof_form_shape_ok(form,proof_submit_text=''):
+def schema_field_role(row):
+ d=' '.join(str((row or {}).get(k) or '') for k in ('desc','name','id')).strip()
+ typ=str((row or {}).get('type') or '').lower();tag=str((row or {}).get('tag') or '').lower()
+ explicit=str((row or {}).get('role') or '').strip().lower()
+ if explicit:return explicit
+ if typ=='email' or re.search(r'(e-?mail|メール)',d,re.I):return 'email'
+ if tag=='textarea' or re.search(r'(message|inquir|enquir|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細|description)',d,re.I):return 'message'
+ if re.search(r'(会社|法人|企業|company|organization|organisation)',d,re.I):return 'company'
+ if re.search(r'(ふりがな|ひらがな)',d,re.I):return 'name_hiragana'
+ if re.search(r'(フリガナ|カナ|kana|furigana)',d,re.I):return 'name_katakana'
+ if re.search(r'(姓|苗字|名字|surname|family[ _.-]?name|last[ _.-]?name|\\blname\\b)',d,re.I):return 'last_name'
+ if re.search(r'(名|given[ _.-]?name|first[ _.-]?name|\\bfname\\b)',d,re.I):return 'first_name'
+ if re.search(r'(氏名|お名前|名前|担当者|full.?name|contact.?name|\\bname\\b)',d,re.I):return 'name'
+ if re.search(r'(件名|subject|title)',d,re.I):return 'subject'
+ if re.search(r'(部署|部門|department|designation|job.?title|position|役職|職種)',d,re.I):return 'department'
+ if typ=='url' or re.search(r'(url|website|ホームページ)',d,re.I):return 'url'
+ return ''
+
+async def proof_form_shape_ok(form,proof_submit_text='',proof_field_schema=None):
  try:
   try: form_text=' '.join((await form.inner_text(timeout=1200)).split())[:5000]
   except Exception: form_text=''
   if EMAIL_CLIENT_FORM.search(form_text):return False
   ok=bool(await form.evaluate("""f=>{const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};const email=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i,msg=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;let E=false,M=false;for(const e of [...f.querySelectorAll('input,textarea,select')].slice(0,80)){if(!vis(e))continue;const d=[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),e.value,e.innerText,e.closest('td')?.previousElementSibling?.innerText,...[...(e.labels||[])].map(l=>l.innerText||'')].filter(Boolean).join(' ');const t=(e.getAttribute('type')||'').toLowerCase();E=E||t==='email'||email.test(d)||d.includes('@');M=M||e.tagName==='TEXTAREA'||msg.test(d)}return E&&M}"""))
   if not ok:return False
+  schema=[x for x in (proof_field_schema or []) if isinstance(x,dict)][:32]
+  if schema:
+   matched=0; matched_roles=set()
+   for row in schema:
+    role=schema_field_role(row)
+    loc=await reacquire_visible_field(form,str(row.get('name') or ''),str(row.get('id') or ''),int(row.get('i') if row.get('i') is not None else -1))
+    if loc is None:continue
+    matched+=1
+    if role:matched_roles.add(role)
+   expected_roles={schema_field_role(x) for x in schema}
+   expected_roles.discard('')
+   if 'email' in expected_roles and 'email' not in matched_roles:return False
+   if 'message' in expected_roles and 'message' not in matched_roles:return False
+   if matched < min(2,len(schema)):return False
   expected=normalize_proof_submit_text(proof_submit_text)
   if not expected:return True
   xs=form.locator('button,input[type=submit],input[type=button],input[type=image]')
@@ -370,7 +402,7 @@ async def proof_form_shape_ok(form,proof_submit_text=''):
    if d and (expected==d or expected in d or d in expected):return True
   return False
  except:return False
-async def choose_form_any_frame(page,proof_frame_index=None,proof_form_index=None,proof_submit_text=''):
+async def choose_form_any_frame(page,proof_frame_index=None,proof_form_index=None,proof_submit_text='',proof_field_schema=None):
  frames=ordered_form_frames(page)
  try:pfr=int(proof_frame_index) if proof_frame_index is not None else -1
  except:pfr=-1
@@ -382,8 +414,19 @@ async def choose_form_any_frame(page,proof_frame_index=None,proof_form_index=Non
    forms=root.locator('form')
    if 0<=pfi<await forms.count():
     pf=forms.nth(pfi)
-    if await proof_form_shape_ok(pf,proof_submit_text):return (1000,pfr,pfi,pf)
+    if await proof_form_shape_ok(pf,proof_submit_text,proof_field_schema):return (1000,pfr,pfi,pf)
   except Exception:pass
+ schema=[x for x in (proof_field_schema or []) if isinstance(x,dict)][:32]
+ if schema:
+  schema_hits=[]
+  for fri,root in enumerate(frames):
+   try:forms=root.locator('form');count=min(await forms.count(),12)
+   except Exception:continue
+   for fi in range(count):
+    f=forms.nth(fi)
+    if await proof_form_shape_ok(f,proof_submit_text,schema):
+     schema_hits.append((950,fri,fi,f))
+  if len(schema_hits)==1:return schema_hits[0]
  best=None
  for fri,root in enumerate(frames):
   c=await choose_form(root)
@@ -536,7 +579,41 @@ async def reacquire_visible_field(form,name='',eid='',fallback_index=-1):
  except Exception:pass
  return None
 
-async def fill_form(page,form,message,email,market):
+def schema_role_value(role,message,email,market):
+ company='Practical AI Lab';name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'
+ site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
+ return {
+  'email':email,'message':message,'company':company,'name':name,
+  'name_hiragana':'ぷらくてぃかるえーあいらぼ','name_katakana':'プラクティカルエーアイラボ',
+  'first_name':'Practical AI','last_name':'Lab',
+  'subject':('AI業務改善のご相談' if market=='JP-JA' else 'AI workflow fit check'),
+  'department':'Operations','url':site,
+ }.get(str(role or ''))
+
+async def fill_proof_schema(form,schema,message,email,market):
+ out={'email':False,'message':False,'matched':0,'filled':0,'ids':set(),'names':set(),'indices':set()}
+ for row in [x for x in (schema or []) if isinstance(x,dict)][:32]:
+  role=schema_field_role(row);value=schema_role_value(role,message,email,market)
+  if value is None:continue
+  try:i=int(row.get('i') if row.get('i') is not None else -1)
+  except Exception:i=-1
+  fid=str(row.get('id') or '');name=str(row.get('name') or '')
+  loc=await reacquire_visible_field(form,name,fid,i)
+  if loc is None:continue
+  out['matched']+=1
+  try:
+   await sticky_fill(loc,value)
+  except Exception:
+   continue
+  out['filled']+=1
+  if fid:out['ids'].add(fid)
+  if name:out['names'].add(name)
+  if i>=0:out['indices'].add(i)
+  if role=='email':out['email']=True
+  if role=='message':out['message']=True
+ return out
+
+async def fill_form(page,form,message,email,market,proof_field_schema=None):
  company='Practical AI Lab'; name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'; site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
  fields=form.locator('input,textarea,select'); required_unknown=[]; sensitive=[]; filled={'email':False,'message':False};fill_deadline=time.monotonic()+45.0
  script_required=set()
@@ -551,6 +628,8 @@ async def fill_form(page,form,message,email,market):
   })""")
  except Exception:
   meta=[]
+ mapped=await fill_proof_schema(form,proof_field_schema,message,email,market)
+ filled['email']=bool(mapped.get('email'));filled['message']=bool(mapped.get('message'))
  if any(sensitive_kind(str(m.get('d') or '')) for m in meta):
   script_required=await same_origin_script_required_sensitive(page)
  for m in meta:
@@ -559,6 +638,8 @@ async def fill_form(page,form,message,email,market):
    if not m.get('visible') or not m.get('enabled'):continue
    i=int(m.get('i') or 0);e=fields.nth(i);tag=str(m.get('tag') or '');typ=str(m.get('typ') or tag);d=' '.join(str(m.get('d') or '').split())[:500];cls=str(m.get('cls') or '')
    field_name=str(m.get('name') or '');field_id=str(m.get('id') or '')
+   if ((field_id and field_id in mapped['ids']) or (field_name and field_name in mapped['names']) or i in mapped['indices']):
+    continue
    kind=sensitive_kind(d)
    req=field_required_hint(bool(m.get('required')),cls,d) or bool(kind and kind in script_required)
    if time.monotonic()>fill_deadline:return {'ok':False,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'timed_out':True}
@@ -622,7 +703,7 @@ async def fill_form(page,form,message,email,market):
     if is_message_field:filled['message']=True
   except Exception as ex:
    if req:required_unknown.append((d or type(ex).__name__)[:160])
- return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8]}
+ return {'ok':filled['email'] and filled['message'] and not sensitive and not required_unknown,'filled':filled,'sensitive':sensitive[:8],'required_unknown':required_unknown[:8],'proof_schema_matched':int(mapped.get('matched') or 0),'proof_schema_filled':int(mapped.get('filled') or 0)}
 def compact_control_text(value):
  return re.sub(r'\s+','',str(value or '')).casefold()
 
@@ -926,6 +1007,7 @@ async def process_task(browser,t):
  # created by filling the canonical form and taking the confirm transition.
  url=sender_start_url(t)
  initial_proof_submit_text='' if proof_confirm_step else t.get('proof_submit_text')
+ proof_schema=[x for x in (t.get('proof_field_schema') or []) if isinstance(x,dict)][:32]
  ctx=None;click_barrier=False
  try:
   ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(2200 if fast_direct else 3000)
@@ -970,22 +1052,22 @@ async def process_task(browser,t):
    if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500],'late_form_wait_ms':3000}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
-  chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+  chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
   if not chosen:
    await reveal_candidate_forms(page,t.get('proof_frame_index'),t.get('proof_form_index'))
    if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'late_render':True}}
-   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
   if not chosen:
    multistep_steps=await advance_safe_multistep(page,t.get('proof_frame_index'),t.get('proof_form_index'))
    if multistep_steps:
-    chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+    chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
   else:
    multistep_steps=0
   if not chosen:
    await page.wait_for_timeout(300 if fast_direct else 900)
-   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
   if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True,'multistep_steps':multistep_steps}}
-  _,frame_i,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
+  _,frame_i,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''),proof_schema)
   if fill.get('timed_out'):return {**out,'outcome':'TECH_RETRY','reason':'FILL_TIMEOUT_PRE_SUBMIT','evidence':{**fill,'pre_submit':True}}
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
   if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':{**fill,'pre_submit':True}}
@@ -994,7 +1076,7 @@ async def process_task(browser,t):
   # A positional nth() locator can then silently point at an unrelated search
   # form. Re-resolve the contact form and require the exact filled payload to
   # still be present before any submit control is considered.
-  refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+  refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
   if not refreshed:return {**out,'outcome':'TECH_RETRY','reason':'FORM_IDENTITY_LOST_AFTER_FILL','evidence':{'pre_submit':True,'resend_safe':True}}
   _,frame_i,fi,form=refreshed
   if not await form_contains_payload(form,str(t.get('reply_address') or ''),str(t['message_body'])):
@@ -1010,7 +1092,7 @@ async def process_task(browser,t):
    # is already stable. Rebind the same proven form twice before failing closed.
    for settle_ms in (400,700):
     await page.wait_for_timeout(settle_ms)
-    refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
+    refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
     if not refreshed:continue
     _,frame_i,fi,form=refreshed
     if not await form_contains_payload(form,str(t.get('reply_address') or ''),str(t['message_body'])):continue
