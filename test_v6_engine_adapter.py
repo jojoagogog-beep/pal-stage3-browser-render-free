@@ -10,7 +10,7 @@ class V6EngineAdapterTests(unittest.TestCase):
             self.assertIn(name,docker)
     def test_adapter_uses_old_browser_slots_pipeline(self):
         s=Path("v6_v9_send_worker.py").read_text()
-        self.assertIn("BrowserSlots(2)",s)
+        self.assertIn("BrowserSlots(1)",s)
         self.assertIn("prepare_same_page",s)
         self.assertIn("revalidate_prepared_fields",s)
         self.assertIn("submit_prepared",s)

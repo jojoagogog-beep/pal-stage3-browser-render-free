@@ -95,7 +95,7 @@ async def main():
         if x is not None: ready.append(x)
     if not ready:
         print(json.dumps({'status':'PASS','engine':'V6_BROWSER_SLOTS','tasks':0,'results':[]})); return
-    bs=BrowserSlots(2); await bs.start(); results=[]; lock=asyncio.Lock(); queue=asyncio.Queue()
+    bs=BrowserSlots(1); await bs.start(); results=[]; lock=asyncio.Lock(); queue=asyncio.Queue()
     for t in ready: queue.put_nowait(t)
     async def lane(slot):
         while not queue.empty():
@@ -111,6 +111,6 @@ async def main():
         await asyncio.gather(*(lane(s) for s in list(bs.slots)))
     finally:
         await bs.close()
-    print(json.dumps({'status':'PASS','engine':'V6_BROWSER_SLOTS','tasks':len(ready),'concurrency':2,'results':[{k:r.get(k) for k in ('token_id','outcome','reason')} for r in results]},ensure_ascii=False))
+    print(json.dumps({'status':'PASS','engine':'V6_BROWSER_SLOTS','tasks':len(ready),'concurrency':1,'results':[{k:r.get(k) for k in ('token_id','outcome','reason')} for r in results]},ensure_ascii=False))
 
 if __name__=='__main__': asyncio.run(main())
