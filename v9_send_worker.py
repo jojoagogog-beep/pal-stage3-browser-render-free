@@ -579,6 +579,20 @@ async def reacquire_visible_field(form,name='',eid='',fallback_index=-1):
  except Exception:pass
  return None
 
+async def value_for_field_limit(loc,value,role=''):
+ try:
+  ml=int(await loc.evaluate("e=>Number(e.maxLength||e.getAttribute('maxlength')||-1)") or -1)
+ except Exception:
+  ml=-1
+ text=str(value)
+ if ml>0 and len(text)>ml:
+  # Preserve the original message intent, but do not submit a fragment that is
+  # too short to be meaningful. Email/name/etc. are never silently truncated.
+  if str(role or '')!='message' or ml<80:
+   raise RuntimeError('FIELD_MAXLENGTH_UNFIT')
+  text=text[:ml].rstrip()
+ return text
+
 def schema_role_value(role,message,email,market):
  company='Practical AI Lab';name='Practical AI Lab 運営' if market=='JP-JA' else 'Practical AI Lab'
  site='https://practical-ai-lab.pages.dev/' if market=='JP-JA' else 'https://practical-ai-lab.pages.dev/global/'
@@ -602,6 +616,7 @@ async def fill_proof_schema(form,schema,message,email,market):
   if loc is None:continue
   out['matched']+=1
   try:
+   value=await value_for_field_limit(loc,value,role)
    await sticky_fill(loc,value)
   except Exception:
    continue
@@ -692,12 +707,14 @@ async def fill_form(page,form,message,email,market,proof_field_schema=None):
    if value is not None:
     target=e
     try:
+     value=await value_for_field_limit(target,value,'message' if is_message_field else '')
      await sticky_fill(target,value)
     except Exception:
      # React/SPA forms can replace or duplicate inputs during hydration.
      # Reacquire the currently visible/enabled field, never a stale .first.
      target=await reacquire_visible_field(form,field_name,field_id,i)
      if target is None:raise
+     value=await value_for_field_limit(target,value,'message' if is_message_field else '')
      await sticky_fill(target,value)
     if is_email_field:filled['email']=True
     if is_message_field:filled['message']=True
