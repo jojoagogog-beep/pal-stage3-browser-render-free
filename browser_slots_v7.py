@@ -1173,7 +1173,7 @@ class BrowserSlots:
             return {"safe":False,"reason":"IDENTITY_MISSING"}
         try:
             try:
-                await slot.page.goto(url,wait_until="domcontentloaded",timeout=8000)
+                await slot.page.goto(url,wait_until="domcontentloaded",timeout=5000)
             except Exception as exc:
                 if type(exc).__name__!="TimeoutError":
                     return {"safe":False,"reason":"BROWSER_"+type(exc).__name__.upper(),"retry":True}
@@ -1626,6 +1626,38 @@ class BrowserSlots:
                     await cb.check()
             except Exception:
                 pass
+
+        # Some reactive builders add the required flag only after earlier fields
+        # receive input. Repair one late-required, non-sensitive text field pass
+        # before browser constraint validation. Never invent phone/address or
+        # factual select/radio answers.
+        try:
+            late_rows = await form.locator("input,textarea").evaluate_all(_pal_js(r"""
+              return els.map((e,i)=>({i,type:(e.type||'').toLowerCase(),tag:e.tagName.toLowerCase(),
+                value:e.value||'',required:palRequired(e),hidden:e.disabled||!palVisible(e)||e.type==='hidden',
+                desc:(palSelfDesc(e)+' '+palRowLabel(e)+' '+palLabelOf(e)).slice(0,700)}));
+            """))
+            for lr in late_rows:
+                if lr.get("hidden") or not lr.get("required") or str(lr.get("value") or "").strip():
+                    continue
+                typ=str(lr.get("type") or "").lower(); desc=str(lr.get("desc") or "")
+                if sensitive_rx.search(desc):
+                    return {"safe":False,"prepared":False,"reason":"REQUIRED_PERSONAL_ONLY","safety":True}
+                desired=None
+                if lr.get("tag")=="textarea": desired=message_body
+                elif typ=="email": desired=reply_address
+                elif typ=="url": desired=site_url
+                elif typ in {"text","search",""}:
+                    if re.search(r"(message|inquiry|enquiry|問い合わせ|内容|詳細|description)",desc,re.I): desired=message_body
+                    elif re.search(r"(e-?mail|メール)",desc,re.I): desired=reply_address
+                    elif re.search(r"(company|organization|organisation|会社|法人|企業)",desc,re.I): desired="Practical AI Lab"
+                    elif re.search(r"(件名|subject|title)",desc,re.I): desired=subject
+                    else: desired=contact_name
+                if desired is not None:
+                    try: await self._commit_field_value(form.locator("input,textarea").nth(int(lr["i"])),desired)
+                    except Exception: pass
+        except Exception:
+            pass
 
         presubmit = await form.locator("input,textarea,select").evaluate_all(_pal_js(r"""
           const missing=[], invalid=[]; const radioDone=new Set();
