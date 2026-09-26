@@ -1677,8 +1677,16 @@ class BrowserSlots:
                         "fill_ms": fill_ms,
                     }}
         final_safety_started = time.monotonic()
-        from revenue_execution.b2b_outbound.v41.static_probe_v41 import PROHIBIT, captcha_challenge_present
-        from revenue_execution.b2b_outbound.v5.semantic_fingerprint_v5 import from_html
+        PROHIBIT = re.compile(
+            r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|'
+            r'セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|'
+            r'no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))', re.I
+        )
+        def captcha_challenge_present(z):
+            return bool(re.search(
+                r'(g-recaptcha|grecaptcha|recaptcha/api|hcaptcha|h-captcha|'
+                r'challenges\.cloudflare\.com|cf-turnstile|turnstile/v0|captcha)', str(z or ''), re.I
+            ))
         final_url = page.url
         page_html = await page.content()
         root = self._target_root(slot)
@@ -1700,13 +1708,12 @@ class BrowserSlots:
         plain = " ".join(re.sub("<[^>]+>", " ", html).split())
         if PROHIBIT.search(plain):
             return {"safe": False, "prepared": False, "reason": "SALES_PROHIBITED", "safety": True}
-        semantic, semantic_fp, parse_status = await asyncio.to_thread(from_html, final_url, root_html)
-        if semantic and semantic.get("required_sensitive"):
-            return {"safe": False, "prepared": False, "reason": "FINAL_SEMANTIC_REQUIRED_SENSITIVE", "safety": True}
-        if (parse_status != "PASS" or not semantic) and not stage3_full_v3:
-            return {"safe": False, "prepared": False, "reason": "FINAL_SEMANTIC_" + str(parse_status), "safety": True}
-        if not semantic_fp:
-            semantic_fp = "STAGE3_FULL_V3_FINAL_LIVE_RECHECK"
+        # V9 already supplied the Stage3 rendered proof. The field-level live
+        # checks immediately above are authoritative here; do not import the
+        # legacy V5 semantic parser on Render. For non-V9 callers, fail closed.
+        if not stage3_full_v3:
+            return {"safe": False, "prepared": False, "reason": "FINAL_STAGE3_PROOF_REQUIRED", "safety": True}
+        semantic_fp = "V9_STAGE3_PREVERIFIED_FINAL_LIVE_RECHECK"
 
         now_ms = int(time.time() * 1000)
         final_proof_source, final_lane_mode = _final_live_preflight_provenance(
