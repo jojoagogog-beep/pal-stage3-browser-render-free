@@ -13,7 +13,8 @@ def v6_context(t):
     domain=str(t.get('official_domain') or (urlsplit(url).hostname or '')).lower().removeprefix('www.')
     market=str(t.get('market') or '')
     detail={
-        'proof_source':'RENDERED_BROWSER_V2','lane_mode':'FAST_DOM',
+        'proof_source':str(t.get('proof_stage3_source') or 'RENDERED_BROWSER_V2'),
+        'lane_mode':str(t.get('proof_lane_mode') or 'FAST_DOM').upper(),
         'frame_index':t.get('proof_frame_index'),'form_index':t.get('proof_form_index'),
         'submit_text':t.get('proof_submit_text'),'form_fingerprint':t.get('proof_form_fingerprint'),
         'control_kind':('CONFIRM_STEP' if t.get('proof_confirm_step') else 'DIRECT_SUBMIT'),
