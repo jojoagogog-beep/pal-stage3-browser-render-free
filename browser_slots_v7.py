@@ -1300,17 +1300,32 @@ class BrowserSlots:
         # fall back to the legacy rendered-depth search when that exact target
         # no longer exists on the live page.
         target = None
-        if reservoir_row.get("_v9_preverified") is True and stage3_frame_index is not None and stage3_form_index is not None:
+        v9_direct = bool(reservoir_row.get("_v9_preverified") is True and stage3_frame_index is not None and stage3_form_index is not None)
+        if v9_direct:
             try:
                 roots=list(page.frames)[:20]
                 if 0 <= int(stage3_frame_index) < len(roots):
-                    forms=roots[int(stage3_frame_index)].locator("form")
+                    root0=roots[int(stage3_frame_index)]
+                    forms=root0.locator("form")
+                    if not (0 <= int(stage3_form_index) < await forms.count()):
+                        try:
+                            await root0.wait_for_function(
+                                "i => document.forms && document.forms.length > i",
+                                arg=int(stage3_form_index), timeout=2000,
+                            )
+                        except Exception:
+                            pass
+                        forms=root0.locator("form")
                     if 0 <= int(stage3_form_index) < await forms.count():
                         target={"ready":True,"index":int(stage3_form_index),"score":1000,
                                 "action":str(await forms.nth(int(stage3_form_index)).get_attribute("action") or "")[:500],
                                 "frame_index":int(stage3_frame_index)}
             except Exception:
                 target=None
+            if target is None:
+                return {"safe":False,"prepared":False,"retry":True,
+                        "reason":"V9_PROVEN_FORM_NOT_READY",
+                        "cycle_seconds":round(time.monotonic()-started,3)}
         stage3_lane_mode = str(stage3_detail.get("lane_mode") or "").upper() if stage3_verified else ""
         if target is None and stage3_verified and stage3_lane_mode:
             try:
@@ -1354,11 +1369,11 @@ class BrowserSlots:
         # component hydrates on the first click. Reveal and settle that component
         # before filling, so the framework receives the input events.
         try:
-            await form.scroll_into_view_if_needed(timeout=2000)
+            await form.scroll_into_view_if_needed(timeout=(900 if v9_direct else 2000))
             if await form.evaluate("f => !!f.closest('astro-island[ssr]')"):
                 await root.wait_for_function(
                     "i => {const f=document.forms[i]; return !!f && !f.closest('astro-island[ssr]');}",
-                    arg=target_form_index, timeout=3500,
+                    arg=target_form_index, timeout=(1500 if v9_direct else 3500),
                 )
         except Exception:
             return {"safe": False, "prepared": False, "retry": True,
