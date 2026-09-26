@@ -903,6 +903,26 @@ async def refresh_actionable_control(form,item,kind='final',expected_text=''):
   if candidate is not None and await control_actionable(candidate):return candidate
  return None
 
+async def rebind_payload_control(page,t,proof_schema,proof_submit_text,kind):
+ # Reactive forms can replace both the form and its submit button after input.
+ # Reacquire only a form that still contains this exact email+message payload.
+ for delay in (0.12,0.30):
+  try:await page.wait_for_timeout(int(delay*1000))
+  except Exception:pass
+  refreshed=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),proof_submit_text,proof_schema)
+  if not refreshed:continue
+  _,_,_,fresh_form=refreshed
+  if not await form_contains_payload(fresh_form,str(t.get('reply_address') or ''),str(t.get('message_body') or '')):continue
+  try:form_action=str(await fresh_form.get_attribute('action') or '')
+  except:form_action=''
+  confirm_action=bool(re.search(r'(confirm|review|check|kakunin|確認)',unquote_plus(form_action),re.I))
+  confirm,final=await resolve_pre_submit_controls(fresh_form,bool(t.get('proof_confirm_step')),confirm_action,proof_submit_text)
+  item=confirm if kind=='confirm' else final
+  if item is None:continue
+  item=await refresh_actionable_control(fresh_form,item,kind,(proof_submit_text if kind=='final' else ''))
+  if item is not None:return fresh_form,item
+ return None,None
+
 async def unique_final_on_page(page):
  hits=[]
  try:n=min(await page.locator('form').count(),20)
@@ -1171,7 +1191,7 @@ async def process_task(browser,t):
       break
    if not has_form:return {**out,'outcome':'TECH_RETRY','reason':'NAVIGATION_TIMEOUT_NO_FORM','evidence':{'pre_submit':True,'final_url':page.url[:500],'late_form_wait_ms':5800}}
   if PROHIBIT.search(txt):return {**out,'outcome':'SAFETY_BLOCKED','reason':'SALES_PROHIBITED','evidence':{'pre_submit':True}}
-  if re.search(r'(protected\s+by\s+reCAPTCHA|please\s+confirm\s+you(?:\s+are|\'re)\s+human|human\s+verification)',txt,re.I):
+  if re.search(r'((?:protected\s+by|protegido\s+por)\s+(?:reCAPTCHA|hCaptcha)|(?:reCAPTCHA|hCaptcha).{0,100}(?:privacy policy|política de privacidad|terms of service|términos de servicio)|(?:reCAPTCHA|hCaptcha).{0,40}保護|please\s+confirm\s+you(?:\s+are|\'re)\s+human|human\s+verification)',txt,re.I):
    return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True,'text_signal':True}}
   if await visible_captcha_any(page):return {**out,'outcome':'SAFETY_BLOCKED','reason':'CAPTCHA','evidence':{'pre_submit':True}}
   chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text,proof_schema)
@@ -1259,6 +1279,10 @@ async def process_task(browser,t):
   if confirm is not None:
    if MODE=='PRODUCTION':
     confirm=await refresh_actionable_control(form,confirm,'confirm')
+    if confirm is None:
+     rebound_form,rebound=await rebind_payload_control(page,t,proof_schema,initial_proof_submit_text,'confirm')
+     if rebound is not None:
+      form,confirm=rebound_form,rebound
     if confirm is None:return {**out,'outcome':'TECH_RETRY','reason':'CONFIRM_CONTROL_STALE_PRE_CLICK','evidence':{'pre_submit':True,'resend_safe':True}}
    if MODE=='PRODUCTION' and not await asyncio.to_thread(_mark_click_started,t):return {**out,'outcome':'TECH_RETRY','reason':'CLICK_BARRIER_WRITE_FAILED','evidence':{'pre_submit':True}}
    click_barrier=True
@@ -1305,6 +1329,10 @@ async def process_task(browser,t):
    if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'AMBIGUOUS_HOLD','reason':'PRODUCTION_CONTROL_REVOKED_BEFORE_FINAL','evidence':{**cev,'control_recheck':True}}
   if MODE=='PRODUCTION' and not click_barrier:
    final=await refresh_actionable_control(form,final,'final',t.get('proof_submit_text') or '')
+   if final is None:
+    rebound_form,rebound=await rebind_payload_control(page,t,proof_schema,initial_proof_submit_text,'final')
+    if rebound is not None:
+     form,final=rebound_form,rebound
    if final is None:return {**out,'outcome':'TECH_RETRY','reason':'SUBMIT_CONTROL_STALE_PRE_CLICK','evidence':{'pre_submit':True,'resend_safe':True}}
    if not await asyncio.to_thread(_mark_click_started,t):return {**out,'outcome':'TECH_RETRY','reason':'CLICK_BARRIER_WRITE_FAILED','evidence':{'pre_submit':True}}
    click_barrier=True

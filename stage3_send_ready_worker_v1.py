@@ -863,7 +863,7 @@ async def visible_captcha(root):
       };
       if([...document.querySelectorAll(sel)].slice(0,12).some(visible)) return true;
       const body=((document.body&&document.body.textContent)||'').slice(0,12000);
-      return /(verify you are human|prove you are human|human verification|current year.{0,50}(?:human|prove)|anti[- ]?spam.{0,40}(?:question|check|challenge)|checking your browser|complete the security check|captcha challenge|画像認証|画像内.{0,30}(?:文字列|文字|コード)|認証コード.{0,20}(?:画像|入力)|画像認証.{0,30}(?:正しくありません|必須))/i.test(body);
+      return /(verify you are human|prove you are human|human verification|current year.{0,50}(?:human|prove)|anti[- ]?spam.{0,40}(?:question|check|challenge)|checking your browser|complete the security check|captcha challenge|(?:protected\s+by|protegido\s+por)\s+(?:recaptcha|hcaptcha)|(?:recaptcha|hcaptcha).{0,100}(?:privacy policy|política de privacidad|terms of service|términos de servicio)|(?:recaptcha|hcaptcha).{0,40}保護|画像認証|画像内.{0,30}(?:文字列|文字|コード)|認証コード.{0,20}(?:画像|入力)|画像認証.{0,30}(?:正しくありません|必須))/i.test(body);
     }"""
     try:
         return bool(await asyncio.wait_for(root.evaluate(script),timeout=2.0))
