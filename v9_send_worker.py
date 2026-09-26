@@ -849,18 +849,25 @@ async def form_contains_payload(form,email,message):
     for(const e of els){
       const raw=norm(e.value),v=semantic(e.value);
       if(raw.toLowerCase()===wantEmail)email=true;
-      if(v===wantMessage){
+      const desc=[e.name,e.id,e.placeholder,e.getAttribute('aria-label')].filter(Boolean).join(' ');
+      const messageLike=e.tagName==='TEXTAREA'||/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i.test(desc);
+      let expected=wantMessage;
+      if(messageLike){
+        const ml=Number(e.maxLength||e.getAttribute('maxlength')||-1);
+        if(ml>0 && String(a.message||'').length>ml){
+          expected=semantic(String(a.message||'').slice(0,ml).replace(/\s+$/,''));
+        }
+      }
+      if(messageLike && v===expected){
         message=true;
-      }else if(wantMessage && v){
-        // Reactive forms often normalize whitespace or apply a visible
-        // maxlength. Accept only a substantial prefix-equivalent payload;
-        // this is still much stricter than checking for a generic non-empty
-        // textarea and prevents rebinding to an unrelated form.
-        const shorter=Math.min(v.length,wantMessage.length);
-        const longer=Math.max(v.length,wantMessage.length);
-        const enough=shorter>=Math.min(160,Math.floor(wantMessage.length*0.80));
+      }else if(messageLike && expected && v){
+        // Reactive forms can normalize whitespace. Compare against the exact
+        // maxlength-adjusted message that the sender intentionally filled.
+        const shorter=Math.min(v.length,expected.length);
+        const longer=Math.max(v.length,expected.length);
+        const enough=shorter>=Math.min(160,Math.floor(expected.length*0.80));
         const ratio=longer ? shorter/longer : 0;
-        if(enough && ratio>=0.80 && (v.startsWith(wantMessage.slice(0,shorter)) || wantMessage.startsWith(v.slice(0,shorter)))){
+        if(enough && ratio>=0.80 && (v.startsWith(expected.slice(0,shorter)) || expected.startsWith(v.slice(0,shorter)))){
           message=true;
         }
       }
