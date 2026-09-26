@@ -920,6 +920,7 @@ async def process_task(browser,t):
  if MODE=='PRODUCTION' and not _proof_control_ok(t,60000):return {**out,'outcome':'TECH_RETRY','reason':'PROOF_EXPIRED_PRE_BROWSER','evidence':{'pre_submit':True,'proof_expires_at':t.get('proof_expires_at')}}
  if MODE=='PRODUCTION' and not await asyncio.to_thread(_production_control_ok):return {**out,'outcome':'TECH_RETRY','reason':'PRODUCTION_CONTROL_REVOKED_PRE_BROWSER','evidence':{'pre_submit':True,'control_recheck':True}}
  canonical_url=str(t['canonical_url']);domain=str(t.get('official_domain') or host(canonical_url));proof_url=str(t.get('proof_url') or '')
+ fast_direct=(str(t.get('proof_lane') or '')=='DIRECT_LIVE_REVALIDATE')
  proof_confirm_step=bool(t.get('proof_confirm_step'))
  # A confirmation-page proof cannot be opened directly: it depends on state
  # created by filling the canonical form and taking the confirm transition.
@@ -927,11 +928,11 @@ async def process_task(browser,t):
  initial_proof_submit_text='' if proof_confirm_step else t.get('proof_submit_text')
  ctx=None;click_barrier=False
  try:
-  ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(3000)
+  ctx=await browser.new_context(user_agent=UA,ignore_https_errors=False);page=await ctx.new_page();page.set_default_timeout(2200 if fast_direct else 3000)
   await page.route('**/*',lambda route: route.abort() if route.request.resource_type in {'image','media','font'} else route.continue_())
   nav_timeout=False;nav_alias_fallback=False;nav_http_status=None
   try:
-   nav_resp=await page.goto(url,wait_until='domcontentloaded',timeout=14000)
+   nav_resp=await page.goto(url,wait_until='domcontentloaded',timeout=(8000 if fast_direct else 14000))
    nav_http_status=(int(nav_resp.status) if nav_resp is not None else None)
   except PlaywrightTimeoutError:
    nav_timeout=True
@@ -943,18 +944,18 @@ async def process_task(browser,t):
    if fallback and host(fallback)==domain:
     nav_alias_fallback=True;url=fallback
     try:
-     nav_resp=await page.goto(fallback,wait_until='domcontentloaded',timeout=14000)
+     nav_resp=await page.goto(fallback,wait_until='domcontentloaded',timeout=(8000 if fast_direct else 14000))
      nav_http_status=(int(nav_resp.status) if nav_resp is not None else None)
     except PlaywrightTimeoutError:nav_timeout=True
    else:
     raise
-  await page.wait_for_timeout(600 if nav_timeout else (800 if str(t.get('proof_lane') or '')=='FAST_DOM' else 1600))
+  await page.wait_for_timeout(400 if fast_direct else (600 if nav_timeout else (800 if str(t.get('proof_lane') or '')=='FAST_DOM' else 1600)))
   if host(page.url)!=domain:return {**out,'outcome':'SAFETY_BLOCKED','reason':'DOMAIN_CHANGED','evidence':{'final_url':page.url[:500]}}
   http_verdict=pre_submit_http_verdict(nav_http_status)
   if http_verdict:
    outcome,reason=http_verdict
    return {**out,'outcome':outcome,'reason':reason,'evidence':{'pre_submit':True,'http_status':nav_http_status,'final_url':page.url[:500],'navigation_timeout':nav_timeout}}
-  txt=await body_text(page,3500)
+  txt=await body_text(page,2000 if fast_direct else 3500)
   if txt is None:return {**out,'outcome':'TECH_RETRY','reason':'BODY_UNREADABLE_PRE_SUBMIT','evidence':{'pre_submit':True,'navigation_timeout':nav_timeout,'final_url':page.url[:500]}}
   if nav_timeout:
    has_form=await has_any_form(page)
@@ -962,7 +963,7 @@ async def process_task(browser,t):
     # A navigation timeout can still leave a usable page that finishes
     # hydrating the contact form a moment later. Re-check the live DOM/frames
     # before declaring a technical retry; never click or submit in this wait.
-    for delay_ms in (1200,1800):
+    for delay_ms in ((400,700) if fast_direct else (1200,1800)):
      await page.wait_for_timeout(delay_ms)
      if await has_any_form(page):
       has_form=True;break
@@ -981,14 +982,14 @@ async def process_task(browser,t):
   else:
    multistep_steps=0
   if not chosen:
-   await page.wait_for_timeout(900)
+   await page.wait_for_timeout(300 if fast_direct else 900)
    chosen=await choose_form_any_frame(page,t.get('proof_frame_index'),t.get('proof_form_index'),initial_proof_submit_text)
   if not chosen:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'BUSINESS_CONTACT_FORM_NOT_FOUND','evidence':{'pre_submit':True,'late_retry':True,'multistep_steps':multistep_steps}}
   _,frame_i,fi,form=chosen;fill=await fill_form(page,form,str(t['message_body']),str(t.get('reply_address') or ''),str(t.get('market') or ''))
   if fill.get('timed_out'):return {**out,'outcome':'TECH_RETRY','reason':'FILL_TIMEOUT_PRE_SUBMIT','evidence':{**fill,'pre_submit':True}}
   if fill['sensitive']:return {**out,'outcome':'SAFETY_BLOCKED','reason':'REQUIRED_SENSITIVE','evidence':fill}
   if not fill['ok']:return {**out,'outcome':'CONFIRMED_NOT_SENT','reason':'REQUIRED_UNFILLABLE','evidence':{**fill,'pre_submit':True}}
-  await page.wait_for_timeout(500)
+  await page.wait_for_timeout(250 if fast_direct else 500)
   # Frameworks such as Contact Form 7 can reorder forms after field updates.
   # A positional nth() locator can then silently point at an unrelated search
   # form. Re-resolve the contact form and require the exact filled payload to
