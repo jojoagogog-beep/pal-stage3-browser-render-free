@@ -1164,11 +1164,53 @@ class BrowserSlots:
                             "frame_index": frame_index}
         return best or {"ready": False, "reason": "BUSINESS_CONTACT_FORM_NOT_FOUND"}
 
+    async def v9_preverified_preflight(self, slot: BrowserSlot, route_meta: dict, reservoir_row: dict) -> dict:
+        """Fast live recheck for a fresh V9 Stage3 SEND_READY route."""
+        started=time.monotonic()
+        url=str(route_meta.get("canonical_url") or reservoir_row.get("canonical_url") or "")
+        domain=str(route_meta.get("domain") or reservoir_row.get("official_domain") or "").lower().removeprefix("www.")
+        if not url or not domain:
+            return {"safe":False,"reason":"IDENTITY_MISSING"}
+        try:
+            try:
+                await slot.page.goto(url,wait_until="domcontentloaded",timeout=8000)
+            except Exception as exc:
+                if type(exc).__name__!="TimeoutError":
+                    return {"safe":False,"reason":"BROWSER_"+type(exc).__name__.upper(),"retry":True}
+            final_url=str(slot.page.url or url)
+            final_domain=(urlsplit(final_url).hostname or "").lower().removeprefix("www.")
+            if final_domain!=domain:
+                return {"safe":False,"reason":"DOMAIN_CHANGED","safety":True}
+            for root in list(slot.page.frames)[:20]:
+                if await self._visible_captcha_challenge(root):
+                    return {"safe":False,"reason":"CAPTCHA","safety":True}
+            html=await slot.page.content()
+            plain=" ".join(re.sub("<[^>]+>"," ",html).split())
+            prohibit=re.compile(
+                r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|'
+                r'セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|'
+                r'no\s+(?:sales|solicitation|marketing)\s+(?:messages?|inquiries|contacts?))',re.I)
+            if prohibit.search(plain):
+                return {"safe":False,"reason":"SALES_PROHIBITED","safety":True}
+            if final_domain.endswith((".go.jp",".lg.jp",".gov",".gov.uk",".gov.sg",".govt.nz")) or ".gov." in final_domain:
+                return {"safe":False,"reason":"PUBLIC_ENTITY","safety":True}
+            return {"safe":True,"reason":"V9_PREVERIFIED_FAST_PREFLIGHT","final_url":final_url,
+                    "form_fingerprint":hashlib.sha256((final_url+"\n"+html).encode("utf-8","ignore")).hexdigest(),
+                    "semantic_fingerprint":"V9_STAGE3_PREVERIFIED",
+                    "content_hash":hashlib.sha256(html.encode("utf-8","ignore")).hexdigest(),
+                    "navigation_timeout_recovered":False,
+                    "timing":{"preflight_total_ms":round((time.monotonic()-started)*1000,1)}}
+        except Exception as exc:
+            return {"safe":False,"reason":"V9_FAST_PREFLIGHT_"+type(exc).__name__.upper(),"retry":True}
+
     async def prepare_same_page(self, slot: BrowserSlot, route_meta: dict, reservoir_row: dict,
                                 message_body: str, reply_address: str) -> dict:
         """VERIFY + fill + final safety recheck on the same already-open Page. Never submits."""
         started = time.monotonic()
-        pre = await self.live_preflight(slot, route_meta, reservoir_row)
+        if reservoir_row.get("_v9_preverified") is True:
+            pre = await self.v9_preverified_preflight(slot, route_meta, reservoir_row)
+        else:
+            pre = await self.live_preflight(slot, route_meta, reservoir_row)
         if pre.get("safe") is not True:
             return {**pre, "prepared": False, "cycle_seconds": round(time.monotonic() - started, 3)}
         if not message_body or not reply_address:

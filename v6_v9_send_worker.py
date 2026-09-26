@@ -22,6 +22,7 @@ def v6_context(t):
                 'name':str(t.get('company_key') or domain),'legal_verified':True,
                 'source_kind':'V9_VERIFIED','reject_code':'','safety_flags_json':'[]'}
     reservoir={'canonical_url':url,'official_domain':domain,'market':market,
+               '_v9_preverified':True,
                '_stage3_full_v3_fresh':True,
                '_stage3_full_v3_detail_json':json.dumps(detail,ensure_ascii=False),
                '_stage3_full_v3_field_schema_json':json.dumps(t.get('proof_field_schema') or [],ensure_ascii=False),
