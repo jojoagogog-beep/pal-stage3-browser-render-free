@@ -772,14 +772,29 @@ async def final_control_matching_text(form,expected_text=''):
 
 async def form_contains_payload(form,email,message):
  try:
-  found=await form.locator('input,textarea').evaluate_all("""(els,a)=>{
+  found=await form.locator('input,textarea').evaluate_all(r"""(els,a)=>{
     const norm=(v)=>String(v||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/[ \t]+$/gm,'').trim();
+    const semantic=(v)=>norm(v).replace(/\s+/g,' ').trim();
     let email=false,message=false;
-    const wantEmail=norm(a.email).toLowerCase(),wantMessage=norm(a.message);
+    const wantEmail=norm(a.email).toLowerCase(),wantMessage=semantic(a.message);
     for(const e of els){
-      const v=norm(e.value);
-      if(v.toLowerCase()===wantEmail)email=true;
-      if(v===wantMessage)message=true;
+      const raw=norm(e.value),v=semantic(e.value);
+      if(raw.toLowerCase()===wantEmail)email=true;
+      if(v===wantMessage){
+        message=true;
+      }else if(wantMessage && v){
+        // Reactive forms often normalize whitespace or apply a visible
+        // maxlength. Accept only a substantial prefix-equivalent payload;
+        // this is still much stricter than checking for a generic non-empty
+        // textarea and prevents rebinding to an unrelated form.
+        const shorter=Math.min(v.length,wantMessage.length);
+        const longer=Math.max(v.length,wantMessage.length);
+        const enough=shorter>=Math.min(160,Math.floor(wantMessage.length*0.80));
+        const ratio=longer ? shorter/longer : 0;
+        if(enough && ratio>=0.80 && (v.startsWith(wantMessage.slice(0,shorter)) || wantMessage.startsWith(v.slice(0,shorter)))){
+          message=true;
+        }
+      }
     }
     return {email,message};
   }""",{'email':email,'message':message})
