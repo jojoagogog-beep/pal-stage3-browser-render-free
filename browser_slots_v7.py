@@ -1181,11 +1181,23 @@ class BrowserSlots:
             final_domain=(urlsplit(final_url).hostname or "").lower().removeprefix("www.")
             if final_domain!=domain:
                 return {"safe":False,"reason":"DOMAIN_CHANGED","safety":True}
-            for root in list(slot.page.frames)[:20]:
+            detail={}
+            try: detail=json.loads(str(reservoir_row.get("_stage3_full_v3_detail_json") or "{}"))
+            except Exception: detail={}
+            try: proof_frame=int(detail.get("frame_index")) if detail.get("frame_index") is not None else 0
+            except Exception: proof_frame=0
+            roots=list(slot.page.frames)
+            check_roots=[]
+            for idx in (0,proof_frame):
+                if 0 <= idx < len(roots) and roots[idx] not in check_roots: check_roots.append(roots[idx])
+            for root in check_roots:
                 if await self._visible_captcha_challenge(root):
                     return {"safe":False,"reason":"CAPTCHA","safety":True}
-            html=await slot.page.content()
-            plain=" ".join(re.sub("<[^>]+>"," ",html).split())
+            try:
+                plain=" ".join((await slot.page.locator("body").inner_text(timeout=900)).split())
+            except Exception:
+                plain=""
+            html=plain[:24000]
             prohibit=re.compile(
                 r'(営業(?:目的|メール|連絡|勧誘).{0,24}(?:お断り|禁止|不可)|'
                 r'セールス.{0,24}(?:お断り|禁止)|勧誘.{0,24}(?:お断り|禁止)|'
@@ -1195,7 +1207,7 @@ class BrowserSlots:
             if final_domain.endswith((".go.jp",".lg.jp",".gov",".gov.uk",".gov.sg",".govt.nz")) or ".gov." in final_domain:
                 return {"safe":False,"reason":"PUBLIC_ENTITY","safety":True}
             return {"safe":True,"reason":"V9_PREVERIFIED_FAST_PREFLIGHT","final_url":final_url,
-                    "form_fingerprint":hashlib.sha256((final_url+"\n"+html).encode("utf-8","ignore")).hexdigest(),
+                    "form_fingerprint":str(detail.get("form_fingerprint") or hashlib.sha256((final_url+"\n"+html).encode("utf-8","ignore")).hexdigest()),
                     "semantic_fingerprint":"V9_STAGE3_PREVERIFIED",
                     "content_hash":hashlib.sha256(html.encode("utf-8","ignore")).hexdigest(),
                     "navigation_timeout_recovered":False,
@@ -1385,7 +1397,12 @@ class BrowserSlots:
         # On those builders use Playwright's trusted fill path field-by-field so
         # React/Wix receives the same input sequence a user would generate.
         try:
-            trusted_event_fill = _requires_trusted_field_events(await page.content())
+            if reservoir_row.get("_v9_preverified") is True:
+                trusted_event_fill = bool(await page.evaluate("""() => !!document.querySelector(
+                  '[data-mesh-id],[class*=\"wixui-\"],script[src*=\"wixstatic.com\"],script[src*=\"parastorage.com\"]'
+                )"""))
+            else:
+                trusted_event_fill = _requires_trusted_field_events(await page.content())
         except Exception:
             trusted_event_fill = False
         batch_assignments = []
@@ -1734,24 +1751,32 @@ class BrowserSlots:
                 r'challenges\.cloudflare\.com|cf-turnstile|turnstile/v0|captcha)', str(z or ''), re.I
             ))
         final_url = page.url
-        page_html = await page.content()
         root = self._target_root(slot)
-        try:
-            root_html = await root.content()
-        except Exception:
-            root_html = page_html
-        html = page_html + "\n" + root_html
         domain = str(route_meta.get("domain") or reservoir_row.get("official_domain") or "").lower().removeprefix("www.")
         if (urlsplit(final_url).hostname or "").lower().removeprefix("www.") != domain:
             return {"safe": False, "prepared": False, "reason": "DOMAIN_CHANGED", "safety": True}
         stage3_full_v3 = bool(reservoir_row.get("_stage3_full_v3_fresh"))
         if stage3_full_v3:
-            for _r in list(page.frames)[:20]:
+            roots=list(page.frames); check_roots=[]
+            for idx in (0,int(getattr(slot,"target_frame_index",0) or 0)):
+                if 0 <= idx < len(roots) and roots[idx] not in check_roots: check_roots.append(roots[idx])
+            for _r in check_roots:
                 if await self._visible_captcha_challenge(_r):
                     return {"safe": False, "prepared": False, "reason": "CAPTCHA", "safety": True}
-        elif captcha_challenge_present(html):
-            return {"safe": False, "prepared": False, "reason": "CAPTCHA", "safety": True}
-        plain = " ".join(re.sub("<[^>]+>", " ", html).split())
+            try: page_text=await page.locator("body").inner_text(timeout=900)
+            except Exception: page_text=""
+            try: root_text=await root.locator("body").inner_text(timeout=700)
+            except Exception: root_text=""
+            plain=" ".join((str(page_text)+" "+str(root_text)).split())[:30000]
+            html=plain
+        else:
+            page_html = await page.content()
+            try: root_html = await root.content()
+            except Exception: root_html = page_html
+            html = page_html + "\n" + root_html
+            if captcha_challenge_present(html):
+                return {"safe": False, "prepared": False, "reason": "CAPTCHA", "safety": True}
+            plain = " ".join(re.sub("<[^>]+>", " ", html).split())
         if PROHIBIT.search(plain):
             return {"safe": False, "prepared": False, "reason": "SALES_PROHIBITED", "safety": True}
         # V9 already supplied the Stage3 rendered proof. The field-level live
