@@ -470,13 +470,16 @@ class BrowserSlots:
         if self.browser:
             return
         self.pw = await async_playwright().start()
-        executable = os.getenv(
-            "PAL_V6_CHROME_PATH",
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        )
+        executable = os.getenv("PAL_V6_CHROME_PATH", "").strip()
+        if not executable:
+            executable = (
+                "/usr/bin/chromium" if os.path.exists("/usr/bin/chromium")
+                else "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+            )
         kwargs = {
             "headless": True,
-            "args": ["--disable-background-networking", "--disable-sync"],
+            "args": ["--disable-background-networking", "--disable-sync",
+                     "--disable-dev-shm-usage", "--no-sandbox"],
         }
         if os.path.exists(executable):
             kwargs["executable_path"] = executable
