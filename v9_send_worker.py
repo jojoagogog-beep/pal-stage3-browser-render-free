@@ -920,12 +920,26 @@ async def settle_correlated_click_timeout(page,click_error,mutations):
  return True
 
 async def provider_confirmation_visible(page):
- for sel in ('[id^="gform_confirmation_message_"]','.gform_confirmation_message','.wpforms-confirmation-container-full','.mw_wp_form_complete','.form__holder.form-success.success','.form-success.success'):
+ for sel in ('[id^="gform_confirmation_message_"]','.gform_confirmation_message','.wpforms-confirmation-container-full','.mw_wp_form_complete','.w-form-done','.form__holder.form-success.success','.form-success.success'):
   try:
    xs=page.locator(sel)
    for i in range(min(await xs.count(),4)):
     if await xs.nth(i).is_visible():return True
   except:pass
+ return False
+
+def trusted_provider_accept(responses,payload_cleared):
+ # Count only provider endpoints that return 2xx after receiving this exact
+ # form payload. Generic 2xx remains ambiguous.
+ for x in responses or []:
+  if not x.get('matches_form_payload'):continue
+  try: status=int(x.get('status') or 0);u=urlsplit(str(x.get('url') or ''));h=(u.hostname or '').lower();path=u.path or '/'
+  except Exception:continue
+  if not (200 <= status < 300):continue
+  if h=='webflow.com' and path.startswith('/api/v1/form/'):
+   return True
+  if h=='contact.apps-api.instantpage.secureserver.net' and path.startswith('/v3/messages'):
+   return True
  return False
 
 async def recover_correlated_request_responses(req_objs,responses,resp_objs):
@@ -1057,11 +1071,12 @@ async def click_and_evidence(page,loc,message,email,before_text):
  except:path_changed=False
  correlated_2xx_navigation=bool(corr2xx and path_changed and not is_confirm_url(page.url) and not final_error_path)
  correlated_3xx_cleared=bool(corr3xx and payload_cleared and not redirect_confirm and not is_confirm_url(page.url) and not redirect_error and not final_error_path)
- has_success=bool(provider_success or provider_confirmation_dom or new_success)
+ provider_endpoint_accept=trusted_provider_accept(responses,payload_cleared)
+ has_success=bool(provider_success or provider_confirmation_dom or new_success or provider_endpoint_accept)
  same_form_reject=same_form_redirect_failure(before_url,responses,payload_values_remaining,has_success)
  home_no_submit=home_navigation_without_submission(before_url,page.url,mutations,payload_values_remaining,has_success)
- ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':correlated_mutation,'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_request_created':corr_created,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'final_error_path':final_error_path,'redirect_error':redirect_error,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'same_form_redirect_failure':same_form_reject,'home_navigation_without_submission':home_no_submit,'server_success':provider_success,'provider_confirmation_dom':provider_confirmation_dom,'server_not_sent':provider_fail or corr4xx or final_error_path or redirect_error,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
- if (provider_success or provider_confirmation_dom or new_success or corr204 or corr_created or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation or correlated_3xx_cleared) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
+ ev={'clicked_once':True,'submit_request_observed':bool(mutations),'submit_request_correlated':correlated_mutation,'submit_request_2xx':corr2xx,'submit_request_204':corr204,'submit_request_created':corr_created,'submit_redirect_completion':redirect_completion,'submit_redirect_success_query':redirect_success_query,'submit_redirect_confirm':redirect_confirm,'final_completion_path':final_completion,'final_success_query':final_success_query,'final_error_path':final_error_path,'redirect_error':redirect_error,'post_submit_path_changed':path_changed,'payload_values_remaining':payload_values_remaining,'payload_cleared':payload_cleared,'correlated_2xx_navigation':correlated_2xx_navigation,'correlated_3xx_cleared':correlated_3xx_cleared,'trusted_provider_accept':provider_endpoint_accept,'same_form_redirect_failure':same_form_reject,'home_navigation_without_submission':home_no_submit,'server_success':provider_success,'provider_confirmation_dom':provider_confirmation_dom,'server_not_sent':provider_fail or corr4xx or final_error_path or redirect_error,'success_dom':new_success,'success_match':success_match,'failure_match':failure_match,'final_text_excerpt':final_text_excerpt,'validation_error':validation,'new_validation_text':new_validation_text,'invalid_control_count':invalid_control_count,'network_mutations':mutations[:8],'network_responses':responses[:8],'response_bodies':bodies,'final_url':page.url[:500],'click_error':click_error}
+ if (provider_success or provider_confirmation_dom or new_success or provider_endpoint_accept or corr204 or corr_created or redirect_completion or redirect_success_query or final_completion or final_success_query or correlated_2xx_navigation or correlated_3xx_cleared) and not ev['server_not_sent'] and not validation:return 'SENT_CONFIRMED',ev
  if ev['server_not_sent'] or validation or same_form_reject or home_no_submit:return 'CONFIRMED_NOT_SENT',ev
  return 'AMBIGUOUS_HOLD',ev
 async def await_submit_barrier(task,timeout=65.0):
