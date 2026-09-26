@@ -332,6 +332,53 @@ async def choose_form(page):
   fi=int(rows[0]['fi']);return (int(rows[0]['score']),fi,page.locator('form').nth(fi))
  except:return None
 
+async def choose_virtual_contact_container(root):
+ # Some React/Webflow-style contact UIs do not use a literal <form>.
+ # Accept only one unambiguous visible container containing an email field,
+ # a message field, and an actionable submit-like control.
+ try:
+  result=await root.evaluate(r"""() => {
+    const vis=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0&&!e.disabled};
+    const emailRx=/(e-?mail|(?:^|[^a-z])mail(?:$|[^a-z])|メール)/i;
+    const msgRx=/(message|inquir|enquir|comment|お問い合わせ内容|問い合わせ内容|ご用件|内容|詳細)/i;
+    const sendRx=/(send|submit|contact|inquir|enquir|送信|確認|次へ)/i;
+    const fields=[...document.querySelectorAll('input,textarea')].filter(vis);
+    const desc=e=>[e.name,e.id,e.placeholder,e.getAttribute('aria-label'),...[...(e.labels||[])].map(l=>l.innerText||'')].filter(Boolean).join(' ');
+    const emails=fields.filter(e=>(e.type||'').toLowerCase()==='email'||emailRx.test(desc(e)));
+    const messages=fields.filter(e=>e.tagName==='TEXTAREA'||msgRx.test(desc(e)));
+    const controls=[...document.querySelectorAll('button,input[type=submit],input[type=button]')].filter(vis).filter(e=>sendRx.test([e.innerText,e.value,e.getAttribute('aria-label')].filter(Boolean).join(' ')));
+    const common=(a,b)=>{
+      const seen=new Set();let x=a;
+      for(let i=0;x&&i<8;i++,x=x.parentElement)seen.add(x);
+      x=b;for(let i=0;x&&i<8;i++,x=x.parentElement){if(seen.has(x))return x}
+      return null;
+    };
+    const hits=[];
+    for(const e of emails.slice(0,8))for(const m of messages.slice(0,8)){
+      let c=common(e,m);if(!c)continue;
+      for(let up=0;c&&up<4;up++,c=c.parentElement){
+        const cs=controls.filter(b=>c.contains(b));
+        if(cs.length!==1)continue;
+        const ins=[...c.querySelectorAll('input,textarea,select')].filter(vis);
+        if(ins.length<2||ins.length>40)continue;
+        const txt=(c.innerText||'').slice(0,5000);
+        if(/mailto:|email\s+client/i.test(txt))continue;
+        hits.push(c);break;
+      }
+    }
+    const uniq=[...new Set(hits)];
+    if(uniq.length!==1)return {ok:false,count:uniq.length};
+    document.querySelectorAll('[data-pal-virtual-contact]').forEach(x=>x.removeAttribute('data-pal-virtual-contact'));
+    uniq[0].setAttribute('data-pal-virtual-contact','1');
+    return {ok:true,count:1};
+  }""")
+  if result and result.get('ok'):
+   loc=root.locator('[data-pal-virtual-contact="1"]')
+   if await loc.count()==1:return loc
+ except Exception:
+  pass
+ return None
+
 def ordered_form_frames(page,domain=''):
  all_frames=list(page.frames);main=page.main_frame;same=[];provider=[];other=[];domain=domain or host(page.url)
  provider_re=re.compile(r'(form|contact|hubspot|jotform|typeform|wufoo|formstack|marketo|pardot|salesforce)',re.I)
@@ -433,7 +480,12 @@ async def choose_form_any_frame(page,proof_frame_index=None,proof_form_index=Non
   if not c:continue
   score,fi,form=c;cand=(int(score),fri,int(fi),form)
   if best is None or cand[0]>best[0]:best=cand
- return best
+ if best is not None:return best
+ virtual=[]
+ for fri,root in enumerate(frames):
+  loc=await choose_virtual_contact_container(root)
+  if loc is not None:virtual.append((10,fri,-1,loc))
+ return virtual[0] if len(virtual)==1 else None
 
 async def visible_captcha_any(page):
  for root in list(page.frames)[:12]:
