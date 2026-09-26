@@ -79,12 +79,12 @@ class V9SenderSafetyTests(unittest.TestCase):
         finally:
             app.TOKEN,app.STAGE2_PRIMARY_ROLE,app.V9_SEND_THREAD,app.V9_SEND_PENDING,app._start_pending_v9_send=old
 
-    def test_sender_turn_capacity_is_four_bounded_tasks(self):
+    def test_sender_turn_capacity_is_eight_bounded_tasks(self):
         src=Path('v9_send_worker.py').read_text()
-        self.assertIn("PAL_V9_SEND_MAX_TASKS','4'",src)
+        self.assertIn("PAL_V9_SEND_MAX_TASKS','8'",src)
         self.assertIn('[:MAX_TASKS_PER_TURN]',src)
         self.assertIn('asyncio.Semaphore(SEND_CONCURRENCY)',src)
-        self.assertEqual(w.MAX_TASKS_PER_TURN,4)
+        self.assertEqual(w.MAX_TASKS_PER_TURN,8)
         self.assertEqual(w.SEND_CONCURRENCY,2)
 
     def test_production_waits_for_submit_barrier(self):
