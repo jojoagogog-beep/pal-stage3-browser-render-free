@@ -1,0 +1,14 @@
+{
+  "sourceLocale": "en",
+  "fallbackLocale": "en",
+  "targets": [
+    "en", "ja", "de", "fr", "es", "pt-BR", "it", "nl",
+    "sv", "da", "no", "fi", "pl", "cs", "tr", "ko",
+    "zh-CN", "zh-TW", "th", "id", "vi", "ar", "he", "hi"
+  ],
+  "policy": {
+    "appStoreLanguageClaim": "only_after_ui_translation_qa",
+    "unknownLocale": "fallback_to_en",
+    "datesNumbersCurrency": "Intl"
+  }
+}

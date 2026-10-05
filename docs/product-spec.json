@@ -1,0 +1,12 @@
+{
+  "slug": "pal-barcode-checksum-guard",
+  "name": "PAL Barcode Checksum Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "4.99",
+    "trial_days": 7
+  },
+  "primary_check": "Invalid barcode checksum",
+  "headline": "Find UPC and EAN barcodes with invalid check digits."
+}
