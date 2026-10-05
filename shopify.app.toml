@@ -1,5 +1,5 @@
 name = "PAL SKU Symbol Guard"
-application_url = "https://pal-variant-sku-symbol-guard-431722725377.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-sku-symbol-guard/app"
 embedded = true
 client_id = "3d5c021df5bbfd09be7ad456d7d1c66e"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-variant-sku-symbol-guard-431722725377.vercel.app/auth/callback",
-  "https://pal-variant-sku-symbol-guard-431722725377.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-sku-symbol-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-sku-symbol-guard/auth/shopify/callback"
 ]
 
 [webhooks]
