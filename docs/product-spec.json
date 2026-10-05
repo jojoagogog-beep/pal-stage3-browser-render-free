@@ -1,0 +1,12 @@
+{
+  "slug": "pal-tag-case-guard",
+  "name": "PAL Tag Case Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "5.99",
+    "trial_days": 7
+  },
+  "primary_check": "Tag casing drift",
+  "headline": "Find tag casing drift across the catalog."
+}
