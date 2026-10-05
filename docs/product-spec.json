@@ -1,0 +1,12 @@
+{
+  "slug": "pal-description-link-density-guard",
+  "name": "PAL Link Density Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "5.99",
+    "trial_days": 7
+  },
+  "primary_check": "High link density",
+  "headline": "Find descriptions with unusually dense link usage."
+}

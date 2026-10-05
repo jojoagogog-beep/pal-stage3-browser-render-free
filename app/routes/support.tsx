@@ -1,0 +1,3 @@
+import { PublicPage } from '../components/public-page';
+export const meta = () => [{title: 'Support · PAL Link Density Guard'}];
+export default function Page(){return <PublicPage title='Support' intro='Help for PAL Link Density Guard.'><h2>Before contacting support</h2><p>Rescan the current product batch and confirm the app still has read_products access. Findings are batch-based and read-only.</p><h2>What to include</h2><p>Send your shop domain, the affected product titles, and a short description of the result you expected. Never send passwords or Shopify access tokens.</p><h2>Contact</h2><p>Email practicalai_lab_jp@proton.me.</p></PublicPage>;}
