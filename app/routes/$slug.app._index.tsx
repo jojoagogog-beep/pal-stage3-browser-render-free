@@ -1,0 +1,38 @@
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { data, isRouteErrorResponse, useLoaderData, useRouteError, useSearchParams, useRevalidator } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+import { MultiDashboard } from "../components/multi-dashboard";
+import { getShopify, getSlug } from "../multi-shopify.server";
+import { ruleModules } from "../rules";
+
+const PRODUCTS_QUERY=`#graphql
+query PalGuardProducts($cursor:String){
+  products(first:100,after:$cursor,sortKey:ID){
+    nodes{id title vendor productType tags handle descriptionHtml variants(first:100){nodes{id title sku barcode price compareAtPrice selectedOptions{name value}}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
+
+export async function loader({request}:LoaderFunctionArgs){
+  const slug=getSlug(request);const definition=ruleModules[slug as keyof typeof ruleModules] as any;
+  const {admin}=await getShopify(slug).authenticate.admin(request);
+  const cursor=new URL(request.url).searchParams.get("cursor");
+  if(cursor&&(cursor.length>2048||!/^[A-Za-z0-9+/=_-]+$/.test(cursor)))throw new Response("Invalid catalog cursor.",{status:400});
+  try{
+    const response=await admin.graphql(PRODUCTS_QUERY,{variables:{cursor}});
+    const json=await response.json() as any;
+    if(!response.ok||json.errors?.length||!json.data?.products)throw new Error("API error");
+    const result=json.data.products;
+    if(result.pageInfo.hasNextPage&&(!result.pageInfo.endCursor||result.pageInfo.endCursor===cursor))throw new Error("Invalid pagination");
+    return data({slug,audit:definition.auditCatalog(result.nodes),nextCursor:result.pageInfo.hasNextPage?result.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
+  }catch{throw new Response("The catalog audit could not be loaded. Retry shortly.",{status:502});}
+}
+export default function Index(){
+  const result=useLoaderData<typeof loader>();const definition=ruleModules[result.slug as keyof typeof ruleModules] as any;
+  const[params,setParams]=useSearchParams();const revalidator=useRevalidator();
+  return <MultiDashboard definition={definition} {...result} busy={revalidator.state==="loading"} onRefresh={()=>revalidator.revalidate()}
+    onNext={result.nextCursor?()=>{const n=new URLSearchParams(params);n.set("cursor",result.nextCursor!);setParams(n)}:undefined}
+    onRestart={()=>{const n=new URLSearchParams(params);n.delete("cursor");setParams(n)}}/>;
+}
+export function ErrorBoundary(){const error=useRouteError();const retry=useRevalidator();if(isRouteErrorResponse(error)&&[400,502].includes(error.status))return <main style={{padding:32,fontFamily:"system-ui"}}><h1>Audit unavailable</h1><p role="alert">{String(error.data)}</p><button onClick={()=>retry.revalidate()}>Try again</button></main>;return boundary.error(error)}
+export const headers:HeadersFunction=(args)=>({...boundary.headers(args),"Cache-Control":"no-store"});

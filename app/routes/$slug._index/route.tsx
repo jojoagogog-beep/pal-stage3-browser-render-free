@@ -1,0 +1,3 @@
+import { useParams } from "react-router";
+import { ruleModules } from "../../rules";
+export default function Landing(){const {slug=""}=useParams();const d=ruleModules[slug as keyof typeof ruleModules] as any;if(!d)return <main>Unknown app.</main>;return <main style={{fontFamily:"system-ui",maxWidth:900,margin:"48px auto",padding:"0 24px"}}><p>Practical AI Lab</p><h1>{d.appMeta.headline}</h1><p>{d.appMeta.lead}</p><h2>Read-only catalog QA</h2><p>{d.appMeta.readOnlyNote}</p><p><a href={"/"+slug+"/review-demo"}>Explore the illustrative demo</a></p><nav><a href={"/"+slug+"/privacy"}>Privacy</a>{" · "}<a href={"/"+slug+"/terms"}>Terms</a>{" · "}<a href={"/"+slug+"/support"}>Support</a></nav></main>}
