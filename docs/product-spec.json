@@ -1,0 +1,12 @@
+{
+  "slug": "pal-tag-prefix-guard",
+  "name": "PAL Tag Prefix Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "6.99",
+    "trial_days": 7
+  },
+  "primary_check": "Inconsistent tag prefix",
+  "headline": "Find inconsistent structured tag prefixes."
+}
