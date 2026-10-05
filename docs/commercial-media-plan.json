@@ -1,0 +1,22 @@
+{
+  "schema": "PAL_COMMERCIAL_MEDIA_PLAN_V3",
+  "app_name": "PAL Collection Sort Guard",
+  "positioning": "Read-only inventory of Shopify collection sort modes.",
+  "merchant_benefits": [
+    "Show current sort order per collection.",
+    "Highlight manual-sort collections.",
+    "Summarize sort-mode usage and export CSV."
+  ],
+  "screenshots": [
+    "overview.png",
+    "manual.png",
+    "automatic.png",
+    "best.png",
+    "price.png",
+    "limit.png"
+  ],
+  "feature_image": "overview.png",
+  "screencast": "pal-collection-sort-guard-screencast.mp4",
+  "live_listing_reuse_required": true,
+  "source": "Real app review-demo states using fictional collection records."
+}

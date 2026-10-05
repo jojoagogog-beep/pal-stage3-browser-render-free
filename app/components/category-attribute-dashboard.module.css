@@ -1,0 +1,73 @@
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric,
+.metricWarning,
+.metricSuccess {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #dfe3e8;
+  border-radius: 14px;
+  background: #f9fafb;
+  color: #4a4f53;
+}
+
+.metricWarning {
+  border-color: #ead8ad;
+  background: #fffaf0;
+}
+
+.metricSuccess {
+  border-color: #b9ddca;
+  background: #f2fbf6;
+}
+
+.metric strong,
+.metricWarning strong,
+.metricSuccess strong {
+  color: #202223;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.productLink {
+  color: #005bd3;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.productLink:hover {
+  text-decoration: underline;
+}
+
+.variantName,
+.tableNote {
+  color: #616a66;
+}
+
+.tableNote {
+  margin: 12px 0 0;
+  font-size: 0.875rem;
+}
+
+.footerLinks {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  padding: 20px 0 8px;
+  font-size: 0.875rem;
+}
+
+.footerLinks a {
+  color: #53645a;
+}
+
+@media (max-width: 720px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+}

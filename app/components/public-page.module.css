@@ -1,0 +1,86 @@
+.page {
+  min-height: 100vh;
+  background: #f4f7f5;
+  color: #18211c;
+  font-family: Inter, system-ui, sans-serif;
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  max-width: 900px;
+  margin: 0 auto 28px;
+  color: #66706a;
+  font-size: 0.9rem;
+}
+
+.brand {
+  color: #173d2a;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.article {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 64px);
+  border: 1px solid #dce5df;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 18px 55px rgba(22, 48, 33, 0.07);
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: #287a50;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.article h1 {
+  margin: 0;
+  font-size: clamp(2.1rem, 5vw, 3.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.intro {
+  margin: 22px 0 34px;
+  color: #4c5a52;
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+.article h2 {
+  margin: 32px 0 10px;
+  font-size: 1.15rem;
+}
+
+.article p,
+.article li {
+  line-height: 1.7;
+}
+
+.article ul {
+  padding-left: 22px;
+}
+
+.updated {
+  margin-top: 42px;
+  color: #748078;
+  font-size: 0.85rem;
+}
+
+.links {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  margin: 28px auto;
+}
+
+.links a {
+  color: #355a45;
+}
