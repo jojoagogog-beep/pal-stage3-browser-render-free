@@ -1,0 +1,40 @@
+{
+  "priority": 71,
+  "slug": "pal-collection-content-guard",
+  "app_name": "PAL Collection Content Guard",
+  "problem": "Collections can be published with blank descriptions, images, or SEO fields, leaving merchants without a focused catalog-level content readiness audit.",
+  "target_merchant": "Stores with many collections that want a read-only worklist of collection content gaps before merchandising or SEO review.",
+  "first_release": [
+    "Identify collections with blank descriptions.",
+    "Find missing collection images and SEO title or description fields.",
+    "Separate collections by observed content gaps.",
+    "Export a diagnostic CSV with direct Shopify Admin collection links."
+  ],
+  "constraints": [
+    "Read-only v1.",
+    "No automatic content generation.",
+    "No collection edits.",
+    "No protected customer data."
+  ],
+  "required_scopes": [
+    "read_products"
+  ],
+  "pricing": {
+    "monthly_usd": 4.99,
+    "trial_days": 7
+  },
+  "research": {
+    "as_of": "2026-10-02",
+    "evidence": [
+      "Shopify Community posts repeatedly discuss missing or non-displayed collection descriptions.",
+      "Shopify Admin GraphQL 2026-10 exposes collection description, image, SEO metadata and collection queries under read_products."
+    ],
+    "source_urls": [
+      "https://community.shopify.com/t/collection-description-not-showing-on-collection-page/397937",
+      "https://community.shopify.com/t/collections-description-not-showing-on-collections-page/571919",
+      "https://shopify.dev/docs/api/admin-graphql/2026-10/queries/collections"
+    ],
+    "confidence": "medium"
+  },
+  "status": "manual_build_active"
+}

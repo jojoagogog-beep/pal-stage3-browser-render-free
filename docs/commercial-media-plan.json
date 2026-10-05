@@ -1,0 +1,22 @@
+{
+  "schema": "PAL_COMMERCIAL_MEDIA_PLAN_V3",
+  "app_name": "PAL Collection Ratio Guard",
+  "positioning": "Read-only audit of collection-image aspect-ratio consistency.",
+  "merchant_benefits": [
+    "Identify the dominant collection-image ratio.",
+    "Find ratio outliers before merchandising changes.",
+    "Export a diagnostic CSV without editing images."
+  ],
+  "screenshots": [
+    "overview.png",
+    "wide.png",
+    "portrait.png",
+    "missing.png",
+    "ready.png",
+    "limit.png"
+  ],
+  "feature_image": "overview.png",
+  "screencast": "pal-collection-image-ratio-guard-screencast.mp4",
+  "live_listing_reuse_required": true,
+  "source": "Real app review-demo states using fictional collection image dimensions."
+}
