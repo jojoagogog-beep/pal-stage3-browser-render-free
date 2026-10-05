@@ -1,5 +1,5 @@
 {
-  "name": "pal-handle-title-drift-guard",
+  "name": "pal-tag-whitespace-guard",
   "private": true,
   "scripts": {
     "build": "react-router build",
