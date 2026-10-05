@@ -1,5 +1,5 @@
 name = "PAL Compare Zero Guard"
-application_url = "https://pal-compare-zero-guard-431723675649.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-compare-zero-guard/app"
 embedded = true
 client_id = "ebf6cce79650bf235fa404d5ef92d11a"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-compare-zero-guard-431723675649.vercel.app/auth/callback",
-  "https://pal-compare-zero-guard-431723675649.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-compare-zero-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-compare-zero-guard/auth/shopify/callback"
 ]
 
 [webhooks]
