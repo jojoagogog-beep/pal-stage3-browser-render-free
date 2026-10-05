@@ -1,5 +1,5 @@
 name = "PAL Uppercase Tag Guard"
-application_url = "https://pal-tag-uppercase-guard-431721349121.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-uppercase-guard/app"
 embedded = true
 client_id = "e255d8250467304e08c6ff4602b65d3d"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-tag-uppercase-guard-431721349121.vercel.app/auth/callback",
-  "https://pal-tag-uppercase-guard-431721349121.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-uppercase-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-uppercase-guard/auth/shopify/callback"
 ]
 
 [webhooks]
