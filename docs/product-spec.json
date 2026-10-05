@@ -1,12 +1,12 @@
 {
-  "slug": "pal-handle-title-drift-guard",
-  "name": "PAL Handle Title Drift Guard",
+  "slug": "pal-compare-price-format-guard",
+  "name": "PAL Compare Format Guard",
   "scope": "read_products",
   "read_only": true,
   "pricing": {
-    "monthly_usd": "4.99",
+    "monthly_usd": "6.99",
     "trial_days": 7
   },
-  "primary_check": "Handle/title drift",
-  "headline": "Find handles that no longer resemble product titles."
+  "primary_check": "Compare-at precision review",
+  "headline": "Find compare-at prices with more than two decimal places."
 }
