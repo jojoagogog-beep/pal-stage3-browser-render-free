@@ -1,5 +1,5 @@
 name = "PAL Title Space Guard"
-application_url = "https://pal-title-leading-space-guard.onrender.com/app"
+application_url = "https://pal-title-leading-space-guard-431720169473.vercel.app"
 embedded = true
 client_id = "b63024444661f58d6c24ab88749753c7"
 
@@ -8,31 +8,31 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-title-leading-space-guard.onrender.com/auth/callback",
-  "https://pal-title-leading-space-guard.onrender.com/auth/shopify/callback"
+  "https://pal-title-leading-space-guard-431720169473.vercel.app/auth/callback",
+  "https://pal-title-leading-space-guard-431720169473.vercel.app/auth/shopify/callback"
 ]
 
 [webhooks]
 api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
+  uri = "/pal-title-leading-space-guard/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
+  uri = "/pal-title-leading-space-guard/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/data_request"
+  uri = "/pal-title-leading-space-guard/webhooks/customers/data_request"
   compliance_topics = [ "customers/data_request" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/redact"
+  uri = "/pal-title-leading-space-guard/webhooks/customers/redact"
   compliance_topics = [ "customers/redact" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/shop/redact"
+  uri = "/pal-title-leading-space-guard/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
 [pos]
