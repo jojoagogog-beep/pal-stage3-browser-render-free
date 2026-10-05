@@ -1,5 +1,5 @@
 name = "PAL Title Ending Guard"
-application_url = "https://pal-title-trailing-mark-guard-431720136705.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-title-trailing-mark-guard/app"
 embedded = true
 client_id = "ef01f26be3940315d1e04bbea71eb8c5"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-title-trailing-mark-guard-431720136705.vercel.app/auth/callback",
-  "https://pal-title-trailing-mark-guard-431720136705.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-title-trailing-mark-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-title-trailing-mark-guard/auth/shopify/callback"
 ]
 
 [webhooks]
