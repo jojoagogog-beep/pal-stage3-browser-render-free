@@ -1,15 +1,15 @@
-name = "PAL Handle Title Drift Guard"
-application_url = "https://pal-handle-title-drift-guard.onrender.com"
+name = "PAL Broken Link Markup Guard"
+application_url = "https://pal-description-broken-link-guard.onrender.com/app"
 embedded = true
-client_id = "1c3685fcc43e19945a7e8f5b3ea380b1"
+client_id = "19c5e390fd48c5c036bf8a7f5b8135ac"
 
 [access_scopes]
 scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-handle-title-drift-guard.onrender.com/auth/callback",
-  "https://pal-handle-title-drift-guard.onrender.com/auth/shopify/callback"
+  "https://pal-description-broken-link-guard.onrender.com/auth/callback",
+  "https://pal-description-broken-link-guard.onrender.com/auth/shopify/callback"
 ]
 
 [webhooks]
