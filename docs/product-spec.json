@@ -1,0 +1,12 @@
+{
+  "slug": "pal-variant-title-default-guard",
+  "name": "PAL Variant Title Default Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "4.99",
+    "trial_days": 7
+  },
+  "primary_check": "Generic variant title",
+  "headline": "Find generic or default variant titles."
+}
