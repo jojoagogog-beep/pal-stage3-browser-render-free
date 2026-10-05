@@ -1,5 +1,5 @@
 name = "PAL Title Word Count Guard"
-application_url = "https://pal-title-word-count-guard-431719972865.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-title-word-count-guard/app"
 embedded = true
 client_id = "d4e746e3165958a062cefd84198fd6c3"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-title-word-count-guard-431719972865.vercel.app/auth/callback",
-  "https://pal-title-word-count-guard-431719972865.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-title-word-count-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-title-word-count-guard/auth/shopify/callback"
 ]
 
 [webhooks]
