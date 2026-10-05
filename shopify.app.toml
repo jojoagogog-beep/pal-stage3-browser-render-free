@@ -1,5 +1,5 @@
 name = "PAL Numeric Tag Guard"
-application_url = "https://pal-tag-numeric-guard.onrender.com/app"
+application_url = "https://pal-tag-numeric-guard-431721218049.vercel.app"
 embedded = true
 client_id = "fc6e3a0c072a01badcb2c403374c4703"
 
@@ -8,31 +8,31 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-tag-numeric-guard.onrender.com/auth/callback",
-  "https://pal-tag-numeric-guard.onrender.com/auth/shopify/callback"
+  "https://pal-tag-numeric-guard-431721218049.vercel.app/auth/callback",
+  "https://pal-tag-numeric-guard-431721218049.vercel.app/auth/shopify/callback"
 ]
 
 [webhooks]
 api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
+  uri = "/pal-tag-numeric-guard/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
+  uri = "/pal-tag-numeric-guard/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/data_request"
+  uri = "/pal-tag-numeric-guard/webhooks/customers/data_request"
   compliance_topics = [ "customers/data_request" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/redact"
+  uri = "/pal-tag-numeric-guard/webhooks/customers/redact"
   compliance_topics = [ "customers/redact" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/shop/redact"
+  uri = "/pal-tag-numeric-guard/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
 [pos]
