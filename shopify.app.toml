@@ -1,5 +1,5 @@
 name = "PAL Compare Format Guard"
-application_url = "https://pal-compare-price-format-guard-431723511809.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-compare-price-format-guard/app"
 embedded = true
 client_id = "3a6852d6d46216d097acc80b15ec2119"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-compare-price-format-guard-431723511809.vercel.app/auth/callback",
-  "https://pal-compare-price-format-guard-431723511809.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-compare-price-format-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-compare-price-format-guard/auth/shopify/callback"
 ]
 
 [webhooks]
