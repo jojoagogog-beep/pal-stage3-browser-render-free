@@ -1,5 +1,5 @@
 name = "PAL Uppercase Copy Guard"
-application_url = "https://pal-description-uppercase-guard-431722332161.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-description-uppercase-guard/app"
 embedded = true
 client_id = "575aeaa248445d13542f01d1c34464ab"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-uppercase-guard-431722332161.vercel.app/auth/callback",
-  "https://pal-description-uppercase-guard-431722332161.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-uppercase-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-uppercase-guard/auth/shopify/callback"
 ]
 
 [webhooks]
