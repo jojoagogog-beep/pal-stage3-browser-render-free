@@ -1,0 +1,12 @@
+{
+  "slug": "pal-description-table-guard",
+  "name": "PAL Description Table Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "4.99",
+    "trial_days": 7
+  },
+  "primary_check": "Complex description table",
+  "headline": "Find complex tables in product descriptions."
+}
