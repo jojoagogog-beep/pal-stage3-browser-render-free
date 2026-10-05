@@ -1,5 +1,5 @@
 name = "PAL SKU Case Guard"
-application_url = "https://pal-variant-sku-case-guard-431722856449.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-sku-case-guard/app"
 embedded = true
 client_id = "f048a2c07ed17ae8d1f565eaba93f202"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-variant-sku-case-guard-431722856449.vercel.app/auth/callback",
-  "https://pal-variant-sku-case-guard-431722856449.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-sku-case-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-sku-case-guard/auth/shopify/callback"
 ]
 
 [webhooks]
