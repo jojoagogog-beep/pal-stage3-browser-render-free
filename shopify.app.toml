@@ -1,15 +1,15 @@
-name = "PAL Handle Title Drift Guard"
-application_url = "https://pal-handle-title-drift-guard.onrender.com"
+name = "PAL Uppercase Tag Guard"
+application_url = "https://pal-tag-uppercase-guard.onrender.com/app"
 embedded = true
-client_id = "1c3685fcc43e19945a7e8f5b3ea380b1"
+client_id = "e255d8250467304e08c6ff4602b65d3d"
 
 [access_scopes]
 scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-handle-title-drift-guard.onrender.com/auth/callback",
-  "https://pal-handle-title-drift-guard.onrender.com/auth/shopify/callback"
+  "https://pal-tag-uppercase-guard.onrender.com/auth/callback",
+  "https://pal-tag-uppercase-guard.onrender.com/auth/shopify/callback"
 ]
 
 [webhooks]

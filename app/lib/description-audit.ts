@@ -1,48 +1,21 @@
-const MODE:string="handleDrift";
-export const appMeta={shortName:"Handle Title Drift Guard",exportSlug:"handle-title-drift",readonlyLabel:'Read-only · Catalog QA',eyebrow:'CATALOG QA / REVIEW',headline:"Find handles that no longer resemble product titles.",lead:"Compare normalized handle tokens with title tokens to surface likely stale URLs after substantial renaming.",sidebarHelp:'Focus this review on the flagged catalog pattern.',readOnlyNote:'This app never changes products, variants, tags, prices, or descriptions.',panelTitle:'Catalog findings',emptyCopy:'No matching issues were detected in this product batch.',statusCopy:'Findings are review guidance based on the current product batch.'} as const;
-const APP_RULE_LABEL="Handle/title drift";
-const APP_RULE_ADVICE="Confirm whether the current handle is intentional before changing URLs or creating redirects.";
+export const appMeta={shortName:"Uppercase Tag Guard",exportSlug:"tag-uppercase",readonlyLabel:'Read-only · Catalog QA',eyebrow:'CATALOG QA / REVIEW',headline:"Find all-uppercase product tags.",lead:"Find all-uppercase product tags.",sidebarHelp:'Focus this review on the flagged catalog pattern.',readOnlyNote:'This app never changes products, variants, tags, prices, or descriptions.',panelTitle:'Catalog findings',emptyCopy:'No matching issues were detected in this product batch.',statusCopy:'Findings are review guidance based on the current product batch.'} as const;
+const APP_RULE_LABEL="Uppercase tag";
+const APP_RULE_ADVICE="Review whether uppercase tags follow your canonical tag naming convention.";
 export type Variant={id:string;title:string;sku:string|null;barcode:string|null;price:string;compareAtPrice:string|null;selectedOptions:Array<{name:string;value:string}>};
-export type Product={id:string;title:string;vendor:string;tags:string[];handle:string;descriptionHtml:string;variants:{nodes:Variant[]}};
+export type Product={id:string;title:string;vendor:string;productType:string;tags:string[];handle:string;descriptionHtml:string;variants:{nodes:Variant[]}};
 export type Finding={productId:string;productTitle:string;rule:'issue';evidence:string;detail:string};
 export type Audit={products:number;findings:Finding[];skipped:string[]};
-export const rules={issue:{label:APP_RULE_LABEL,priority:'Review',advice:APP_RULE_ADVICE}};
+export const rules={issue:{label:APP_RULE_LABEL,priority:'High',advice:APP_RULE_ADVICE}} as const;
 const textOnly=(html:string)=>html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
 const normWords=(s:string)=>s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,' ').trim().split(/\s+/).filter(Boolean);
 function pushFinding(findings:Finding[],p:Product,evidence:string,detail:string){findings.push({productId:p.id,productTitle:p.title,rule:'issue',evidence,detail})}
 function finish(products:Product[],findings:Finding[],skipped:string[]):Audit{findings.sort((a,b)=>a.productTitle.localeCompare(b.productTitle));return{products:products.length,findings,skipped:[...new Set(skipped)]}}
 export function auditCatalog(products:Product[]):Audit{
- const findings:Finding[]=[]; const skipped:string[]=[]; const push=(p:Product,evidence:string,detail:string)=>pushFinding(findings,p,evidence,detail);
- if(MODE==='tagCase'){
-  const forms=new Map<string,Set<string>>(); for(const p of products)for(const tag of p.tags||[]){const k=tag.trim().toLowerCase();if(!k)continue;const s=forms.get(k)||new Set<string>();s.add(tag.trim());forms.set(k,s)}
-  for(const p of products){const bad=(p.tags||[]).filter(t=>(forms.get(t.trim().toLowerCase())?.size||0)>1);if(bad.length)push(p,'Variants: '+[...new Set(bad.map(t=>[...(forms.get(t.trim().toLowerCase())||[])].join(' / ')))].join('; '),'The same tag value appears with different capitalization in this batch.')}
-  return finish(products,findings,skipped);
- }
- if(MODE==='skuPrefix'){
-  const byVendor=new Map<string,Product[]>();for(const p of products){const k=p.vendor.trim();if(!k)continue;const g=byVendor.get(k)||[];g.push(p);byVendor.set(k,g)}
-  for(const [vendor,group] of byVendor){const counts=new Map<string,number>();for(const p of group)for(const v of p.variants.nodes){const sku=(v.sku||'').trim();if(!sku)continue;const pre=sku.split(/[-_.]/)[0].toUpperCase();if(pre.length>=2)counts.set(pre,(counts.get(pre)||0)+1)}const sorted=[...counts.entries()].sort((a,b)=>b[1]-a[1]);const dominant=sorted[0];if(!dominant||dominant[1]<2)continue;for(const p of group){const odd=p.variants.nodes.filter(v=>{const sku=(v.sku||'').trim();if(!sku)return false;return sku.split(/[-_.]/)[0].toUpperCase()!==dominant[0]});if(odd.length)push(p,'Vendor '+vendor+' usually uses '+dominant[0]+' - '+odd.length+' variant(s) differ','SKU prefixes differ from the dominant vendor pattern in this batch.')}}
-  return finish(products,findings,skipped);
- }
+ const findings:Finding[]=[];const skipped:string[]=[];
+ const push=(p:Product,evidence:string,detail:string)=>pushFinding(findings,p,evidence,detail);
  for(const p of products){
-  if(MODE==='placeholder'){const hay=(p.title+' '+textOnly(p.descriptionHtml)).toLowerCase();const hits=['lorem ipsum','coming soon','tbd','todo','test product','placeholder'].filter(x=>hay.includes(x));if(hits.length)push(p,'Matched: '+hits.join(', '),'Placeholder phrases were found in the product title or description.')}
-  else if(MODE==='titleCase'){const letters=(p.title.match(/[A-Za-z]/g)||[]).join('');if(letters.length>=5&&(letters===letters.toUpperCase()||letters===letters.toLowerCase()))push(p,p.title,'The title uses a single casing style across all letters.')}
-  else if(MODE==='titleRepeat'){const words=normWords(p.title);const counts=new Map<string,number>();for(const w of words)counts.set(w,(counts.get(w)||0)+1);const repeated=[...counts].filter(([w,n])=>w.length>2&&n>=2).map(([w,n])=>w+' x'+n);if(repeated.length)push(p,repeated.join(', '),'Repeated meaningful tokens were found in the product title.')}
-  else if(MODE==='titleSymbol'){const symbols=(p.title.match(/[^A-Za-z0-9\sÀ-ÿ]/g)||[]);const repeated=/([!?*#_+=~])\1{1,}/.test(p.title);if(repeated||symbols.length>=5)push(p,'Symbols: '+symbols.length,'The title contains repeated or unusually dense punctuation.')}
-  else if(MODE==='tagPrefix'){const structured=(p.tags||[]).filter(t=>/[:=|]/.test(t));const malformed=structured.filter(t=>!/^[a-z0-9_-]+:[^:]+$/i.test(t));if(malformed.length)push(p,malformed.slice(0,6).join(', '),'Structured tags use mixed delimiters or malformed prefix syntax.')}
-  else if(MODE==='tagLength'){const long=(p.tags||[]).filter(t=>t.trim().length>64);if(long.length)push(p,long.map(t=>t.slice(0,50)+'... ('+t.length+')').join('; '),'One or more product tags exceed 64 characters.')}
-  else if(MODE==='linkDensity'){const links=(p.descriptionHtml.match(/<a\b/gi)||[]).length;const words=normWords(textOnly(p.descriptionHtml)).length;if(links>=8||(links>=4&&words>0&&links/(words/100)>4))push(p,links+' links across '+words+' words','Link density is high relative to the description text.')}
-  else if(MODE==='inlineStyle'){const styles=(p.descriptionHtml.match(/\sstyle\s*=/gi)||[]).length;if(styles>=4)push(p,styles+' inline style attributes','The description contains repeated inline CSS styling.')}
-  else if(MODE==='table'){const tables=(p.descriptionHtml.match(/<table\b/gi)||[]).length;const nested=/<table\b[^>]*>[\s\S]*<table\b/i.test(p.descriptionHtml);if(tables>=2||nested)push(p,tables+' table elements'+(nested?' - nested table detected':''),'The product description uses multiple or nested HTML tables.')}
-  else if(MODE==='imageProtocol'){const hits=[...p.descriptionHtml.matchAll(/<img\b[^>]*\bsrc=["'](http:\/\/[^"']+)/gi)].map(m=>m[1]);if(hits.length)push(p,hits.slice(0,4).join(', '),'One or more description images use an insecure HTTP source.')}
-  else if(MODE==='rawUrl'){const noAnchors=p.descriptionHtml.replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi,' ');const urls=(textOnly(noAnchors).match(/https?:\/\/[^\s<]+/gi)||[]);if(urls.length)push(p,urls.slice(0,4).join(', '),'Plain-text URLs appear outside anchor elements.')}
-  else if(MODE==='variantTitle'){const bad=p.variants.nodes.filter(v=>/^(default title|default|variant|option)$/i.test(v.title.trim()));if(bad.length)push(p,bad.slice(0,6).map(v=>v.title).join(', '),'One or more variants use a generic default title.')}
-  else if(MODE==='skuCoverage'){const bad=p.variants.nodes.filter(v=>!String(v.sku||'').trim());if(bad.length)push(p,bad.length+' of '+p.variants.nodes.length+' variants have blank SKUs','At least one variant has no SKU.')}
-  else if(MODE==='barcode'){const bad=p.variants.nodes.filter(v=>{const b=String(v.barcode||'').replace(/\s/g,'');if(!/^(\d{8}|\d{12}|\d{13})$/.test(b))return false;const ds=[...b].map(Number);const check=ds.pop() as number;let sum=0;for(let i=ds.length-1,j=0;i>=0;i--,j++)sum+=ds[i]*(j%2===0?3:1);return(10-(sum%10))%10!==check});if(bad.length)push(p,bad.slice(0,5).map(v=>String(v.barcode)).join(', '),'One or more numeric UPC/EAN values have an invalid check digit.')}
-  else if(MODE==='optionLength'){const vals=p.variants.nodes.flatMap(v=>v.selectedOptions||[]).map(o=>o.value).filter(v=>v.trim().length>40);if(vals.length)push(p,[...new Set(vals)].slice(0,6).join(', '),'One or more selected option values exceed 40 characters.')}
-  else if(MODE==='optionDelimiter'){const vals=p.variants.nodes.flatMap(v=>v.selectedOptions||[]).map(o=>o.value).filter(v=>/[,|;]|\s\/\s/.test(v));if(vals.length)push(p,[...new Set(vals)].slice(0,6).join(', '),'Option values appear to combine multiple concepts with delimiters.')}
-  else if(MODE==='handleDrift'){const tw=new Set(normWords(p.title).filter(w=>w.length>2));const hw=new Set(normWords(p.handle.replace(/-/g,' ')).filter(w=>w.length>2));if(tw.size>=2&&hw.size){const inter=[...tw].filter(w=>hw.has(w)).length;const ratio=inter/Math.max(tw.size,hw.size);if(ratio<0.25)push(p,'Title: '+[...tw].slice(0,6).join(' ')+' - Handle: '+p.handle,'The product handle shares few meaningful tokens with the current title.')}}
-  else if(MODE==='discountDepth'){const bad=p.variants.nodes.flatMap(v=>{const price=Number(v.price),cap=Number(v.compareAtPrice);if(!Number.isFinite(price)||!Number.isFinite(cap)||cap<=price||cap<=0)return[];const pct=(cap-price)/cap*100;return pct>=70||pct<=2?[v.title+': '+pct.toFixed(1)+'%']:[]});if(bad.length)push(p,bad.slice(0,6).join(', '),'One or more compare-at discounts are unusually deep or negligible.')}
+    const bad=(p.tags||[]).filter(t=>t.length>=4&&/[A-Z]/.test(t)&&t===t.toUpperCase());if(bad.length)push(p,bad.slice(0,6).join(', '),'One or more tags are written entirely in uppercase.');
  }
- return finish(products,findings,skipped);
+ return finish(products,findings,skipped)
 }
 export function buildCsv(findings:Finding[]):string{const cell=(v:string)=>'"'+(/^[\s]*[=+@\-\t\r\n]/.test(v)?"'"+v:v).replace(/"/g,'""')+'"';return '\ufeff'+[['Priority','Product','Product ID','Issue','Evidence','Recommendation'],...findings.map(f=>['Review',f.productTitle,f.productId,rules.issue.label,f.evidence,rules.issue.advice])].map(r=>r.map(x=>cell(String(x))).join(',')).join('\r\n')}
