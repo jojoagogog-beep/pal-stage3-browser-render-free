@@ -1,5 +1,5 @@
 name = "PAL Description Email Guard"
-application_url = "https://pal-description-email-guard.onrender.com/app"
+application_url = "https://pal-description-email-guard-431721971713.vercel.app"
 embedded = true
 client_id = "f6dd6b8348eee9f7c4eba2713e26d514"
 
@@ -8,31 +8,31 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-email-guard.onrender.com/auth/callback",
-  "https://pal-description-email-guard.onrender.com/auth/shopify/callback"
+  "https://pal-description-email-guard-431721971713.vercel.app/auth/callback",
+  "https://pal-description-email-guard-431721971713.vercel.app/auth/shopify/callback"
 ]
 
 [webhooks]
 api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
+  uri = "/pal-description-email-guard/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
+  uri = "/pal-description-email-guard/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/data_request"
+  uri = "/pal-description-email-guard/webhooks/customers/data_request"
   compliance_topics = [ "customers/data_request" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/redact"
+  uri = "/pal-description-email-guard/webhooks/customers/redact"
   compliance_topics = [ "customers/redact" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/shop/redact"
+  uri = "/pal-description-email-guard/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
 [pos]
