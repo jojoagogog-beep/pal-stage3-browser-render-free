@@ -1,0 +1,423 @@
+{
+  "buildManifest": {
+    "serverBundles": {
+      "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0": {
+        "id": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+        "file": "build/server/nodejs_eyJydW50aW1lIjoibm9kZWpzIn0/index.js",
+        "config": {
+          "runtime": "nodejs"
+        }
+      }
+    },
+    "routeIdToServerBundleId": {
+      "routes/webhooks.customers.data_request": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/webhooks.app.scopes_update": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/webhooks.customers.redact": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/webhooks.app.uninstalled": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/webhooks.shop.redact": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/media-preview": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/review-demo": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/auth.login": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/privacy": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/support": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/welcome": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/_index": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/auth.$": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/terms": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/app.session-token-probe": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/app._index": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0"
+    },
+    "routes": {
+      "root": {
+        "id": "root",
+        "file": "app/root.tsx",
+        "path": "",
+        "config": {}
+      },
+      "routes/webhooks.customers.data_request": {
+        "id": "routes/webhooks.customers.data_request",
+        "parentId": "root",
+        "file": "app/routes/webhooks.customers.data_request.tsx",
+        "path": "webhooks/customers/data_request",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/webhooks.app.scopes_update": {
+        "id": "routes/webhooks.app.scopes_update",
+        "parentId": "root",
+        "file": "app/routes/webhooks.app.scopes_update.tsx",
+        "path": "webhooks/app/scopes_update",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/webhooks.customers.redact": {
+        "id": "routes/webhooks.customers.redact",
+        "parentId": "root",
+        "file": "app/routes/webhooks.customers.redact.tsx",
+        "path": "webhooks/customers/redact",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/webhooks.app.uninstalled": {
+        "id": "routes/webhooks.app.uninstalled",
+        "parentId": "root",
+        "file": "app/routes/webhooks.app.uninstalled.tsx",
+        "path": "webhooks/app/uninstalled",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/webhooks.shop.redact": {
+        "id": "routes/webhooks.shop.redact",
+        "parentId": "root",
+        "file": "app/routes/webhooks.shop.redact.tsx",
+        "path": "webhooks/shop/redact",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/media-preview": {
+        "id": "routes/media-preview",
+        "parentId": "root",
+        "file": "app/routes/media-preview.tsx",
+        "path": "media-preview",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/review-demo": {
+        "id": "routes/review-demo",
+        "parentId": "root",
+        "file": "app/routes/review-demo.tsx",
+        "path": "review-demo",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/auth.login": {
+        "id": "routes/auth.login",
+        "parentId": "root",
+        "file": "app/routes/auth.login/route.tsx",
+        "path": "auth/login",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/privacy": {
+        "id": "routes/privacy",
+        "parentId": "root",
+        "file": "app/routes/privacy.tsx",
+        "path": "privacy",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/support": {
+        "id": "routes/support",
+        "parentId": "root",
+        "file": "app/routes/support.tsx",
+        "path": "support",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/welcome": {
+        "id": "routes/welcome",
+        "parentId": "root",
+        "file": "app/routes/welcome.tsx",
+        "path": "welcome",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/_index": {
+        "id": "routes/_index",
+        "parentId": "root",
+        "file": "app/routes/_index/route.tsx",
+        "index": true,
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/auth.$": {
+        "id": "routes/auth.$",
+        "parentId": "root",
+        "file": "app/routes/auth.$.tsx",
+        "path": "auth/*",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/terms": {
+        "id": "routes/terms",
+        "parentId": "root",
+        "file": "app/routes/terms.tsx",
+        "path": "terms",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/app": {
+        "id": "routes/app",
+        "parentId": "root",
+        "file": "app/routes/app.tsx",
+        "path": "app",
+        "config": {}
+      },
+      "routes/app.session-token-probe": {
+        "id": "routes/app.session-token-probe",
+        "parentId": "routes/app",
+        "file": "app/routes/app.session-token-probe.tsx",
+        "path": "session-token-probe",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/app._index": {
+        "id": "routes/app._index",
+        "parentId": "routes/app",
+        "file": "app/routes/app._index.tsx",
+        "index": true,
+        "config": {
+          "runtime": "nodejs"
+        }
+      }
+    }
+  },
+  "reactRouterConfig": {
+    "appDirectory": "/Users/kawaguchitakumi/pal-shopify-app-factory/apps/pal-title-length-guard/app",
+    "basename": "/",
+    "buildDirectory": "/Users/kawaguchitakumi/pal-shopify-app-factory/apps/pal-title-length-guard/build",
+    "future": {
+      "unstable_optimizeDeps": false,
+      "v8_passThroughRequests": false,
+      "v8_trailingSlashAwareDataRequests": false,
+      "unstable_previewServerPrerendering": false,
+      "v8_middleware": false,
+      "v8_splitRouteModules": false,
+      "v8_viteEnvironmentApi": false
+    },
+    "routes": {
+      "root": {
+        "id": "root",
+        "file": "root.tsx",
+        "path": ""
+      },
+      "routes/webhooks.customers.data_request": {
+        "id": "routes/webhooks.customers.data_request",
+        "parentId": "root",
+        "file": "routes/webhooks.customers.data_request.tsx",
+        "path": "webhooks/customers/data_request"
+      },
+      "routes/webhooks.app.scopes_update": {
+        "id": "routes/webhooks.app.scopes_update",
+        "parentId": "root",
+        "file": "routes/webhooks.app.scopes_update.tsx",
+        "path": "webhooks/app/scopes_update"
+      },
+      "routes/webhooks.customers.redact": {
+        "id": "routes/webhooks.customers.redact",
+        "parentId": "root",
+        "file": "routes/webhooks.customers.redact.tsx",
+        "path": "webhooks/customers/redact"
+      },
+      "routes/webhooks.app.uninstalled": {
+        "id": "routes/webhooks.app.uninstalled",
+        "parentId": "root",
+        "file": "routes/webhooks.app.uninstalled.tsx",
+        "path": "webhooks/app/uninstalled"
+      },
+      "routes/webhooks.shop.redact": {
+        "id": "routes/webhooks.shop.redact",
+        "parentId": "root",
+        "file": "routes/webhooks.shop.redact.tsx",
+        "path": "webhooks/shop/redact"
+      },
+      "routes/media-preview": {
+        "id": "routes/media-preview",
+        "parentId": "root",
+        "file": "routes/media-preview.tsx",
+        "path": "media-preview"
+      },
+      "routes/review-demo": {
+        "id": "routes/review-demo",
+        "parentId": "root",
+        "file": "routes/review-demo.tsx",
+        "path": "review-demo"
+      },
+      "routes/auth.login": {
+        "id": "routes/auth.login",
+        "parentId": "root",
+        "file": "routes/auth.login/route.tsx",
+        "path": "auth/login"
+      },
+      "routes/privacy": {
+        "id": "routes/privacy",
+        "parentId": "root",
+        "file": "routes/privacy.tsx",
+        "path": "privacy"
+      },
+      "routes/support": {
+        "id": "routes/support",
+        "parentId": "root",
+        "file": "routes/support.tsx",
+        "path": "support"
+      },
+      "routes/welcome": {
+        "id": "routes/welcome",
+        "parentId": "root",
+        "file": "routes/welcome.tsx",
+        "path": "welcome"
+      },
+      "routes/_index": {
+        "id": "routes/_index",
+        "parentId": "root",
+        "file": "routes/_index/route.tsx",
+        "index": true
+      },
+      "routes/auth.$": {
+        "id": "routes/auth.$",
+        "parentId": "root",
+        "file": "routes/auth.$.tsx",
+        "path": "auth/*"
+      },
+      "routes/terms": {
+        "id": "routes/terms",
+        "parentId": "root",
+        "file": "routes/terms.tsx",
+        "path": "terms"
+      },
+      "routes/app": {
+        "id": "routes/app",
+        "parentId": "root",
+        "file": "routes/app.tsx",
+        "path": "app"
+      },
+      "routes/app.session-token-probe": {
+        "id": "routes/app.session-token-probe",
+        "parentId": "routes/app",
+        "file": "routes/app.session-token-probe.tsx",
+        "path": "session-token-probe"
+      },
+      "routes/app._index": {
+        "id": "routes/app._index",
+        "parentId": "routes/app",
+        "file": "routes/app._index.tsx",
+        "index": true
+      }
+    },
+    "routeDiscovery": {
+      "mode": "lazy",
+      "manifestPath": "/__manifest"
+    },
+    "serverBuildFile": "index.js",
+    "serverModuleFormat": "esm",
+    "ssr": true,
+    "subResourceIntegrity": false,
+    "allowedActionOrigins": false,
+    "unstable_routeConfig": [
+      {
+        "id": "root",
+        "path": "",
+        "file": "root.tsx",
+        "children": [
+          {
+            "id": "routes/webhooks.customers.data_request",
+            "file": "routes/webhooks.customers.data_request.tsx",
+            "path": "webhooks/customers/data_request"
+          },
+          {
+            "id": "routes/webhooks.app.scopes_update",
+            "file": "routes/webhooks.app.scopes_update.tsx",
+            "path": "webhooks/app/scopes_update"
+          },
+          {
+            "id": "routes/webhooks.customers.redact",
+            "file": "routes/webhooks.customers.redact.tsx",
+            "path": "webhooks/customers/redact"
+          },
+          {
+            "id": "routes/webhooks.app.uninstalled",
+            "file": "routes/webhooks.app.uninstalled.tsx",
+            "path": "webhooks/app/uninstalled"
+          },
+          {
+            "id": "routes/webhooks.shop.redact",
+            "file": "routes/webhooks.shop.redact.tsx",
+            "path": "webhooks/shop/redact"
+          },
+          {
+            "id": "routes/media-preview",
+            "file": "routes/media-preview.tsx",
+            "path": "media-preview"
+          },
+          {
+            "id": "routes/review-demo",
+            "file": "routes/review-demo.tsx",
+            "path": "review-demo"
+          },
+          {
+            "id": "routes/auth.login",
+            "file": "routes/auth.login/route.tsx",
+            "path": "auth/login"
+          },
+          {
+            "id": "routes/privacy",
+            "file": "routes/privacy.tsx",
+            "path": "privacy"
+          },
+          {
+            "id": "routes/support",
+            "file": "routes/support.tsx",
+            "path": "support"
+          },
+          {
+            "id": "routes/welcome",
+            "file": "routes/welcome.tsx",
+            "path": "welcome"
+          },
+          {
+            "id": "routes/_index",
+            "file": "routes/_index/route.tsx",
+            "index": true
+          },
+          {
+            "id": "routes/auth.$",
+            "file": "routes/auth.$.tsx",
+            "path": "auth/*"
+          },
+          {
+            "id": "routes/terms",
+            "file": "routes/terms.tsx",
+            "path": "terms"
+          },
+          {
+            "id": "routes/app",
+            "file": "routes/app.tsx",
+            "path": "app",
+            "children": [
+              {
+                "id": "routes/app.session-token-probe",
+                "file": "routes/app.session-token-probe.tsx",
+                "path": "session-token-probe"
+              },
+              {
+                "id": "routes/app._index",
+                "file": "routes/app._index.tsx",
+                "index": true
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "viteConfig": {
+    "build": {
+      "assetsDir": "assets"
+    }
+  }
+}
