@@ -1,5 +1,5 @@
 name = "PAL Handle Format Guard"
-application_url = "https://pal-handle-format-guard-431720366081.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-handle-format-guard/app"
 embedded = true
 client_id = "2038502b92089081438651bf9e4565f0"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-handle-format-guard-431720366081.vercel.app/auth/callback",
-  "https://pal-handle-format-guard-431720366081.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-handle-format-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-handle-format-guard/auth/shopify/callback"
 ]
 
 [webhooks]
