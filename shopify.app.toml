@@ -1,5 +1,5 @@
 name = "PAL Empty Anchor Guard"
-application_url = "https://pal-description-empty-anchor-guard-431722266625.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-description-empty-anchor-guard/app"
 embedded = true
 client_id = "1b4fe0e50c1727c34871212f16331f41"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-empty-anchor-guard-431722266625.vercel.app/auth/callback",
-  "https://pal-description-empty-anchor-guard-431722266625.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-empty-anchor-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-empty-anchor-guard/auth/shopify/callback"
 ]
 
 [webhooks]
