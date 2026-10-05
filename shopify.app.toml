@@ -1,5 +1,5 @@
 name = "PAL Description Script Guard"
-application_url = "https://pal-description-script-guard-431721873409.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-description-script-guard/app"
 embedded = true
 client_id = "4db9d610f4edf8b4a3048b643b2efc3c"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-script-guard-431721873409.vercel.app/auth/callback",
-  "https://pal-description-script-guard-431721873409.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-script-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-script-guard/auth/shopify/callback"
 ]
 
 [webhooks]
