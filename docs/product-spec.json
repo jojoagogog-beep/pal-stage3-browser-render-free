@@ -1,0 +1,12 @@
+{
+  "slug": "pal-option-value-length-guard",
+  "name": "PAL Option Value Length Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "5.99",
+    "trial_days": 7
+  },
+  "primary_check": "Long option value",
+  "headline": "Find unusually long variant option values."
+}
