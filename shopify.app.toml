@@ -1,15 +1,15 @@
-name = "PAL Handle Title Drift Guard"
-application_url = "https://pal-handle-title-drift-guard.onrender.com"
+name = "PAL Tag Duplicate Guard"
+application_url = "https://pal-tag-duplicate-guard.onrender.com/app"
 embedded = true
-client_id = "1c3685fcc43e19945a7e8f5b3ea380b1"
+client_id = "771d0d3b8391008471eaf13ba3886a70"
 
 [access_scopes]
 scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-handle-title-drift-guard.onrender.com/auth/callback",
-  "https://pal-handle-title-drift-guard.onrender.com/auth/shopify/callback"
+  "https://pal-tag-duplicate-guard.onrender.com/auth/callback",
+  "https://pal-tag-duplicate-guard.onrender.com/auth/shopify/callback"
 ]
 
 [webhooks]
