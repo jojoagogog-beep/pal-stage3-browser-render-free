@@ -1,5 +1,5 @@
 name = "PAL Broken Link Markup Guard"
-application_url = "https://pal-description-broken-link-guard-431722102785.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-description-broken-link-guard/app"
 embedded = true
 client_id = "19c5e390fd48c5c036bf8a7f5b8135ac"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-broken-link-guard-431722102785.vercel.app/auth/callback",
-  "https://pal-description-broken-link-guard-431722102785.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-broken-link-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-broken-link-guard/auth/shopify/callback"
 ]
 
 [webhooks]
