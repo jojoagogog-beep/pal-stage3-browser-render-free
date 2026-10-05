@@ -1,5 +1,5 @@
 name = "PAL Option Value Case Guard"
-application_url = "https://pal-option-value-case-guard-431723216897.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-option-value-case-guard/app"
 embedded = true
 client_id = "ff6e54d410e142152726aa9c27c0460b"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-option-value-case-guard-431723216897.vercel.app/auth/callback",
-  "https://pal-option-value-case-guard-431723216897.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-option-value-case-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-option-value-case-guard/auth/shopify/callback"
 ]
 
 [webhooks]
