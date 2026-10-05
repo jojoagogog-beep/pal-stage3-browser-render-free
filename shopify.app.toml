@@ -1,5 +1,5 @@
 name = "PAL Description Bold Guard"
-application_url = "https://pal-description-bold-guard-431722299393.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-description-bold-guard/app"
 embedded = true
 client_id = "ef3ff12cc4c294cddf2f3b5852c44583"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-bold-guard-431722299393.vercel.app/auth/callback",
-  "https://pal-description-bold-guard-431722299393.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-bold-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-bold-guard/auth/shopify/callback"
 ]
 
 [webhooks]
