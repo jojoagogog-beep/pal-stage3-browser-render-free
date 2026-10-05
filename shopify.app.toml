@@ -1,5 +1,5 @@
 name = "PAL Option Delimiter Guard"
-application_url = "https://pal-option-delimiter-guard.onrender.com"
+application_url = "https://pal-stage3-browser-free-shard1.onrender.com"
 embedded = true
 client_id = "c504e603f126d62ecb6087365cf6113d"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-option-delimiter-guard.onrender.com/auth/callback",
-  "https://pal-option-delimiter-guard.onrender.com/auth/shopify/callback"
+  "https://pal-stage3-browser-free-shard1.onrender.com/auth/callback",
+  "https://pal-stage3-browser-free-shard1.onrender.com/auth/shopify/callback"
 ]
 
 [webhooks]

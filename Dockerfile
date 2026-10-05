@@ -1,18 +1,9 @@
-FROM node:20-alpine
-RUN apk add --no-cache openssl
-
-EXPOSE 3000
-
+FROM node:22-bookworm-slim
 WORKDIR /app
-
-ENV NODE_ENV=production
-
-COPY package.json package-lock.json* ./
-
-RUN npm ci --omit=dev && npm cache clean --force
-
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY package*.json ./
+RUN npm install
 COPY . .
-
 RUN npm run build
-
-CMD ["npm", "run", "docker-start"]
+ENV NODE_ENV=production
+CMD ["npm","run","docker-start"]
