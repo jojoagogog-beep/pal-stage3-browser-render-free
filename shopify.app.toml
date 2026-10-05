@@ -1,5 +1,5 @@
 name = "PAL Barcode Checksum Guard"
-application_url = "https://example.com"
+application_url = "https://pal-barcode-checksum-guard.onrender.com"
 embedded = true
 client_id = "421354e9c5aa495df90cd92619ec4b5c"
 
