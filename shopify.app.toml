@@ -1,5 +1,5 @@
 name = "PAL Tag Duplicate Guard"
-application_url = "https://pal-tag-duplicate-guard.onrender.com/app"
+application_url = "https://pal-tag-duplicate-guard-431720988673.vercel.app"
 embedded = true
 client_id = "771d0d3b8391008471eaf13ba3886a70"
 
@@ -8,31 +8,31 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-tag-duplicate-guard.onrender.com/auth/callback",
-  "https://pal-tag-duplicate-guard.onrender.com/auth/shopify/callback"
+  "https://pal-tag-duplicate-guard-431720988673.vercel.app/auth/callback",
+  "https://pal-tag-duplicate-guard-431720988673.vercel.app/auth/shopify/callback"
 ]
 
 [webhooks]
 api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
+  uri = "/pal-tag-duplicate-guard/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
+  uri = "/pal-tag-duplicate-guard/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/data_request"
+  uri = "/pal-tag-duplicate-guard/webhooks/customers/data_request"
   compliance_topics = [ "customers/data_request" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/redact"
+  uri = "/pal-tag-duplicate-guard/webhooks/customers/redact"
   compliance_topics = [ "customers/redact" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/shop/redact"
+  uri = "/pal-tag-duplicate-guard/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
 [pos]
