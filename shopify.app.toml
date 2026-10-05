@@ -1,5 +1,5 @@
 name = "PAL Tag Symbol Guard"
-application_url = "https://pal-tag-symbol-guard-431721152513.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-symbol-guard/app"
 embedded = true
 client_id = "d3c94f7de6bfa082d853a55459e2d189"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-tag-symbol-guard-431721152513.vercel.app/auth/callback",
-  "https://pal-tag-symbol-guard-431721152513.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-symbol-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-symbol-guard/auth/shopify/callback"
 ]
 
 [webhooks]
