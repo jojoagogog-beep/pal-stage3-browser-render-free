@@ -20,7 +20,7 @@ export default function App() {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <meta name="shopify-api-key" content={apiKey} />
-        <title>PAL Handle Title Drift Guard</title>
+        <title>PAL Placeholder Copy Guard</title>
         {mediaCapture ? null : (
           <>
 
