@@ -1,0 +1,12 @@
+{
+  "slug": "pal-option-delimiter-guard",
+  "name": "PAL Option Delimiter Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "6.99",
+    "trial_days": 7
+  },
+  "primary_check": "Compound option value",
+  "headline": "Find option values that combine multiple concepts."
+}
