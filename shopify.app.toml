@@ -1,5 +1,5 @@
 name = "PAL Title Space Guard"
-application_url = "https://pal-title-leading-space-guard-431720169473.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-title-leading-space-guard/app"
 embedded = true
 client_id = "b63024444661f58d6c24ab88749753c7"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-title-leading-space-guard-431720169473.vercel.app/auth/callback",
-  "https://pal-title-leading-space-guard-431720169473.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-title-leading-space-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-title-leading-space-guard/auth/shopify/callback"
 ]
 
 [webhooks]
