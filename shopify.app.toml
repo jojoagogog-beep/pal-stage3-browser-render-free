@@ -1,5 +1,5 @@
 name = "PAL Handle Digit Guard"
-application_url = "https://pal-handle-digit-tail-guard-431720398849.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-handle-digit-tail-guard/app"
 embedded = true
 client_id = "3db04d0c3a470326a25d8d7c801defb3"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-handle-digit-tail-guard-431720398849.vercel.app/auth/callback",
-  "https://pal-handle-digit-tail-guard-431720398849.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-handle-digit-tail-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-handle-digit-tail-guard/auth/shopify/callback"
 ]
 
 [webhooks]
