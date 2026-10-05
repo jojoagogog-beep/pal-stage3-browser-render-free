@@ -1,5 +1,5 @@
 name = "PAL Title Digit Guard"
-application_url = "https://pal-title-digit-guard-431720071169.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-title-digit-guard/app"
 embedded = true
 client_id = "5455b1bf44686b310cd80fb5538d098c"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-title-digit-guard-431720071169.vercel.app/auth/callback",
-  "https://pal-title-digit-guard-431720071169.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-title-digit-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-title-digit-guard/auth/shopify/callback"
 ]
 
 [webhooks]
