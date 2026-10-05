@@ -1,5 +1,5 @@
 {
-  "name": "pal-handle-title-drift-guard",
+  "name": "pal-vendor-symbol-guard",
   "private": true,
   "scripts": {
     "build": "react-router build",
