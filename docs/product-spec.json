@@ -1,12 +1,12 @@
 {
-  "slug": "pal-handle-title-drift-guard",
-  "name": "PAL Handle Title Drift Guard",
+  "slug": "pal-variant-sku-length-guard",
+  "name": "PAL SKU Length Guard",
   "scope": "read_products",
   "read_only": true,
   "pricing": {
-    "monthly_usd": "4.99",
+    "monthly_usd": "5.99",
     "trial_days": 7
   },
-  "primary_check": "Handle/title drift",
-  "headline": "Find handles that no longer resemble product titles."
+  "primary_check": "Long SKU",
+  "headline": "Find unusually long variant SKUs."
 }
