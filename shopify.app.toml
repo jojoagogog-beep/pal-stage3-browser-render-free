@@ -1,5 +1,5 @@
 name = "PAL Description List Guard"
-application_url = "https://pal-description-list-guard-431721840641.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-description-list-guard/app"
 embedded = true
 client_id = "29f8ead0474a95325992690c0eb735f8"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-list-guard-431721840641.vercel.app/auth/callback",
-  "https://pal-description-list-guard-431721840641.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-list-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-list-guard/auth/shopify/callback"
 ]
 
 [webhooks]
