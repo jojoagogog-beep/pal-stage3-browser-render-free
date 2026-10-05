@@ -1,15 +1,15 @@
-name = "PAL Handle Title Drift Guard"
-application_url = "https://pal-handle-title-drift-guard.onrender.com"
+name = "PAL Compare Zero Guard"
+application_url = "https://pal-compare-zero-guard.onrender.com/app"
 embedded = true
-client_id = "1c3685fcc43e19945a7e8f5b3ea380b1"
+client_id = "ebf6cce79650bf235fa404d5ef92d11a"
 
 [access_scopes]
 scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-handle-title-drift-guard.onrender.com/auth/callback",
-  "https://pal-handle-title-drift-guard.onrender.com/auth/shopify/callback"
+  "https://pal-compare-zero-guard.onrender.com/auth/callback",
+  "https://pal-compare-zero-guard.onrender.com/auth/shopify/callback"
 ]
 
 [webhooks]
