@@ -1,0 +1,12 @@
+{
+  "name": "pal-seo-bulk-fixer",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-29",
+  "vpc_services": [
+    {
+      "binding": "PAL_SEO_VPC",
+      "service_id": "01a0ec4c-76b8-7a31-98a1-9edf06a0e4d4",
+      "remote": true
+    }
+  ]
+}
