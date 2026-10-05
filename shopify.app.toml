@@ -1,5 +1,5 @@
 name = "PAL Variant Delimiter Guard"
-application_url = "https://pal-variant-title-delimiter-guard-431722594305.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-title-delimiter-guard/app"
 embedded = true
 client_id = "2fb5cf714b9a6fd74a64524aad912273"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-variant-title-delimiter-guard-431722594305.vercel.app/auth/callback",
-  "https://pal-variant-title-delimiter-guard-431722594305.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-title-delimiter-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-title-delimiter-guard/auth/shopify/callback"
 ]
 
 [webhooks]
