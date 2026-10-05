@@ -1,5 +1,5 @@
 name = "PAL Variant Empty Guard"
-application_url = "https://pal-variant-empty-guard-431722430465.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-empty-guard/app"
 embedded = true
 client_id = "acce6a131174237ca9469c16b76c5a2e"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-variant-empty-guard-431722430465.vercel.app/auth/callback",
-  "https://pal-variant-empty-guard-431722430465.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-empty-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-variant-empty-guard/auth/shopify/callback"
 ]
 
 [webhooks]
