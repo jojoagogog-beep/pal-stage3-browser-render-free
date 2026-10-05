@@ -1,5 +1,5 @@
 name = "PAL SKU Length Guard"
-application_url = "https://pal-variant-sku-length-guard.onrender.com/app"
+application_url = "https://pal-variant-sku-length-guard-431722692609.vercel.app"
 embedded = true
 client_id = "abbd367598bc823895a7278dc8621816"
 
@@ -8,31 +8,31 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-variant-sku-length-guard.onrender.com/auth/callback",
-  "https://pal-variant-sku-length-guard.onrender.com/auth/shopify/callback"
+  "https://pal-variant-sku-length-guard-431722692609.vercel.app/auth/callback",
+  "https://pal-variant-sku-length-guard-431722692609.vercel.app/auth/shopify/callback"
 ]
 
 [webhooks]
 api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
+  uri = "/pal-variant-sku-length-guard/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
+  uri = "/pal-variant-sku-length-guard/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/data_request"
+  uri = "/pal-variant-sku-length-guard/webhooks/customers/data_request"
   compliance_topics = [ "customers/data_request" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/redact"
+  uri = "/pal-variant-sku-length-guard/webhooks/customers/redact"
   compliance_topics = [ "customers/redact" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/shop/redact"
+  uri = "/pal-variant-sku-length-guard/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
 [pos]
