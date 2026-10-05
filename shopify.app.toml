@@ -1,5 +1,5 @@
 name = "PAL Option Value Space Guard"
-application_url = "https://pal-option-value-space-guard-431723315201.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-option-value-space-guard/app"
 embedded = true
 client_id = "ff2ec214a87e8d7f6789eebaaa1f1c24"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-option-value-space-guard-431723315201.vercel.app/auth/callback",
-  "https://pal-option-value-space-guard-431723315201.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-option-value-space-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-option-value-space-guard/auth/shopify/callback"
 ]
 
 [webhooks]
