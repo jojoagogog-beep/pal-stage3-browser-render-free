@@ -1,0 +1,12 @@
+{
+  "slug": "pal-tag-length-guard",
+  "name": "PAL Tag Length Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "4.99",
+    "trial_days": 7
+  },
+  "primary_check": "Long product tag",
+  "headline": "Find unusually long product tags."
+}
