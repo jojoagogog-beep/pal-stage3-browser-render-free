@@ -1,5 +1,5 @@
 name = "PAL Tag Whitespace Guard"
-application_url = "https://pal-tag-whitespace-guard-431721086977.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-whitespace-guard/app"
 embedded = true
 client_id = "be7c31ae52c7ac0c5abfe43978f7a72f"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-tag-whitespace-guard-431721086977.vercel.app/auth/callback",
-  "https://pal-tag-whitespace-guard-431721086977.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-whitespace-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-whitespace-guard/auth/shopify/callback"
 ]
 
 [webhooks]
