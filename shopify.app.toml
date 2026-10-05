@@ -1,5 +1,5 @@
 name = "PAL Compare Equal Guard"
-application_url = "https://pal-compare-price-equal-guard-431723479041.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-compare-price-equal-guard/app"
 embedded = true
 client_id = "7eb31e339741c8a27b0cc1c4dfc4916c"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-compare-price-equal-guard-431723479041.vercel.app/auth/callback",
-  "https://pal-compare-price-equal-guard-431723479041.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-compare-price-equal-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-compare-price-equal-guard/auth/shopify/callback"
 ]
 
 [webhooks]
