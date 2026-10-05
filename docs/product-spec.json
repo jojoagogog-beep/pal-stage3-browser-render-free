@@ -1,0 +1,43 @@
+{
+  "priority": 80,
+  "slug": "pal-vendor-name-consistency-guard",
+  "app_name": "PAL Vendor Name Guard",
+  "problem": "Product catalogs can accumulate vendor names that differ only by case, spacing, punctuation, or near-identical spelling, which can fragment filtering and internal catalog organization.",
+  "target_merchant": "Stores with imported or long-running catalogs that rely on vendor names for filtering, reporting, and merchandising.",
+  "first_release": [
+    "Detect vendor names that collapse to the same normalized form by case, whitespace, and punctuation.",
+    "Group affected products under each suspicious vendor-name cluster.",
+    "Prioritize high-frequency naming drift without changing product data.",
+    "Export a read-only remediation CSV with direct product links."
+  ],
+  "constraints": [
+    "Read-only v1.",
+    "No vendor/product writes.",
+    "No protected customer data.",
+    "Do not claim two vendor names are definitively the same business."
+  ],
+  "required_scopes": [
+    "read_products"
+  ],
+  "pricing": {
+    "monthly_usd": 5.99,
+    "trial_days": 7
+  },
+  "research": {
+    "as_of": "2026-10-01",
+    "evidence": [
+      "Shopify Community support notes that duplicate-looking vendor entries can be caused by case differences such as lowercase versus uppercase vendor names.",
+      "Current App Store results include a read-only vendor checker focused on missing/default/placeholder vendors, leaving a narrower naming-consistency workflow distinct."
+    ],
+    "source_urls": [
+      "https://community.shopify.com/t/same-product-vendors-name-is-showing-two-times/36269/2",
+      "https://apps.shopify.com/missing-vendor-check"
+    ],
+    "confidence": "medium"
+  },
+  "status": "queued",
+  "build_attempts": 1,
+  "workspace": "/Users/kawaguchitakumi/pal-shopify-app-factory/apps/pal-vendor-name-consistency-guard",
+  "next_build_attempt": 1790834297.798205,
+  "build_last_error": "Reading additional input from stdin...\n"
+}

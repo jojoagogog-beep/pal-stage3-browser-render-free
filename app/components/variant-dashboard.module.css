@@ -1,0 +1,49 @@
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #dfe3e8;
+  border-radius: 12px;
+  background: #f9fafb;
+  color: #4a4f53;
+}
+
+.metric strong {
+  color: #202223;
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.productLink {
+  color: #005bd3;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.productLink:hover {
+  text-decoration: underline;
+}
+
+.footerLinks {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  padding: 20px 0 8px;
+  font-size: 0.875rem;
+}
+
+.footerLinks a {
+  color: #53645a;
+}
+
+@media (max-width: 720px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+}

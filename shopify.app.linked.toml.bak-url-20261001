@@ -1,0 +1,41 @@
+client_id = "e831e40715bda8c781756b7303aeda45"
+name = "PAL Variant Shipping Guard"
+application_url = "https://magnetic-detect-perth-appearance.trycloudflare.com"
+embedded = false
+
+[access_scopes]
+scopes = "read_inventory,read_products"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://magnetic-detect-perth-appearance.trycloudflare.com/auth/callback",
+  "https://magnetic-detect-perth-appearance.trycloudflare.com/auth/shopify/callback"
+]
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
+
+[pos]
+embedded = false

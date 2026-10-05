@@ -1,0 +1,111 @@
+{
+  "apps": [
+    {
+      "name": "Simprosys Google Shopping Feed",
+      "url": "https://apps.shopify.com/google-shopping-feed",
+      "public_evidence": "4.9/5 average across ~4,900 reviews (97% five-star); third-party install trackers report 40,000+ live stores; carries the 'Built for Shopify' badge; long operating history with continuous update cadence.",
+      "abstract_media_notes": "Headline states scope as a channel list ('Google Shopping, Microsoft, Meta & Pinterest') rather than a slogan — a scanning merchant can confirm fit in one read without opening the listing further."
+    },
+    {
+      "name": "Matrixify",
+      "url": "https://apps.shopify.com/excel-export-import",
+      "public_evidence": "4.9/5 rating; launched 2017 (rebranded from Excelify), with release notes documenting ~9 years of continuous updates — one of the longest-running apps in the category; review-count figures vary by source/snapshot (several hundred to low thousands).",
+      "abstract_media_notes": "Positioning tagline emphasizes breadth and control ('Import, Export, Update and Migrate ... in bulk') rather than a single outcome, reflecting its role as a general data-quality power tool adjacent to feed compliance rather than a feed-submission app itself."
+    },
+    {
+      "name": "Ced ‑ Google Shopping Feed & Ads (CedCommerce)",
+      "url": "https://apps.shopify.com/google-express-integration",
+      "public_evidence": "CedCommerce's Google feed listing(s) show high review volume, reported between roughly 1,500 and 4,800+ depending on source, with ratings between 4.5 and 4.9; CedCommerce is a long-established multi-app Shopify partner with a large cross-channel portfolio (Amazon, Etsy, Google).",
+      "abstract_media_notes": "Tagline leans on forward-looking language ('ready for AI shopping') to differentiate an otherwise commoditized GMC-feed claim from other listings using near-identical channel lists."
+    },
+    {
+      "name": "Pify Google Shopping Feed",
+      "url": "https://apps.shopify.com/pify-google-shopping-feed",
+      "public_evidence": "4.9/5 rating, ~974 reviews, 'Built for Shopify' badge, free plan available.",
+      "abstract_media_notes": "Tagline is outcome-first ('Improve Google Shopping performance by optimizing product data'), tying the feed/data-quality mechanism directly to an ad-performance result rather than describing the mechanism alone."
+    },
+    {
+      "name": "MP Google Shopping Feed",
+      "url": "https://apps.shopify.com/mageplaza-product-feed",
+      "public_evidence": "4.7/5 rating, ~509 reviews, free to install, markets a named 'Google Feed AI' capability.",
+      "abstract_media_notes": "Leads with an automation/AI label in the tagline itself, used as a differentiator against plainer, manual-sounding competitor taglines."
+    },
+    {
+      "name": "Nabu for Google Shopping Feed (AdNabu)",
+      "url": "https://apps.shopify.com/google-shopping-feed-2",
+      "public_evidence": "~4.8/5 rating; review counts vary by source (roughly several hundred); free plan with trial; publicly markets automatic Merchant Center error resolution and a feed 'health score'.",
+      "abstract_media_notes": "Tagline is diagnostic/outcome-first ('Google Feed AI to boost sales from Google Merchant Center') — error-detection is framed as the core value, the closest existing positioning to a 'readiness guard' concept."
+    },
+    {
+      "name": "Flexify: Facebook Product Feed",
+      "url": "https://apps.shopify.com/facebook-product-catalog",
+      "public_evidence": "Review sentiment repeatedly cites responsive, hands-on support as the standout differentiator; can run as primary Meta/Instagram integration or alongside Shopify's native sales channel.",
+      "abstract_media_notes": "Tagline ('Improve Facebook/Insta performance by optimizing product data') mirrors Pify's structure almost exactly, suggesting this outcome-tied phrasing pattern is a converged category norm rather than one app's original choice."
+    },
+    {
+      "name": "Optim Feed ‑ Product Feeds",
+      "url": "https://apps.shopify.com/happy-feeds-facebook-catalog-feed",
+      "public_evidence": "Reviewed favorably for handling large catalogs via XML-style feeds versus RSS; serves Meta Commerce Manager, Google Merchant Center, Bing, and custom XML.",
+      "abstract_media_notes": "Tagline is plain and functional ('Generate a Facebook Product Feed from your store's products') — a useful contrast case showing less benefit-driven framing than AI/outcome-framed peers."
+    },
+    {
+      "name": "Universal Product Feed",
+      "url": "https://apps.shopify.com/facebook-feed-1",
+      "public_evidence": "Marketed as covering four channels (Meta, Google, TikTok, Snapchat) with GTIN/variant-level customization and Meta Pixel integration.",
+      "abstract_media_notes": "Headline claims broad multi-platform coverage as the core differentiator, a 'one feed app, many channels' positioning distinct from single-channel specialists."
+    },
+    {
+      "name": "OC Meta Catalog Facebook Feed (Orichi)",
+      "url": "https://apps.shopify.com/orichi-product-feeds",
+      "public_evidence": "Reported 5.0/5 rating; free to use; described in reviews as straightforward to set up with accurate ongoing sync.",
+      "abstract_media_notes": "Tagline explicitly lists 'LLMs' alongside Meta/Google/Bing/Pinterest as a feed destination — an early, visible signal that category messaging is already stretching toward AI-shopping-surface readiness, not just legacy engines."
+    }
+  ],
+  "patterns": [
+    "State channel/outcome scope in a short tagline (≤10-12 words) instead of a brand slogan, so fit is clear on first scan.",
+    "Tie the tagline to a business result ('boost sales', 'improve performance') rather than only describing the mechanism — outcome-framed taglines correlate with the higher-adoption listings observed.",
+    "Name the actual destination channels/surfaces explicitly (Google, Meta, Microsoft, Pinterest, and increasingly AI/LLM surfaces) rather than a generic category label like 'product feed'.",
+    "Use diagnostic/error-detection framing ('health score', 'automatic fixes', 'resolves errors') to position the app as risk mitigation, not just automation — this is the closest existing pattern to a readiness/guard concept.",
+    "Free-plan-or-trial availability and the 'Built for Shopify' badge function as low-friction trust levers, especially for apps without a decade of history to point to.",
+    "Longevity (years of continuous updates) acts as an implicit trust signal surfaced by third parties and reviews even when the listing itself doesn't state a founding date.",
+    "Support responsiveness is the single most-cited qualitative differentiator across reviews in this category — better surfaced via authentic review excerpts than via a feature claim.",
+    "Multi-channel breadth claims are common to both leaders and challengers, so breadth alone doesn't differentiate — specificity of the outcome claim does.",
+    "Plain, purely functional taglines (channel + verb, no outcome) appear on the lower-adoption-signal listings in this search — a pattern worth avoiding, not emulating.",
+    "Pricing transparency (free plan / starts-from price) is commonly surfaced adjacent to rating and review count in third-party summaries, implying merchants weigh cost-to-try alongside social proof.",
+    "Category messaging is already shifting to reference AI-shopping and LLM-driven discovery as feed destinations — an emerging axis for differentiation beyond classic GMC/Meta compliance.",
+    "The Shopify listing template itself is a fixed structure (tagline, rating/review count, feature bullets, screenshot/video carousel, FAQ) — competitive differentiation happens within that structure, not by deviating from it."
+  ],
+  "conversion_blueprint": {
+    "hero_goal": "Communicate, in the first visual beat, that the app finds and flags missing/invalid structured attributes (GTIN, product type/category, size/color, etc.) BEFORE they cause Google Merchant Center or Meta catalog disapprovals — i.e., 'ready-looking' products can still fail the feed, and this app catches that gap. The hero should sell the audit/prevention outcome, not the act of building or submitting a feed.",
+    "hero_pattern": "Lead with a single clear problem→catch moment: a product that looks complete in Shopify's admin next to an explicit flag/count of the specific missing attribute(s) that would trigger a disapproval. Keep the first frame to one idea — readiness status, not a feature list or a dashboard tour.",
+    "screenshot_sequence": [
+      "1. Readiness overview — store-wide count of products with attribute gaps, framed as an at-a-glance health check.",
+      "2. Drill-down — a single product showing exactly which required attribute(s) are missing or malformed and why that fails GMC/Meta rules.",
+      "3. Fix-in-place — the correction flow (bulk or single-product) showing how a gap gets resolved without leaving the app.",
+      "4. Channel-specific rule coverage — evidence the tool understands GMC and Meta's distinct requirements, not a generic one-size rule set.",
+      "5. Ongoing monitoring — recurring/scheduled checks or alerts, establishing this is prevention, not a one-time audit.",
+      "6. Outcome proof — before/after or resolved-count summary reinforcing fewer disapprovals/missing items."
+    ],
+    "text_density": "Keep headline text to one short outcome-oriented line per screenshot (roughly 6-10 words), matching the category norm observed (e.g., 'Improve Google Shopping performance by optimizing product data'). Avoid stacked paragraphs on any single frame; one claim, one proof point per screenshot.",
+    "ui_crop_guidance": "Show real product/attribute data tightly cropped to the relevant panel or table row — enough to look authentic and specific, not a full-window screenshot with navigation chrome, sidebars, or unrelated settings that dilute the point being made.",
+    "video_hook_0_10s": "Open directly on the problem: a product that reads as complete, immediately followed (within the first few seconds) by the specific readiness flag appearing — no logo animation, no title card, no scene-setting narration before the first real UI appears.",
+    "video_middle": "Move quickly (30-60s total runtime) through: gap detected → why it matters (which channel/rule) → fix applied → status turns 'ready'. Keep each beat on screen only as long as needed to read it; caption key claims so the video works muted.",
+    "video_ending": "Close on a clear resulting state (store-wide readiness status looking healthy) plus a simple, single call-to-action frame — no feature-list recap, no multi-claim closing slide.",
+    "trust_pattern": "Use only verifiable, non-fabricated signals: actual install/review counts once they exist, any earned Shopify badges (e.g., Built for Shopify once eligible), and real merchant quotes/review excerpts once available. Do not imply certification from Google or Meta unless a documented partnership/certification exists — several competitors avoid over-claiming here and it should be mirrored, not exceeded.",
+    "differentiation_pattern": "Position explicitly as a pre-submission audit/guard layer that complements (not replaces) feed-submission apps like Simprosys/Ced/AdNabu and bulk-edit tools like Matrixify — the wedge is 'catches what looks done but isn't,' distinct from 'builds/sends the feed' or 'bulk-edits everything.' Lean into the diagnostic/error-prevention framing pattern (AdNabu's 'health score' is the nearest analog) since it's underused as a primary hero claim versus channel-breadth claims.",
+    "live_listing_reuse": "The review-submission hero/screenshots should already be the live-listing assets — same problem-first hero, same 6-shot sequence, same tightly-cropped real UI — since Shopify reviews the actual merchant-facing listing. Post-approval, iterate only by swapping in real merchant review excerpts, updated install/rating counts, and refined outcome copy based on which screenshot order/captions test best; don't restructure the sequence or reintroduce a feature-tour format that was avoided for review."
+  },
+  "avoid": [
+    "Don't lead the hero with a full, uncropped admin dashboard screenshot — it reads as a feature tour, not a value proposition, and none of the higher-adoption listings open that way.",
+    "Don't write a plain functional tagline ('Check your product feed for errors') with no outcome attached — this pattern correlates with lower-adoption-signal listings in this research.",
+    "Don't front-load the video with a logo animation, title card, or narrated scene-setting — attention is lost before the first real screen appears.",
+    "Don't claim breadth ('works with every channel') as the sole differentiator — it's already the default claim across most competitors and doesn't distinguish PAL.",
+    "Don't fabricate or imply Google/Meta certification, partnership, or endorsement that doesn't exist — no competitor evidence found supports doing this, and it risks a false trust claim.",
+    "Don't stack multiple claims on one screenshot frame — every high-frequency pattern observed uses one idea per frame.",
+    "Don't end the video on a feature recap slide — close on the resulting state and a single CTA instead.",
+    "Don't build review-submission assets that differ structurally from the live listing — Shopify reviews the actual merchant-facing presentation, so there is nothing to 'revert' after approval."
+  ],
+  "strategy_version": 3,
+  "intended_use": "Abstract conversion patterns only; all app assets and wording must remain original",
+  "fallback_reused_abstract_patterns_from": "/Users/kawaguchitakumi/pal-shopify-app-factory/apps/pal-shipping-weight-integrity-guard/docs/media-benchmark.json"
+}

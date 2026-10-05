@@ -1,0 +1,15 @@
+{
+  "schema": "PAL_COMMERCIAL_MEDIA_PLAN_V3",
+  "app_name": "PAL Tag Consistency Guard",
+  "positioning": "Read-only audit of product-tag naming consistency.",
+  "merchant_benefits": [
+    "Detect capitalization-only tag variants.",
+    "Detect spacing and punctuation tag variants.",
+    "Export a diagnostic CSV without changing product tags."
+  ],
+  "screenshots": ["overview.png","case.png","spacing.png","ready.png","limit.png"],
+  "feature_image": "overview.png",
+  "screencast": "pal-tag-consistency-guard-screencast.mp4",
+  "live_listing_reuse_required": true,
+  "source": "Real app review-demo states using fictional product tags."
+}
