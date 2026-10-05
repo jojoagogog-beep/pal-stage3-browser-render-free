@@ -1,0 +1,12 @@
+{
+  "slug": "pal-variant-sku-coverage-guard",
+  "name": "PAL Variant SKU Coverage Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "5.99",
+    "trial_days": 7
+  },
+  "primary_check": "Missing variant SKU",
+  "headline": "Find variants without SKUs."
+}
