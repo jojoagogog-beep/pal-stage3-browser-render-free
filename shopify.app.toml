@@ -1,5 +1,5 @@
 name = "PAL Description Phone Guard"
-application_url = "https://pal-description-phone-guard-431722004481.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-description-phone-guard/app"
 embedded = true
 client_id = "638826fadce2f39e3f376a60636377af"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-phone-guard-431722004481.vercel.app/auth/callback",
-  "https://pal-description-phone-guard-431722004481.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-phone-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-phone-guard/auth/shopify/callback"
 ]
 
 [webhooks]
