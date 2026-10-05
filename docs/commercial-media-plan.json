@@ -1,0 +1,21 @@
+{
+  "hero_goal": "Show PAL Option Empty Guard finding the catalog issue immediately with real app UI and sample data.",
+  "screenshots": [
+    {
+      "file": "01-review-findings.png",
+      "purpose": "Core finding view and evidence"
+    },
+    {
+      "file": "02-remediation-worklist.png",
+      "purpose": "Read-only remediation handoff"
+    },
+    {
+      "file": "03-filtered-review.png",
+      "purpose": "Focused review/filter workflow"
+    }
+  ],
+  "feature_media": "01-review-findings.png",
+  "video": "optional_not_required",
+  "differentiation": "Single-purpose read-only catalog QA with explicit evidence and merchant-controlled remediation.",
+  "live_listing_reuse": "Use the same validated screenshots after approval."
+}
