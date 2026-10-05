@@ -1,5 +1,5 @@
 name = "PAL Barcode Format Guard"
-application_url = "https://pal-barcode-format-guard-431723053057.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-barcode-format-guard/app"
 embedded = true
 client_id = "aa29ef4b9c8636cd42fdd5ba3abbbded"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-barcode-format-guard-431723053057.vercel.app/auth/callback",
-  "https://pal-barcode-format-guard-431723053057.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-barcode-format-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-barcode-format-guard/auth/shopify/callback"
 ]
 
 [webhooks]
