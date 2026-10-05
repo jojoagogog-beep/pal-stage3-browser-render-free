@@ -1,5 +1,5 @@
 name = "PAL Barcode Space Guard"
-application_url = "https://pal-barcode-space-guard-431723085825.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-barcode-space-guard/app"
 embedded = true
 client_id = "0c91dd813c221baab2780afbce49a26d"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-barcode-space-guard-431723085825.vercel.app/auth/callback",
-  "https://pal-barcode-space-guard-431723085825.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-barcode-space-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-barcode-space-guard/auth/shopify/callback"
 ]
 
 [webhooks]
