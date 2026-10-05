@@ -1,0 +1,12 @@
+{
+  "slug": "pal-description-image-protocol-guard",
+  "name": "PAL Image Protocol Guard",
+  "scope": "read_products",
+  "read_only": true,
+  "pricing": {
+    "monthly_usd": "5.99",
+    "trial_days": 7
+  },
+  "primary_check": "Insecure description image URL",
+  "headline": "Find insecure image URLs inside descriptions."
+}
