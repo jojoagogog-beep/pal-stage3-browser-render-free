@@ -1,5 +1,5 @@
 name = "PAL Description Image Guard"
-application_url = "https://pal-description-image-count-guard-431722070017.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-description-image-count-guard/app"
 embedded = true
 client_id = "1715cfa47a1a3067831ed6454f6d8baa"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-image-count-guard-431722070017.vercel.app/auth/callback",
-  "https://pal-description-image-count-guard-431722070017.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-image-count-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-description-image-count-guard/auth/shopify/callback"
 ]
 
 [webhooks]
