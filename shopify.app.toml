@@ -1,5 +1,5 @@
 name = "PAL Price Precision Guard"
-application_url = "https://pal-price-precision-guard-431723577345.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-price-precision-guard/app"
 embedded = true
 client_id = "898c5978b47c2be2d5de115a6b9c5005"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-price-precision-guard-431723577345.vercel.app/auth/callback",
-  "https://pal-price-precision-guard-431723577345.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-price-precision-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-price-precision-guard/auth/shopify/callback"
 ]
 
 [webhooks]
