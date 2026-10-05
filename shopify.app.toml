@@ -1,5 +1,5 @@
 name = "PAL Tag Duplicate Guard"
-application_url = "https://pal-tag-duplicate-guard-431720988673.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-duplicate-guard/app"
 embedded = true
 client_id = "771d0d3b8391008471eaf13ba3886a70"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-tag-duplicate-guard-431720988673.vercel.app/auth/callback",
-  "https://pal-tag-duplicate-guard-431720988673.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-duplicate-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-tag-duplicate-guard/auth/shopify/callback"
 ]
 
 [webhooks]
