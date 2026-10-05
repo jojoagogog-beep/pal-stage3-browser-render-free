@@ -1,5 +1,5 @@
 name = "PAL Type Length Guard"
-application_url = "https://pal-type-length-guard-431720890369.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-type-length-guard/app"
 embedded = true
 client_id = "e4dbbc55abb45b1ffc655bb78e1954a1"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-type-length-guard-431720890369.vercel.app/auth/callback",
-  "https://pal-type-length-guard-431720890369.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-type-length-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-type-length-guard/auth/shopify/callback"
 ]
 
 [webhooks]
