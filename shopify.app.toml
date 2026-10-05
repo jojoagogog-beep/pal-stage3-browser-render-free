@@ -1,5 +1,5 @@
 name = "PAL Vendor Symbol Guard"
-application_url = "https://pal-vendor-symbol-guard-431720792065.vercel.app"
+application_url = "https://pal-shopify-batch50-gateway.onrender.com/pal-vendor-symbol-guard/app"
 embedded = true
 client_id = "819fd4c15500700c42d593971c914cab"
 
@@ -8,8 +8,8 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-vendor-symbol-guard-431720792065.vercel.app/auth/callback",
-  "https://pal-vendor-symbol-guard-431720792065.vercel.app/auth/shopify/callback"
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-vendor-symbol-guard/auth/callback",
+  "https://pal-shopify-batch50-gateway.onrender.com/pal-vendor-symbol-guard/auth/shopify/callback"
 ]
 
 [webhooks]
