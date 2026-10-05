@@ -1,5 +1,5 @@
 name = "PAL Option Value Case Guard"
-application_url = "https://pal-option-value-case-guard.onrender.com/app"
+application_url = "https://pal-option-value-case-guard-431723216897.vercel.app"
 embedded = true
 client_id = "ff6e54d410e142152726aa9c27c0460b"
 
@@ -8,31 +8,31 @@ scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-option-value-case-guard.onrender.com/auth/callback",
-  "https://pal-option-value-case-guard.onrender.com/auth/shopify/callback"
+  "https://pal-option-value-case-guard-431723216897.vercel.app/auth/callback",
+  "https://pal-option-value-case-guard-431723216897.vercel.app/auth/shopify/callback"
 ]
 
 [webhooks]
 api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
+  uri = "/pal-option-value-case-guard/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
+  uri = "/pal-option-value-case-guard/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/data_request"
+  uri = "/pal-option-value-case-guard/webhooks/customers/data_request"
   compliance_topics = [ "customers/data_request" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/redact"
+  uri = "/pal-option-value-case-guard/webhooks/customers/redact"
   compliance_topics = [ "customers/redact" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/shop/redact"
+  uri = "/pal-option-value-case-guard/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
 [pos]
