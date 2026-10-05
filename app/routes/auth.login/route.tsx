@@ -10,11 +10,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function Auth() {
   return (
     <AppProvider embedded={false}>
-      <s-page heading="Open PAL Handle Title Drift Guard from Shopify">
+      <s-page heading="Open PAL Placeholder Copy Guard from Shopify">
         <s-section heading="Shopify authentication required">
           <s-paragraph>
             For security, installation and sign-in start from the Shopify App
-            Store or Shopify admin. Return to Shopify and open PAL Handle Title Drift Guard from Apps.
+            Store or Shopify admin. Return to Shopify and open PAL Placeholder Copy Guard from Apps.
           </s-paragraph>
         </s-section>
       </s-page>
