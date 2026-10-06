@@ -5,15 +5,28 @@ import {
   Scripts,
   ScrollRestoration,
   useLoaderData,
+  type LoaderFunctionArgs,
 } from "react-router";
+import { appEnvNames } from "./rules/app-env-names";
 
-export const loader = () => ({
-  apiKey: process.env.SHOPIFY_API_KEY || "",
-  mediaCapture: process.env.PAL_MEDIA_CAPTURE === "1",
-});
+export const loader = ({ request }: LoaderFunctionArgs) => {
+  const slug = new URL(request.url).pathname.split("/").filter(Boolean)[0] || "";
+  const names = appEnvNames[slug as keyof typeof appEnvNames];
+  const apiKey = names
+    ? process.env[names.key] || ""
+    : process.env.SHOPIFY_API_KEY || "";
+  const title = slug
+    ? "PAL " + slug.replace(/^pal-/, "").split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
+    : "Practical AI Lab";
+  return {
+    apiKey,
+    title,
+    mediaCapture: process.env.PAL_MEDIA_CAPTURE === "1",
+  };
+};
 
 export default function App() {
-  const { apiKey, mediaCapture } = useLoaderData<typeof loader>();
+  const { apiKey, title, mediaCapture } = useLoaderData<typeof loader>();
   return (
     <html lang="en">
       <head>
@@ -21,7 +34,7 @@ export default function App() {
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <meta name="shopify-api-key" content={apiKey} />
         <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" />
-        <title>PAL Handle Title Drift Guard</title>
+        <title>{title}</title>
         {mediaCapture ? null : (
           <>
 
