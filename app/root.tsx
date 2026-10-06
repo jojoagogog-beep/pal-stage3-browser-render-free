@@ -20,6 +20,7 @@ export default function App() {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <meta name="shopify-api-key" content={apiKey} />
+        <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js" />
         <title>PAL Tag Length Guard</title>
         {mediaCapture ? null : (
           <>
