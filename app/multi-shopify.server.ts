@@ -4,7 +4,7 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import prisma from "./db.server";
 import { appEnvNames } from "./rules/app-env-names";
 
-const origin = process.env.BATCH50_ORIGIN || "";
+const origin = process.env.BATCH50_PUBLIC_ORIGIN || process.env.BATCH50_ORIGIN || "";
 const baseStorage = new PrismaSessionStorage(prisma);
 const instances = new Map<string, ReturnType<typeof shopifyApp>>();
 
