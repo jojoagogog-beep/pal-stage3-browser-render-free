@@ -48,6 +48,9 @@ import * as r46 from './pal-compare-price-equal-guard';
 import * as r47 from './pal-compare-price-format-guard';
 import * as r48 from './pal-price-precision-guard';
 import * as r49 from './pal-compare-zero-guard';
+import * as r50 from './pal-barcode-checksum-guard';
+import * as r51 from './pal-option-value-length-guard';
+import * as r52 from './pal-option-delimiter-guard';
 
 export const ruleModules = {
   'pal-title-length-guard': r00,
@@ -100,5 +103,8 @@ export const ruleModules = {
   'pal-compare-price-format-guard': r47,
   'pal-price-precision-guard': r48,
   'pal-compare-zero-guard': r49,
+  'pal-barcode-checksum-guard': r50,
+  'pal-option-value-length-guard': r51,
+  'pal-option-delimiter-guard': r52,
 } as const;
 export type AppSlug = keyof typeof ruleModules;

@@ -49,4 +49,7 @@ export const appEnvNames = {
   'pal-compare-price-format-guard': { key: 'PAL_48_KEY', secret: 'PAL_48_SECRET' },
   'pal-price-precision-guard': { key: 'PAL_49_KEY', secret: 'PAL_49_SECRET' },
   'pal-compare-zero-guard': { key: 'PAL_50_KEY', secret: 'PAL_50_SECRET' },
+  'pal-barcode-checksum-guard': { key: 'PAL_51_KEY', secret: 'PAL_51_SECRET' },
+  'pal-option-value-length-guard': { key: 'PAL_52_KEY', secret: 'PAL_52_SECRET' },
+  'pal-option-delimiter-guard': { key: 'PAL_53_KEY', secret: 'PAL_53_SECRET' },
 } as const;
