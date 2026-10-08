@@ -32,7 +32,7 @@ export async function loader({request}:LoaderFunctionArgs){
   const slug=getSlug(request);const definition=ruleModules[slug as keyof typeof ruleModules] as any;
   const {admin,session}=await getShopify(slug).authenticate.admin(request);
   const paidHandles: Record<string,string>={
-    "pal-collection-image-ratio-guard":"pal-collection-image-ratio-guard",
+    "pal-collection-image-ratio-guard":"pal-collection-ratio-guard",
     "pal-collection-sort-guard":"pal-collection-sort-guard",
   };
   const storeHandle=String(session.shop||"").replace(/\.myshopify\.com$/i,"");
