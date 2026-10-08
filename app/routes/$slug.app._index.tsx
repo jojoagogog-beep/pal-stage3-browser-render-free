@@ -30,7 +30,15 @@ query PalGuardCollections($cursor:String){
 }`;
 export async function loader({request}:LoaderFunctionArgs){
   const slug=getSlug(request);const definition=ruleModules[slug as keyof typeof ruleModules] as any;
-  const {admin}=await getShopify(slug).authenticate.admin(request);
+  const {admin,session}=await getShopify(slug).authenticate.admin(request);
+  const paidHandles: Record<string,string>={
+    "pal-collection-image-ratio-guard":"pal-collection-image-ratio-guard",
+    "pal-collection-sort-guard":"pal-collection-sort-guard",
+  };
+  const storeHandle=String(session.shop||"").replace(/\.myshopify\.com$/i,"");
+  const pricingUrl=paidHandles[slug] && /^[a-z0-9-]+$/.test(storeHandle)
+    ? `https://admin.shopify.com/store/${encodeURIComponent(storeHandle)}/charges/${paidHandles[slug]}/pricing_plans`
+    : null;
   const cursor=new URL(request.url).searchParams.get("cursor");
   if(cursor&&(cursor.length>2048||!/^[A-Za-z0-9+/=_-]+$/.test(cursor)))throw new Response("Invalid catalog cursor.",{status:400});
   const isCollection=definition.appMeta.entityKind==="collection";
@@ -40,7 +48,7 @@ export async function loader({request}:LoaderFunctionArgs){
     const connection=isCollection?json.data?.collections:json.data?.products;
     if(!response.ok||json.errors?.length||!connection)throw new Error("API error");
     if(connection.pageInfo.hasNextPage&&(!connection.pageInfo.endCursor||connection.pageInfo.endCursor===cursor))throw new Error("Invalid pagination");
-    return data({slug,audit:definition.auditCatalog(connection.nodes),nextCursor:connection.pageInfo.hasNextPage?connection.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
+    return data({slug,pricingUrl,audit:definition.auditCatalog(connection.nodes),nextCursor:connection.pageInfo.hasNextPage?connection.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
   }catch{throw new Response("The catalog audit could not be loaded. Retry shortly.",{status:502});}
 }
 export default function Index(){

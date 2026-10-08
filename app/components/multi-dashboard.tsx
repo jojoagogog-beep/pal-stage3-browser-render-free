@@ -8,6 +8,7 @@ type Definition = {
 };
 type Props = {
   definition: Definition;
+  pricingUrl?: string | null;
   audit: any;
   demo?: boolean;
   initialFilter?: string;
@@ -21,7 +22,7 @@ type Props = {
 };
 
 export function MultiDashboard({
-  definition,audit,demo=false,initialFilter="all",nextCursor,laterBatch,busy,onRefresh,onNext,onRestart
+  definition,audit,pricingUrl=null,demo=false,initialFilter="all",nextCursor,laterBatch,busy,onRefresh,onNext,onRestart
 }:Props){
   const { appMeta, rules, buildCsv } = definition;
   const isCollection=appMeta.entityKind==="collection";
@@ -45,6 +46,13 @@ export function MultiDashboard({
       <span className={styles.readonly}>{appMeta.readonlyLabel}</span>
     </header>
     <div className={styles.body}>
+      {(pricingUrl || (demo && appMeta.entityKind==="collection" && ["collection-image-ratio","collection-sort"].includes(appMeta.exportSlug))) &&
+      <section aria-label="Shopify subscription" style={{background:"#f0f7ff",border:"1px solid #a8caec",borderRadius:12,padding:"18px 22px",marginBottom:22,color:"#143456"}}>
+        <h2 style={{fontSize:19,margin:"0 0 8px"}}>Subscription plan</h2>
+        <p style={{margin:"0 0 12px"}}><strong>$4.99/month after a 7-day free trial.</strong> Secure subscription and billing are handled by Shopify.</p>
+        {pricingUrl?<a href={pricingUrl} target="_top" rel="noopener noreferrer" style={{display:"inline-block",background:"#172f56",color:"white",padding:"12px 18px",borderRadius:8,fontWeight:700,textDecoration:"none"}}>View plans and subscribe →</a>
+          : <p style={{margin:0}}>After installing the app in your store, select <b>View plans and subscribe</b> to open the Shopify-hosted plan selection page.</p>}
+      </section>}
       <div className={styles.heading}><div>
         <p className={styles.eyebrow}>{appMeta.eyebrow}</p><h1>{appMeta.headline}</h1><p className={styles.lead}>{appMeta.lead}</p>
       </div></div>
