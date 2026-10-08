@@ -10,8 +10,14 @@ query PalGuardProducts($cursor:String){
   products(first:100,after:$cursor,sortKey:ID){
     nodes{id title vendor productType tags handle descriptionHtml
       variants(first:100){nodes{id title sku barcode price compareAtPrice selectedOptions{name value}}}
-      images(first:30){nodes{altText}}
     }
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
+const IMAGE_ALT_QUERY=`#graphql
+query PalImageAltProducts($cursor:String){
+  products(first:50,after:$cursor,sortKey:ID){
+    nodes{id title images(first:10){nodes{altText}}}
     pageInfo{hasNextPage endCursor}
   }
 }`;
@@ -29,7 +35,7 @@ export async function loader({request}:LoaderFunctionArgs){
   if(cursor&&(cursor.length>2048||!/^[A-Za-z0-9+/=_-]+$/.test(cursor)))throw new Response("Invalid catalog cursor.",{status:400});
   const isCollection=definition.appMeta.entityKind==="collection";
   try{
-    const response=await admin.graphql(isCollection?COLLECTIONS_QUERY:PRODUCTS_QUERY,{variables:{cursor}});
+    const response=await admin.graphql(isCollection?COLLECTIONS_QUERY:slug==="pal-product-image-alt-guard"?IMAGE_ALT_QUERY:PRODUCTS_QUERY,{variables:{cursor}});
     const json=await response.json() as any;
     const connection=isCollection?json.data?.collections:json.data?.products;
     if(!response.ok||json.errors?.length||!connection)throw new Error("API error");
