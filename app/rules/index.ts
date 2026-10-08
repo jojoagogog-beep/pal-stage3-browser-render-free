@@ -52,7 +52,14 @@ import * as r50 from './pal-barcode-checksum-guard';
 import * as r51 from './pal-option-value-length-guard';
 import * as r52 from './pal-option-delimiter-guard';
 
+import * as r53 from './pal-product-image-alt-guard';
+import * as r54 from './pal-collection-image-ratio-guard';
+import * as r55 from './pal-collection-sort-guard';
+
 export const ruleModules = {
+  'pal-product-image-alt-guard': r53,
+  'pal-collection-image-ratio-guard': r54,
+  'pal-collection-sort-guard': r55,
   'pal-title-length-guard': r00,
   'pal-title-word-count-guard': r01,
   'pal-title-digit-guard': r02,

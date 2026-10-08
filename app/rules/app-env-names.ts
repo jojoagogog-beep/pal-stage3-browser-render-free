@@ -1,4 +1,7 @@
 export const appEnvNames = {
+  'pal-product-image-alt-guard': { key: 'PAL_54_KEY', secret: 'PAL_54_SECRET' },
+  'pal-collection-image-ratio-guard': { key: 'PAL_55_KEY', secret: 'PAL_55_SECRET' },
+  'pal-collection-sort-guard': { key: 'PAL_56_KEY', secret: 'PAL_56_SECRET' },
   'pal-title-length-guard': { key: 'PAL_01_KEY', secret: 'PAL_01_SECRET' },
   'pal-title-word-count-guard': { key: 'PAL_02_KEY', secret: 'PAL_02_SECRET' },
   'pal-title-digit-guard': { key: 'PAL_03_KEY', secret: 'PAL_03_SECRET' },

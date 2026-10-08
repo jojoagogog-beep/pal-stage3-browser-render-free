@@ -8,23 +8,33 @@ import { ruleModules } from "../rules";
 const PRODUCTS_QUERY=`#graphql
 query PalGuardProducts($cursor:String){
   products(first:100,after:$cursor,sortKey:ID){
-    nodes{id title vendor productType tags handle descriptionHtml variants(first:100){nodes{id title sku barcode price compareAtPrice selectedOptions{name value}}}}
+    nodes{id title vendor productType tags handle descriptionHtml
+      variants(first:100){nodes{id title sku barcode price compareAtPrice selectedOptions{name value}}}
+      images(first:30){nodes{altText}}
+    }
     pageInfo{hasNextPage endCursor}
   }
 }`;
-
+const COLLECTIONS_QUERY=`#graphql
+query PalGuardCollections($cursor:String){
+  collections(first:100,after:$cursor,sortKey:ID){
+    nodes{id title handle sortOrder image{width height}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
 export async function loader({request}:LoaderFunctionArgs){
   const slug=getSlug(request);const definition=ruleModules[slug as keyof typeof ruleModules] as any;
   const {admin}=await getShopify(slug).authenticate.admin(request);
   const cursor=new URL(request.url).searchParams.get("cursor");
   if(cursor&&(cursor.length>2048||!/^[A-Za-z0-9+/=_-]+$/.test(cursor)))throw new Response("Invalid catalog cursor.",{status:400});
+  const isCollection=definition.appMeta.entityKind==="collection";
   try{
-    const response=await admin.graphql(PRODUCTS_QUERY,{variables:{cursor}});
+    const response=await admin.graphql(isCollection?COLLECTIONS_QUERY:PRODUCTS_QUERY,{variables:{cursor}});
     const json=await response.json() as any;
-    if(!response.ok||json.errors?.length||!json.data?.products)throw new Error("API error");
-    const result=json.data.products;
-    if(result.pageInfo.hasNextPage&&(!result.pageInfo.endCursor||result.pageInfo.endCursor===cursor))throw new Error("Invalid pagination");
-    return data({slug,audit:definition.auditCatalog(result.nodes),nextCursor:result.pageInfo.hasNextPage?result.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
+    const connection=isCollection?json.data?.collections:json.data?.products;
+    if(!response.ok||json.errors?.length||!connection)throw new Error("API error");
+    if(connection.pageInfo.hasNextPage&&(!connection.pageInfo.endCursor||connection.pageInfo.endCursor===cursor))throw new Error("Invalid pagination");
+    return data({slug,audit:definition.auditCatalog(connection.nodes),nextCursor:connection.pageInfo.hasNextPage?connection.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
   }catch{throw new Response("The catalog audit could not be loaded. Retry shortly.",{status:502});}
 }
 export default function Index(){

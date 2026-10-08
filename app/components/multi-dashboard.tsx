@@ -24,6 +24,7 @@ export function MultiDashboard({
   definition,audit,demo=false,initialFilter="all",nextCursor,laterBatch,busy,onRefresh,onNext,onRestart
 }:Props){
   const { appMeta, rules, buildCsv } = definition;
+  const isCollection=appMeta.entityKind==="collection";
   const [filter,setFilter]=useState(initialFilter==="worklist"?"all":initialFilter);
   const [search,setSearch]=useState("");
   const [tab,setTab]=useState(initialFilter==="worklist"?"worklist":"findings");
@@ -48,8 +49,8 @@ export function MultiDashboard({
         <p className={styles.eyebrow}>{appMeta.eyebrow}</p><h1>{appMeta.headline}</h1><p className={styles.lead}>{appMeta.lead}</p>
       </div></div>
       <div className={styles.context}>
-        <span>{demo?"Demo catalog · Illustrative sample data":"Live catalog · "+(laterBatch?"Later product batch":"First product batch")}</span>
-        <span>{demo?"No store connection":`${audit.products} products in this batch`}</span>
+        <span>{demo?"Demo catalog · Illustrative sample data":"Live catalog · "+(laterBatch?"Later catalog batch":"First catalog batch")}</span>
+        <span>{demo?"No store connection":`${audit.products} ${isCollection?"collections":"products"} in this batch`}</span>
       </div>
       <div className={styles.controls}>
         <nav aria-label="Audit views">
@@ -70,7 +71,7 @@ export function MultiDashboard({
         </aside>
         <section className={styles.panel} aria-label="Audit results">
           <div className={styles.panelTitle}><h2>{tab==="worklist"?"A clear handoff for your catalog team":appMeta.panelTitle}</h2>
-            <label>Find a product<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search product titles" type="search"/></label>
+            <label>Find {isCollection?"a collection":"a product"}<input value={search} onChange={e=>setSearch(e.target.value)} placeholder={isCollection?"Search collection titles":"Search product titles"} type="search"/></label>
           </div>
           {audit.skipped?.length>0&&<p role="alert" className={styles.warning}>Not checked: {audit.skipped.join(", ")}.</p>}
           {nextCursor&&<p className={styles.warning}>More products remain. This view and its export cover only the current batch.</p>}
@@ -92,7 +93,7 @@ export function MultiDashboard({
                   {active&&<article className={styles.evidence}><p className={styles.eyebrow}>CATALOG EVIDENCE</p>
                     <h3>{rules[active.rule]?.label}</h3><p>{active.detail}</p><pre><code>{active.evidence}</code></pre>
                     <h4>Suggested review</h4><p>{rules[active.rule]?.advice}</p>
-                    {demo?<span className={styles.demoLink}>Product editor links appear in a connected store.</span>:<a target="_top" href={`shopify://admin/products/${String(active.productId).split("/").pop()}`}>Open product in admin ↗</a>}
+                    {demo?<span className={styles.demoLink}>Product editor links appear in a connected store.</span>:<a target="_top" href={`shopify://admin/${isCollection?"collections":"products"}/${String(active.productId).split("/").pop()}`}>Open {isCollection?"collection":"product"} in admin ↗</a>}
                   </article>}
                 </div>}
           <div className={styles.footer}><span>High-priority findings appear first. Priorities are review guidance.</span>
