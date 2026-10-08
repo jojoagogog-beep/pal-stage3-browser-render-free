@@ -49,13 +49,27 @@ export function getShopify(slug: string) {
   if (existing) return existing;
   const apiKey = process.env[names.key];
   const apiSecretKey = process.env[names.secret];
-  if (!apiKey || !apiSecretKey || !origin) throw new Error("Missing runtime app configuration for " + slug);
+  // The reviewed collection apps can move to an approved permanent hostname
+  // independently, without interrupting the other gateway-hosted apps.
+  const externalOrigin = slug === "pal-collection-image-ratio-guard"
+    ? process.env.PAL_RATIO_PUBLIC_ORIGIN
+    : slug === "pal-collection-sort-guard"
+      ? process.env.PAL_SORT_PUBLIC_ORIGIN
+      : undefined;
+  const appOrigin = externalOrigin || origin;
+  if (externalOrigin) {
+    const url = new URL(externalOrigin);
+    if (url.protocol !== "https:" || /shopify|example|trycloudflare/i.test(url.hostname) || url.pathname !== "/") {
+      throw new Error("Collection app origin must be a permanent compliant HTTPS hostname");
+    }
+  }
+  if (!apiKey || !apiSecretKey || !appOrigin) throw new Error("Missing runtime app configuration for " + slug);
   const instance = shopifyApp({
     apiKey,
     apiSecretKey,
     apiVersion: ApiVersion.July26,
     scopes: ["read_products"],
-    appUrl: origin,
+    appUrl: appOrigin,
     authPathPrefix: "/" + slug + "/auth",
     sessionStorage: new ScopedSessionStorage(slug) as any,
     distribution: AppDistribution.AppStore,
