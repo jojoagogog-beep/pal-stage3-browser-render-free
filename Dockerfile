@@ -6,4 +6,4 @@ RUN npm install
 COPY . .
 RUN npm run build
 ENV NODE_ENV=production
-CMD ["npm","run","docker-start"]
+CMD ["node","./neutral-proxy.mjs"]

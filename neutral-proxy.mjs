@@ -1,0 +1,83 @@
+// A neutral, review-compliant host for two Shopify apps. Existing stage3
+// routes continue to run through the original React Router service unchanged.
+import http from "node:http";
+import https from "node:https";
+import net from "node:net";
+import fs from "node:fs";
+import path from "node:path";
+import {spawn} from "node:child_process";
+
+const appRoot = path.resolve("build/client");
+const gateway = "pal-shopify-batch50-gateway.onrender.com";
+const appPrefixes = ["/pal-collection-image-ratio-guard/", "/pal-collection-sort-guard/"];
+const publicPort = Number(process.env.PORT || "10000");
+const internalPort = 19731;
+const child = spawn("npm", ["run", "docker-start"], {
+  env: {...process.env, PORT: String(internalPort)},
+  stdio: "inherit",
+});
+child.on("error", e=>{ console.error("ORIGINAL_APP_START_FAILED",e.message);process.exitCode=1;});
+child.on("exit", (code,signal)=>{ console.error("ORIGINAL_APP_EXIT",code,signal);server.close();process.exitCode=code||1;});
+
+function shouldSendToGateway(pathname, method) {
+  if (appPrefixes.some(prefix=>pathname.startsWith(prefix))) return true;
+  if (!["GET","HEAD"].includes(method)) return false;
+  if (!pathname.startsWith("/assets/")) return false;
+  let file;
+  try {file=path.resolve(appRoot, "."+decodeURIComponent(pathname));} catch {return false;}
+  if (!(file.startsWith(appRoot+path.sep))) return false;
+  return !fs.existsSync(file);
+}
+function forward(request,response) {
+  let parsed;
+  try {parsed=new URL(request.url||"/","http://localhost");}catch{
+    response.writeHead(400);response.end("Bad request");return;
+  }
+  const merchant=shouldSendToGateway(parsed.pathname,request.method||"GET");
+  const target=merchant ? new URL(parsed.pathname+parsed.search, "https://"+gateway)
+    : new URL(parsed.pathname+parsed.search, "http://127.0.0.1:"+internalPort);
+  const client=merchant?https:http;
+  const headers={...request.headers,host:target.host};
+  if(merchant){
+    headers["x-forwarded-host"]=request.headers.host||"";
+    headers["x-forwarded-proto"]="https";
+  }
+  const upstream=client.request(target,{method:request.method,headers},incoming=>{
+    const h={...incoming.headers};
+    if(merchant&&h.location){
+      try {
+        const dest=new URL(h.location,target);
+        if(dest.hostname===gateway){
+          dest.host=request.headers.host||dest.host;
+          dest.protocol="https:";
+          h.location=dest.toString();
+        }
+      }catch{}
+    }
+    if(merchant&&h["set-cookie"]){
+      const cookies=Array.isArray(h["set-cookie"])?h["set-cookie"]:[h["set-cookie"]];
+      h["set-cookie"]=cookies.map(v=>v.replace(/;\s*Domain=pal-shopify-batch50-gateway\.onrender\.com\b/ig,""));
+    }
+    response.writeHead(incoming.statusCode||502,h);
+    incoming.pipe(response);
+  });
+  upstream.on("error",e=>{console.error("UPSTREAM_PROXY_FAILURE",merchant?"gateway":"local",e.code||e.message);if(!response.headersSent)response.writeHead(502);response.end("App temporarily unavailable");});
+  request.on("aborted",()=>upstream.destroy());
+  request.pipe(upstream);
+}
+const server=http.createServer(forward);
+server.on("upgrade",(req,socket,head)=>{
+  // Keep original app websocket-based workflows available.
+  if(appPrefixes.some(prefix=>(req.url||"").startsWith(prefix))){socket.destroy();return;}
+  const upstream=net.connect({host:"127.0.0.1",port:internalPort},()=>{
+    const headers=Object.entries(req.headers).map(([k,v])=>k+": "+(Array.isArray(v)?v.join(", "):v)).join("\r\n");
+    upstream.write((req.method||"GET")+" "+(req.url||"/")+" HTTP/1.1\r\n"+headers+"\r\n\r\n");
+    if(head?.length)upstream.write(head);
+    socket.pipe(upstream).pipe(socket);
+  });
+  upstream.on("error",()=>socket.destroy());
+  socket.on("error",()=>upstream.destroy());
+});
+server.listen(publicPort,"0.0.0.0",()=>console.log("PAL_NEUTRAL_PROXY_READY",publicPort,"LOCAL_CHILD",internalPort));
+const stop=()=>{try{child.kill("SIGTERM");}catch{}server.close();};
+process.on("SIGTERM",stop);process.on("SIGINT",stop);
