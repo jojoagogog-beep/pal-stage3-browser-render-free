@@ -20,7 +20,13 @@ child.on("error", e=>{ console.error("ORIGINAL_APP_START_FAILED",e.message);proc
 child.on("exit", (code,signal)=>{ console.error("ORIGINAL_APP_EXIT",code,signal);server.close();process.exitCode=code||1;});
 
 function shouldSendToGateway(pathname, method) {
-  if (appPrefixes.some(prefix=>pathname.startsWith(prefix))) return true;
+  if (appPrefixes.some(prefix=>pathname.startsWith(prefix))) {
+    // Genuine review screencasts are packaged locally on the neutral host.
+    if (["GET","HEAD"].includes(method) &&
+        /^\/pal-collection-(?:image-ratio|sort)-guard\/review-screencast\.mp4$/.test(pathname) &&
+        fs.existsSync(path.resolve(appRoot, "."+pathname))) return false;
+    return true;
+  }
   if (!["GET","HEAD"].includes(method)) return false;
   if (!pathname.startsWith("/assets/")) return false;
   let file;
