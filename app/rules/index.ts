@@ -56,7 +56,9 @@ import * as r53 from './pal-product-image-alt-guard';
 import * as r54 from './pal-collection-image-ratio-guard';
 import * as r55 from './pal-collection-sort-guard';
 
+import * as r56 from './pal-active-product-age-guard';
 export const ruleModules = {
+  'pal-active-product-age-guard': r56,
   'pal-product-image-alt-guard': r53,
   'pal-collection-image-ratio-guard': r54,
   'pal-collection-sort-guard': r55,

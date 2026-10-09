@@ -46,7 +46,7 @@ export function MultiDashboard({
       <span className={styles.readonly}>{appMeta.readonlyLabel}</span>
     </header>
     <div className={styles.body}>
-      {(pricingUrl || (demo && ["product-image-alt","collection-image-ratio","collection-sort"].includes(appMeta.exportSlug))) &&
+      {(pricingUrl || (demo && ["product-image-alt","active-product-age","collection-image-ratio","collection-sort"].includes(appMeta.exportSlug))) &&
       <section aria-label="Shopify subscription" style={{background:"#f0f7ff",border:"1px solid #a8caec",borderRadius:12,padding:"18px 22px",marginBottom:22,color:"#143456"}}>
         <h2 style={{fontSize:19,margin:"0 0 8px"}}>Subscription plan</h2>
         <p style={{margin:"0 0 12px"}}><strong>$4.99/month after a 7-day free trial.</strong> Secure subscription and billing are handled by Shopify.</p>
