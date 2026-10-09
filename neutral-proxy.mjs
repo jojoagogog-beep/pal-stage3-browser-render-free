@@ -9,7 +9,7 @@ import {spawn} from "node:child_process";
 
 const appRoot = path.resolve("build/client");
 const gateway = "pal-shopify-batch50-gateway.onrender.com";
-const appPrefixes = ["/pal-collection-image-ratio-guard/", "/pal-collection-sort-guard/", "/pal-product-image-alt-guard/"];
+const appPrefixes = ["/pal-collection-image-ratio-guard/", "/pal-collection-sort-guard/", "/pal-product-image-alt-guard/", "/pal-active-product-age-guard/"];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
 const child = spawn("npm", ["run", "docker-start"], {
@@ -23,7 +23,7 @@ function shouldSendToGateway(pathname, method) {
   if (appPrefixes.some(prefix=>pathname.startsWith(prefix))) {
     // Genuine review screencasts are packaged locally on the neutral host.
     if (["GET","HEAD"].includes(method) &&
-        /^\/(?:pal-collection-(?:image-ratio|sort)-guard|pal-product-image-alt-guard)\/review-screencast\.mp4$/.test(pathname) &&
+        /^\/(?:pal-collection-(?:image-ratio|sort)-guard|pal-product-image-alt-guard|pal-active-product-age-guard)\/review-screencast\.mp4$/.test(pathname) &&
         fs.existsSync(path.resolve(appRoot, "."+pathname))) return false;
     return true;
   }
