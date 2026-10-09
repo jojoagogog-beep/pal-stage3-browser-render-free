@@ -59,7 +59,20 @@ import * as r54 from './pal-collection-image-ratio-guard';
 import * as r55 from './pal-collection-sort-guard';
 
 import * as r56 from './pal-active-product-age-guard';
+import * as reviewTemplate from './pal-product-template-guard';
+import * as reviewCategory from './pal-category-attribute-coverage-guard';
+import * as reviewMedia from './pal-product-media-count-guard';
+import * as reviewDraft from './pal-stale-draft-product-guard';
+import * as reviewDescription from './pal-product-description-guard';
+import * as reviewCollectionContent from './pal-collection-content-guard';
+
 export const ruleModules = {
+  'pal-product-template-guard': reviewTemplate,
+  'pal-category-attribute-coverage-guard': reviewCategory,
+  'pal-product-media-count-guard': reviewMedia,
+  'pal-stale-draft-product-guard': reviewDraft,
+  'pal-product-description-guard': reviewDescription,
+  'pal-collection-content-guard': reviewCollectionContent,
   'pal-variant-price-range-guard': reviewVariant,
   'pal-zero-price-variant-guard': reviewZero,
   'pal-active-product-age-guard': r56,

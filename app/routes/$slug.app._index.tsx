@@ -35,6 +35,49 @@ query PalGuardCollections($cursor:String){
     pageInfo{hasNextPage endCursor}
   }
 }`;
+const PAUSED_TEMPLATE_QUERY=`#graphql
+query PausedTemplateAudit($cursor:String){
+ products(first:100,after:$cursor,sortKey:ID){nodes{id title templateSuffix vendor productType} pageInfo{hasNextPage endCursor}}
+}`;
+const PAUSED_CATEGORY_QUERY=`#graphql
+query PausedCategoryAudit($cursor:String){
+ products(first:50,after:$cursor,sortKey:ID){nodes{id title category{id fullName} metafields(first:250){nodes{namespace key value type}}} pageInfo{hasNextPage endCursor}}
+}`;
+const PAUSED_MEDIA_QUERY=`#graphql
+query PausedMediaAudit($cursor:String){
+ products(first:100,after:$cursor,sortKey:ID){nodes{id title media(first:20){nodes{mediaContentType}}} pageInfo{hasNextPage endCursor}}
+}`;
+const PAUSED_DESCRIPTION_QUERY=`#graphql
+query PausedDescriptionAudit($cursor:String){
+ products(first:100,after:$cursor,sortKey:ID){nodes{id title descriptionHtml} pageInfo{hasNextPage endCursor}}
+}`;
+const PAUSED_COLLECTION_CONTENT_QUERY=`#graphql
+query PausedCollectionAudit($cursor:String){
+ collections(first:100,after:$cursor,sortKey:ID){nodes{id title description image{url altText} seo{title description}} pageInfo{hasNextPage endCursor}}
+}`;
+const PAUSED_CATEGORY_DEFINITIONS_QUERY=`#graphql
+query PausedCategoryDefinitions($cursor:String){
+ metafieldDefinitions(first:100,after:$cursor,ownerType:PRODUCT,constraintStatus:CONSTRAINED_ONLY){
+  nodes{id name namespace key constraints{key values(first:250){nodes{value}}}}
+  pageInfo{hasNextPage endCursor}
+ }
+}`;
+async function loadPausedCategoryDefinitions(admin:any){
+ const out:any[]=[];let cursor:string|null=null;
+ for(let i=0;i<10;i++){
+  const response:Response=await admin.graphql(PAUSED_CATEGORY_DEFINITIONS_QUERY,{variables:{cursor}});
+  const json:any=await response.json();const c=json.data?.metafieldDefinitions;
+  if(!response.ok||json.errors?.length||!c)throw new Error("Could not read category field definitions.");
+  for(const d of c.nodes||[]){
+   if(d.constraints?.key!=="category")continue;
+   const categories=(d.constraints.values?.nodes||[]).map((x:any)=>String(x.value||"").trim()).filter(Boolean);
+   if(categories.length)out.push({id:d.id,name:d.name,namespace:d.namespace,key:d.key,categoryValues:categories});
+  }
+  if(!c.pageInfo.hasNextPage||!c.pageInfo.endCursor)break;cursor=c.pageInfo.endCursor;
+ }
+ return out;
+}
+
 export async function loader({request}:LoaderFunctionArgs){
   const slug=getSlug(request);const definition=ruleModules[slug as keyof typeof ruleModules] as any;
   const {admin,session}=await getShopify(slug).authenticate.admin(request);
@@ -52,12 +95,23 @@ export async function loader({request}:LoaderFunctionArgs){
   if(cursor&&(cursor.length>2048||!/^[A-Za-z0-9+/=_-]+$/.test(cursor)))throw new Response("Invalid catalog cursor.",{status:400});
   const isCollection=definition.appMeta.entityKind==="collection";
   try{
-    const response=await admin.graphql(isCollection?COLLECTIONS_QUERY:slug==="pal-product-image-alt-guard"?IMAGE_ALT_QUERY:slug==="pal-active-product-age-guard"?AGE_PRODUCT_QUERY:PRODUCTS_QUERY,{variables:{cursor}});
+    const query=
+      slug==="pal-product-template-guard"?PAUSED_TEMPLATE_QUERY:
+      slug==="pal-category-attribute-coverage-guard"?PAUSED_CATEGORY_QUERY:
+      slug==="pal-product-media-count-guard"?PAUSED_MEDIA_QUERY:
+      slug==="pal-product-description-guard"?PAUSED_DESCRIPTION_QUERY:
+      slug==="pal-stale-draft-product-guard"?AGE_PRODUCT_QUERY:
+      slug==="pal-collection-content-guard"?PAUSED_COLLECTION_CONTENT_QUERY:
+      slug==="pal-product-image-alt-guard"?IMAGE_ALT_QUERY:
+      slug==="pal-active-product-age-guard"?AGE_PRODUCT_QUERY:
+      isCollection?COLLECTIONS_QUERY:PRODUCTS_QUERY;
+    const response=await admin.graphql(query,{variables:{cursor}});
     const json=await response.json() as any;
     const connection=isCollection?json.data?.collections:json.data?.products;
     if(!response.ok||json.errors?.length||!connection)throw new Error("API error");
     if(connection.pageInfo.hasNextPage&&(!connection.pageInfo.endCursor||connection.pageInfo.endCursor===cursor))throw new Error("Invalid pagination");
-    return data({slug,pricingUrl,audit:definition.auditCatalog(connection.nodes),nextCursor:connection.pageInfo.hasNextPage?connection.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
+    const definitions=slug==="pal-category-attribute-coverage-guard"?await loadPausedCategoryDefinitions(admin):undefined;
+    return data({slug,pricingUrl,audit:definition.auditCatalog(connection.nodes,definitions),nextCursor:connection.pageInfo.hasNextPage?connection.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
   }catch{throw new Response("The catalog audit could not be loaded. Retry shortly.",{status:502});}
 }
 export default function Index(){
