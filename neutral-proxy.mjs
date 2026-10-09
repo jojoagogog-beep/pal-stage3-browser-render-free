@@ -39,8 +39,26 @@ function forward(request,response) {
   try {parsed=new URL(request.url||"/","http://localhost");}catch{
     response.writeHead(400);response.end("Bad request");return;
   }
-  const merchant=shouldSendToGateway(parsed.pathname,request.method||"GET");
-  const target=merchant ? new URL(parsed.pathname+parsed.search, "https://"+gateway)
+  // Shopify Admin can open the root /app path even when this embedded app was
+  // released with a slugged app URL. Route *only* a known app audience to its
+  // real backend, preserving the shared service and every other app.
+  // The JWT payload is used solely as a routing hint, NOT authentication.
+  // Shopify's authenticate.admin() verifies its signature and session.
+  let routedPath=parsed.pathname;
+  if (["GET","HEAD"].includes(request.method||"GET") && parsed.pathname==="/app") {
+    try {
+      const token=parsed.searchParams.get("id_token")||"";
+      const parts=token.split(".");
+      if (token.length<12000 && parts.length===3) {
+        const payload=JSON.parse(Buffer.from(parts[1],"base64url").toString("utf8"));
+        if (payload.aud==="f929810ee3a2fd0a979f9e45086635f7") {
+          routedPath="/pal-active-product-age-guard/app";
+        }
+      }
+    } catch { /* Invalid token: leave the default routing untouched. */ }
+  }
+  const merchant=shouldSendToGateway(routedPath,request.method||"GET");
+  const target=merchant ? new URL(routedPath+parsed.search, "https://"+gateway)
     : new URL(parsed.pathname+parsed.search, "http://127.0.0.1:"+internalPort);
   const client=merchant?https:http;
   const headers={...request.headers,host:target.host};
