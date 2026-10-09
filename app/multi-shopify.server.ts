@@ -51,7 +51,9 @@ export function getShopify(slug: string) {
   const apiSecretKey = process.env[names.secret];
   // The reviewed collection apps can move to an approved permanent hostname
   // independently, without interrupting the other gateway-hosted apps.
-  const externalOrigin = slug === "pal-collection-image-ratio-guard"
+  const externalOrigin = slug === "pal-product-image-alt-guard"
+    ? process.env.PAL_ALT_PUBLIC_ORIGIN
+    : slug === "pal-collection-image-ratio-guard"
     ? process.env.PAL_RATIO_PUBLIC_ORIGIN
     : slug === "pal-collection-sort-guard"
       ? process.env.PAL_SORT_PUBLIC_ORIGIN

@@ -34,6 +34,7 @@ export async function loader({request}:LoaderFunctionArgs){
   const paidHandles: Record<string,string>={
     "pal-collection-image-ratio-guard":"pal-collection-ratio-guard",
     "pal-collection-sort-guard":"pal-collection-sort-guard",
+    "pal-product-image-alt-guard":"pal-product-image-alt-guard",
   };
   const storeHandle=String(session.shop||"").replace(/\.myshopify\.com$/i,"");
   const pricingUrl=paidHandles[slug] && /^[a-z0-9-]+$/.test(storeHandle)
