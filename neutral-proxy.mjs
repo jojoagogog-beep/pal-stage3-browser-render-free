@@ -9,7 +9,14 @@ import {spawn} from "node:child_process";
 
 const appRoot = path.resolve("build/client");
 const gateway = "pal-shopify-batch50-gateway.onrender.com";
-const appPrefixes = ["/pal-collection-image-ratio-guard/", "/pal-collection-sort-guard/", "/pal-product-image-alt-guard/", "/pal-active-product-age-guard/", "/pal-variant-price-range-guard/", "/pal-zero-price-variant-guard/"];
+const appPrefixes = [
+ "/pal-collection-image-ratio-guard/", "/pal-collection-sort-guard/",
+ "/pal-product-image-alt-guard/", "/pal-active-product-age-guard/",
+ "/pal-variant-price-range-guard/", "/pal-zero-price-variant-guard/",
+ "/pal-product-template-guard/", "/pal-category-attribute-coverage-guard/",
+ "/pal-product-media-count-guard/", "/pal-stale-draft-product-guard/",
+ "/pal-product-description-guard/", "/pal-collection-content-guard/"
+];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
 const child = spawn("npm", ["run", "docker-start"], {
@@ -55,6 +62,12 @@ function forward(request,response) {
           "f929810ee3a2fd0a979f9e45086635f7":"/pal-active-product-age-guard/app",
           "97deccb701377154727b76db4d7009aa":"/pal-variant-price-range-guard/app",
           "6ef199436a0be965d3d9cc3c5171dcdf":"/pal-zero-price-variant-guard/app",
+          "32a3186a1e08a6ddb8adc4475f1b4c78":"/pal-product-template-guard/app",
+          "517d7cad2cdc964792a0508b74501af0":"/pal-category-attribute-coverage-guard/app",
+          "e4061fcb3b6aa33738e8aa3940afb0df":"/pal-product-media-count-guard/app",
+          "76701835db46026187b611c70999b458":"/pal-stale-draft-product-guard/app",
+          "617efcd24f2f797b19a95e8174de66e0":"/pal-product-description-guard/app",
+          "31dc7aabbef154e172be87a234c48ce1":"/pal-collection-content-guard/app",
         };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
