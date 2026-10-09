@@ -9,7 +9,7 @@ import {spawn} from "node:child_process";
 
 const appRoot = path.resolve("build/client");
 const gateway = "pal-shopify-batch50-gateway.onrender.com";
-const appPrefixes = ["/pal-collection-image-ratio-guard/", "/pal-collection-sort-guard/", "/pal-product-image-alt-guard/", "/pal-active-product-age-guard/"];
+const appPrefixes = ["/pal-collection-image-ratio-guard/", "/pal-collection-sort-guard/", "/pal-product-image-alt-guard/", "/pal-active-product-age-guard/", "/pal-variant-price-range-guard/", "/pal-zero-price-variant-guard/"];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
 const child = spawn("npm", ["run", "docker-start"], {
@@ -51,8 +51,13 @@ function forward(request,response) {
       const parts=token.split(".");
       if (token.length<12000 && parts.length===3) {
         const payload=JSON.parse(Buffer.from(parts[1],"base64url").toString("utf8"));
-        if (payload.aud==="f929810ee3a2fd0a979f9e45086635f7") {
-          routedPath="/pal-active-product-age-guard/app";
+        const appPaths={
+          "f929810ee3a2fd0a979f9e45086635f7":"/pal-active-product-age-guard/app",
+          "97deccb701377154727b76db4d7009aa":"/pal-variant-price-range-guard/app",
+          "6ef199436a0be965d3d9cc3c5171dcdf":"/pal-zero-price-variant-guard/app",
+        };
+        if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
+          routedPath=appPaths[payload.aud];
         }
       }
     } catch { /* Invalid token: leave the default routing untouched. */ }
