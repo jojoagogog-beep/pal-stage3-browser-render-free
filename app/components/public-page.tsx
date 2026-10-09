@@ -12,7 +12,7 @@ export function PublicPage({ title, intro, children }: PublicPageProps) {
     <main className={styles.page}>
       <header className={styles.header}>
         <a className={styles.brand} href="/">
-          PAL Raw URL Guard
+          PAL Active Product Age Guard
         </a>
         <span>Practical AI Lab</span>
       </header>
@@ -21,7 +21,7 @@ export function PublicPage({ title, intro, children }: PublicPageProps) {
         <h1>{title}</h1>
         <p className={styles.intro}>{intro}</p>
         {children}
-        <p className={styles.updated}>Last updated: October 4, 2026</p>
+        <p className={styles.updated}>Last updated: October 1, 2026</p>
       </article>
       <nav className={styles.links} aria-label="App information">
         <a href="/privacy">Privacy</a>

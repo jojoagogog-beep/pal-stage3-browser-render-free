@@ -1,38 +1,38 @@
-name = "PAL Raw URL Guard"
-application_url = "https://example.com"
+name = "PAL Active Product Age Guard"
+application_url = "https://pal-stage3-browser-free-shard1.onrender.com/pal-active-product-age-guard/app"
 embedded = true
-client_id = "f8bd55f39453c9f818191d4479e8ec97"
+client_id = "f929810ee3a2fd0a979f9e45086635f7"
 
 [access_scopes]
 scopes = "read_products"
 
 [auth]
 redirect_urls = [
-  "https://pal-description-raw-url-guard.onrender.com/auth/callback",
-  "https://pal-description-raw-url-guard.onrender.com/auth/shopify/callback"
+  "https://pal-stage3-browser-free-shard1.onrender.com/pal-active-product-age-guard/auth/callback",
+  "https://pal-stage3-browser-free-shard1.onrender.com/pal-active-product-age-guard/auth/shopify/callback"
 ]
 
 [webhooks]
-api_version = "2026-07"
+api_version = "2026-10"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
+  uri = "https://pal-stage3-browser-free-shard1.onrender.com/pal-active-product-age-guard/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
+  uri = "https://pal-stage3-browser-free-shard1.onrender.com/pal-active-product-age-guard/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/data_request"
+  uri = "https://pal-stage3-browser-free-shard1.onrender.com/pal-active-product-age-guard/webhooks/customers/data_request"
   compliance_topics = [ "customers/data_request" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/customers/redact"
+  uri = "https://pal-stage3-browser-free-shard1.onrender.com/pal-active-product-age-guard/webhooks/customers/redact"
   compliance_topics = [ "customers/redact" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/shop/redact"
+  uri = "https://pal-stage3-browser-free-shard1.onrender.com/pal-active-product-age-guard/webhooks/shop/redact"
   compliance_topics = [ "shop/redact" ]
 
 [pos]

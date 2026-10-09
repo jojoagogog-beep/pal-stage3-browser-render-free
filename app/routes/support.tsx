@@ -1,3 +1,7 @@
-import { PublicPage } from '../components/public-page';
-export const meta = () => [{title: 'Support · PAL Raw URL Guard'}];
-export default function Page(){return <PublicPage title='Support' intro='Help for PAL Raw URL Guard.'><h2>Before contacting support</h2><p>Rescan the current product batch and confirm the app still has read_products access. Findings are batch-based and read-only.</p><h2>What to include</h2><p>Send your shop domain, the affected product titles, and a short description of the result you expected. Never send passwords or Shopify access tokens.</p><h2>Contact</h2><p>Email practicalai_lab_jp@proton.me.</p></PublicPage>;}
+import { PublicPage } from "../components/public-page";
+export const meta=()=>[{title:"Support · PAL Active Product Age Guard"}];
+export default function Support(){return <PublicPage title="Support" intro="Get help with audit findings, CSV exports, or installation access.">
+<h2>Contact</h2><p>Email practicalai_lab_jp@proton.me. Include your myshopify.com domain, the approximate audit time, and the exact error shown.</p>
+<h2>Before contacting support</h2><ul><li>Reload the app and run the audit again.</li><li>Confirm the app still has read-products access.</li><li>For CSV questions, include the product title and last-updated date shown, but do not attach customer data.</li><li>Never send passwords, Shopify access tokens, payment information, or customer records.</li></ul>
+<h2>What the app does not do</h2><p>The app does not edit products. It lists active products not updated for more than 365 days for merchant review.</p>
+</PublicPage>}

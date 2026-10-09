@@ -39,6 +39,3 @@ __pycache__/
 
 # Local App Store submission exports
 /submission/
-
-.npm-cache/
-.playwright/

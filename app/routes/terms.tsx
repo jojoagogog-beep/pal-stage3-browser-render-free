@@ -1,3 +1,9 @@
-import { PublicPage } from '../components/public-page';
-export const meta = () => [{title: 'Terms of service · PAL Raw URL Guard'}];
-export default function Page(){return <PublicPage title='Terms of service' intro='Terms for PAL Raw URL Guard.'><h2>Service</h2><p>The app provides read-only catalog QA focused on raw url in description and can export a review worklist. It does not modify product or variant data.</p><h2>Merchant responsibility</h2><p>Review findings in catalog context before changing store data. Automated QA signals can flag intentional catalog patterns and do not guarantee that an item is wrong.</p><h2>Subscription</h2><p>The intended public plan is US$6.99 per month with a 7-day trial, configured through Shopify App Pricing before launch. The price and terms presented and accepted in Shopify govern the subscription.</p><h2>Availability and contact</h2><p>Use the app lawfully and protect downloaded catalog exports. Service availability depends on Shopify and hosting systems. Contact practicalai_lab_jp@proton.me for support or terms questions.</p></PublicPage>;}
+import { PublicPage } from "../components/public-page";
+export const meta=()=>[{title:"Terms of Service · PAL Active Product Age Guard"}];
+export default function Terms(){return <PublicPage title="Terms of Service" intro="These terms apply to use of PAL Active Product Age Guard as a read-only catalog freshness audit inside Shopify.">
+<h2>Service</h2><p>The app finds active products that have not been updated for more than 365 days and links to them in Shopify Admin.</p>
+<h2>Merchant responsibility</h2><p>Findings are informational and may be intentional. Products may be intentionally left unchanged. Merchants decide whether any product should be reviewed or edited.</p>
+<h2>No automatic correction</h2><p>The first release is read-only. It does not change products, themes, orders, or customer data.</p>
+<h2>Subscription</h2><p>Paid plans, trials, renewals, and cancellations are administered through Shopify. The intended public plan is US$4.99 per month with a 7-day free trial; the price accepted through Shopify at subscription time controls.</p>
+<h2>Contact</h2><p>Questions can be sent to practicalai_lab_jp@proton.me.</p>
+</PublicPage>}

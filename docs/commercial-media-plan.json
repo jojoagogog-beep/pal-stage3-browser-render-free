@@ -1,0 +1,20 @@
+{
+  "schema": "PAL_COMMERCIAL_MEDIA_PLAN_V3",
+  "app_name": "PAL Active Product Age Guard",
+  "positioning": "Find active products that have not been updated for more than 365 days.",
+  "merchant_benefits": [
+    "Find active products that have not been updated for more than 365 days.",
+    "Review matching products in Shopify Admin.",
+    "Export a diagnostic CSV without changing product data."
+  ],
+  "screenshots": [
+    "overview.png",
+    "issue.png",
+    "ready.png",
+    "limit.png"
+  ],
+  "feature_image": "overview.png",
+  "screencast": "pal-active-product-age-guard-promo.mp4",
+  "live_listing_reuse_required": true,
+  "source": "Real app review-demo states using fictional product records."
+}

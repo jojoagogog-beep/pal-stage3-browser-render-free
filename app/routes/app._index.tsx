@@ -1,47 +1,13 @@
-import type { HeadersFunction, LoaderFunctionArgs } from 'react-router';
-import { data, isRouteErrorResponse, useLoaderData, useRouteError, useSearchParams, useRevalidator } from 'react-router';
-import { boundary } from '@shopify/shopify-app-react-router/server';
-import { DescriptionDashboard } from '../components/description-dashboard';
-import { auditCatalog, type Product } from '../lib/description-audit';
-import { authenticate } from '../shopify.server';
-
-export const PRODUCTS_QUERY = [
-  '#graphql',
-  'query PalGuardProducts($cursor:String){',
-  '  products(first:100,after:$cursor,sortKey:ID){',
-  '    nodes{',
-  '      id title vendor tags handle descriptionHtml',
-  '      variants(first:100){nodes{id title sku barcode price compareAtPrice selectedOptions{name value}}}',
-  '    }',
-  '    pageInfo{hasNextPage endCursor}',
-  '  }',
-  '}'
-].join('\n');
-
-export async function loader({request}:LoaderFunctionArgs){
-  const {admin}=await authenticate.admin(request);
-  const cursor=new URL(request.url).searchParams.get('cursor');
-  if(cursor&&(cursor.length>2048||!/^[A-Za-z0-9+/=_-]+$/.test(cursor))) throw new Response('Invalid catalog cursor.',{status:400});
-  try{
-    const response=await admin.graphql(PRODUCTS_QUERY,{variables:{cursor}});
-    const json=await response.json() as {errors?:unknown[];data?:{products:{nodes:Product[];pageInfo:{hasNextPage:boolean;endCursor:string|null}}}};
-    if(!response.ok||json.errors?.length||!json.data?.products) throw new Error('API error');
-    const result=json.data.products;
-    if(result.pageInfo.hasNextPage&&(!result.pageInfo.endCursor||result.pageInfo.endCursor===cursor)) throw new Error('Invalid pagination');
-    return data({audit:auditCatalog(result.nodes),nextCursor:result.pageInfo.hasNextPage?result.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{'Cache-Control':'no-store'}});
-  }catch{
-    throw new Response('The catalog audit could not be loaded. Retry shortly. If it continues, check product access or contact support.',{status:502});
-  }
-}
-export default function Index(){
-  const result=useLoaderData<typeof loader>(); const [params,setParams]=useSearchParams(); const revalidator=useRevalidator();
-  return <DescriptionDashboard {...result} busy={revalidator.state==='loading'} onRefresh={()=>revalidator.revalidate()}
-    onNext={result.nextCursor?()=>{const next=new URLSearchParams(params);next.set('cursor',result.nextCursor!);setParams(next);}:undefined}
-    onRestart={()=>{const next=new URLSearchParams(params);next.delete('cursor');setParams(next);}}/>;
-}
-export function ErrorBoundary(){
-  const error=useRouteError(); const retry=useRevalidator();
-  if(isRouteErrorResponse(error)&&[400,502].includes(error.status)) return <main style={{padding:32,fontFamily:'system-ui'}}><h1>Audit unavailable</h1><p role='alert'>{String(error.data)}</p><button onClick={()=>retry.revalidate()}>Try again</button> <a href='/support' target='_blank' rel='noreferrer'>Support</a></main>;
-  return boundary.error(error);
-}
-export const headers:HeadersFunction=args=>({...boundary.headers(args),'Cache-Control':'no-store'});
+import type {ActionFunctionArgs,HeadersFunction,LoaderFunctionArgs} from "react-router";
+import {useLoaderData} from "react-router";
+import {boundary} from "@shopify/shopify-app-react-router/server";
+import {ProductAuditDashboard} from "../components/product-audit-dashboard";
+import {auditProducts,buildCsv,type ProductInput} from "../lib/product-audit";
+import {authenticate} from "../shopify.server";
+const MODE="active_freshness", APP_NAME="PAL Active Product Age Guard";
+const QUERY=["#graphql","query ProductAudit($cursor:String,$first:Int!){","shop{name myshopifyDomain}","products(first:$first,after:$cursor,sortKey:ID){pageInfo{hasNextPage endCursor} nodes{id legacyResourceId title handle tags status updatedAt images(first:10){nodes{width height}} variants(first:50){nodes{price compareAtPrice}}}}","}"].join("\n");
+async function load(admin:any){let cursor:string|null=null,more=true;const products:ProductInput[]=[];let shopName="Your store",shopDomain="";while(more&&products.length<1000){const r:Response=await admin.graphql(QUERY,{variables:{cursor,first:Math.min(100,1000-products.length)}});const j:any=await r.json();if(!r.ok||j.errors?.length||!j.data?.products)throw new Response("Product data could not be read.",{status:502});shopName=j.data.shop?.name||shopName;shopDomain=j.data.shop?.myshopifyDomain||shopDomain;products.push(...j.data.products.nodes);cursor=j.data.products.pageInfo.endCursor;more=j.data.products.pageInfo.hasNextPage&&Boolean(cursor);if(!j.data.products.nodes.length)break;}return{products,shopName,shopDomain,coverageLimited:more};}
+export const loader=async({request}:LoaderFunctionArgs)=>{const{admin}=await authenticate.admin(request);const d=await load(admin);return{appName:APP_NAME,mode:MODE,shopName:d.shopName,shopDomain:d.shopDomain,audit:auditProducts(d.products,MODE),coverageLimited:d.coverageLimited,scannedAt:new Date().toISOString().slice(0,16).replace("T"," ")+" UTC"};};
+export const action=async({request}:ActionFunctionArgs)=>{const{admin}=await authenticate.admin(request);const f=await request.formData();if(f.get("intent")!=="exportCsv")return new Response("Unknown action",{status:400});const d=await load(admin);return new Response(buildCsv(auditProducts(d.products,MODE),d.shopDomain),{headers:{"Content-Type":"text/csv; charset=utf-8","Content-Disposition":"attachment; filename=pal-product-audit.csv","Cache-Control":"no-store"}});};
+export default function Index(){return <ProductAuditDashboard {...useLoaderData<typeof loader>()}/>;}
+export const headers:HeadersFunction=(args)=>boundary.headers(args);

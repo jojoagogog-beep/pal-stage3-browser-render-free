@@ -1,4 +1,4 @@
-name = "PAL Variant Sale Guard web"
+name = "PAL Active Product Age Guard web"
 roles = ["frontend", "backend"]
 webhooks_path = "/webhooks/app/uninstalled"
 

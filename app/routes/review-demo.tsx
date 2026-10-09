@@ -1,5 +1,6 @@
-import { useSearchParams } from 'react-router';
-import { DescriptionDashboard } from '../components/description-dashboard';
-import { auditCatalog } from '../lib/description-audit';
-import { demoProducts } from '../lib/demo-catalog';
-export default function ReviewDemo(){const [params]=useSearchParams();const state=params.get('state')||'all';return <DescriptionDashboard key={state} audit={auditCatalog(state==='empty'?[]:state==='clean'?[demoProducts[2]]:demoProducts)} demo initialFilter={state}/>;}
+import {useSearchParams} from "react-router";
+import {ProductAuditDashboard} from "../components/product-audit-dashboard";
+import {auditProducts} from "../lib/product-audit";
+import {demoProducts,readyProducts} from "../lib/demo-catalog";
+const APP_NAME="PAL Active Product Age Guard", MODE="active_freshness";
+export default function ReviewDemo(){const[p]=useSearchParams();const s=p.get("state")||"overview";const products=s==="ready"?readyProducts:s==="issue"?demoProducts.slice(0,2):demoProducts;return <ProductAuditDashboard appName={APP_NAME} mode={MODE} audit={auditProducts(products,MODE)} shopDomain="sample-shop.myshopify.com" shopName="PAL Sample Catalog" scannedAt="Oct 2, 2026, 10:10 PM UTC" coverageLimited={s==="limit"} showExport={false} demo/>;}
