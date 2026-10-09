@@ -1,3 +1,5 @@
+import * as reviewVariant from './pal-variant-price-range-guard';
+import * as reviewZero from './pal-zero-price-variant-guard';
 import * as r00 from './pal-title-length-guard';
 import * as r01 from './pal-title-word-count-guard';
 import * as r02 from './pal-title-digit-guard';
@@ -58,6 +60,8 @@ import * as r55 from './pal-collection-sort-guard';
 
 import * as r56 from './pal-active-product-age-guard';
 export const ruleModules = {
+  'pal-variant-price-range-guard': reviewVariant,
+  'pal-zero-price-variant-guard': reviewZero,
   'pal-active-product-age-guard': r56,
   'pal-product-image-alt-guard': r53,
   'pal-collection-image-ratio-guard': r54,

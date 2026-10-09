@@ -56,4 +56,6 @@ export const appEnvNames = {
   'pal-barcode-checksum-guard': { key: 'PAL_51_KEY', secret: 'PAL_51_SECRET' },
   'pal-option-value-length-guard': { key: 'PAL_52_KEY', secret: 'PAL_52_SECRET' },
   'pal-option-delimiter-guard': { key: 'PAL_53_KEY', secret: 'PAL_53_SECRET' },
+  'pal-variant-price-range-guard': { key: 'PAL_REVIEW_VARIANT_PRICE_KEY', secret: 'PAL_REVIEW_VARIANT_PRICE_SECRET' },
+  'pal-zero-price-variant-guard': { key: 'PAL_REVIEW_ZERO_PRICE_KEY', secret: 'PAL_REVIEW_ZERO_PRICE_SECRET' },
 } as const;
