@@ -14,6 +14,13 @@ query PalGuardProducts($cursor:String){
     pageInfo{hasNextPage endCursor}
   }
 }`;
+const INVENTORY_PRODUCT_QUERY=`#graphql
+query PalInventoryAvailabilityProducts($cursor:String){
+  products(first:50,after:$cursor,sortKey:ID){
+    nodes{id legacyResourceId title status variants(first:100){pageInfo{hasNextPage} nodes{id legacyResourceId title inventoryPolicy inventoryQuantity inventoryItem{tracked inventoryLevels(first:100){pageInfo{hasNextPage} nodes{quantities(names:["available"]){name quantity}}}}}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
 const SHIPPING_PRODUCT_QUERY=`#graphql
 query PalShippingWeightProducts($cursor:String){
   products(first:50,after:$cursor,sortKey:ID){
@@ -111,6 +118,7 @@ export async function loader({request}:LoaderFunctionArgs){
       slug==="pal-collection-content-guard"?PAUSED_COLLECTION_CONTENT_QUERY:
       slug==="pal-product-image-alt-guard"?IMAGE_ALT_QUERY:
       slug==="pal-active-product-age-guard"?AGE_PRODUCT_QUERY:
+      slug==="pal-inventory-availability-guard"?INVENTORY_PRODUCT_QUERY:
       slug==="pal-shipping-weight-integrity-guard"?SHIPPING_PRODUCT_QUERY:
       isCollection?COLLECTIONS_QUERY:PRODUCTS_QUERY;
     const response=await admin.graphql(query,{variables:{cursor}});
