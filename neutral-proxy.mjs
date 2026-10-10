@@ -16,7 +16,7 @@ const appPrefixes = [
  "/pal-product-template-guard/", "/pal-category-attribute-coverage-guard/",
  "/pal-product-media-count-guard/", "/pal-stale-draft-product-guard/",
  "/pal-product-description-guard/", "/pal-collection-content-guard/",
- "/pal-shipping-weight-integrity-guard/"
+ "/pal-shipping-weight-integrity-guard/", "/pal-inventory-availability-guard/"
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
@@ -31,7 +31,7 @@ function shouldSendToGateway(pathname, method) {
   if (appPrefixes.some(prefix=>pathname.startsWith(prefix))) {
     // Genuine review screencasts are packaged locally on the neutral host.
     if (["GET","HEAD"].includes(method) &&
-        /^\/(?:pal-collection-(?:image-ratio|sort)-guard|pal-product-image-alt-guard|pal-active-product-age-guard|pal-shipping-weight-integrity-guard)\/review-screencast\.mp4$/.test(pathname) &&
+        /^\/(?:pal-collection-(?:image-ratio|sort)-guard|pal-product-image-alt-guard|pal-active-product-age-guard|pal-shipping-weight-integrity-guard|pal-inventory-availability-guard)\/review-screencast\.mp4$/.test(pathname) &&
         fs.existsSync(path.resolve(appRoot, "."+pathname))) return false;
     return true;
   }
