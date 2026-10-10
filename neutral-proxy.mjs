@@ -69,6 +69,8 @@ function forward(request,response) {
           "76701835db46026187b611c70999b458":"/pal-stale-draft-product-guard/app",
           "617efcd24f2f797b19a95e8174de66e0":"/pal-product-description-guard/app",
           "31dc7aabbef154e172be87a234c48ce1":"/pal-collection-content-guard/app",
+          "c6b005cee3edc110043f3a6a66b20b28":"/pal-shipping-weight-integrity-guard/app",
+          "13d6c4df2adb508062fafa3161aff790":"/pal-inventory-availability-guard/app",
         };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
