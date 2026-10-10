@@ -53,6 +53,11 @@ export function getShopify(slug: string) {
   // independently, without interrupting the other gateway-hosted apps.
   const externalOrigin = slug === "pal-active-product-age-guard"
     ? process.env.PAL_AGE_PUBLIC_ORIGIN
+    : slug === "pal-category-attribute-coverage-guard"
+    // App Store reviews and OAuth callbacks use the stable neutral hostname.
+    // Using the gateway hostname here can create a cross-host auth redirect
+    // loop when the merchant launches the app from Shopify Admin.
+    ? "https://pal-stage3-browser-free-shard1.onrender.com"
     : slug === "pal-product-image-alt-guard"
     ? process.env.PAL_ALT_PUBLIC_ORIGIN
     : slug === "pal-collection-image-ratio-guard"
