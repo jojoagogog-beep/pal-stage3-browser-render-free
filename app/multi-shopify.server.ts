@@ -51,7 +51,9 @@ export function getShopify(slug: string) {
   const apiSecretKey = process.env[names.secret];
   // The reviewed collection apps can move to an approved permanent hostname
   // independently, without interrupting the other gateway-hosted apps.
-  const externalOrigin = slug === "pal-active-product-age-guard"
+  const externalOrigin = slug === "pal-shipping-weight-integrity-guard"
+    ? process.env.PAL_SHIPPING_PUBLIC_ORIGIN
+    : slug === "pal-active-product-age-guard"
     ? process.env.PAL_AGE_PUBLIC_ORIGIN
     : slug === "pal-category-attribute-coverage-guard"
     // App Store reviews and OAuth callbacks use the stable neutral hostname.
