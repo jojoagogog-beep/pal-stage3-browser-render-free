@@ -16,15 +16,15 @@ query PalGuardProducts($cursor:String){
 }`;
 const INVENTORY_PRODUCT_QUERY=`#graphql
 query PalInventoryAvailabilityProducts($cursor:String){
-  products(first:50,after:$cursor,sortKey:ID){
-    nodes{id legacyResourceId title status variants(first:100){pageInfo{hasNextPage} nodes{id legacyResourceId title inventoryPolicy inventoryQuantity inventoryItem{tracked inventoryLevels(first:100){pageInfo{hasNextPage} nodes{quantities(names:["available"]){name quantity}}}}}}}
+  products(first:5,after:$cursor,sortKey:ID){
+    nodes{id legacyResourceId title status variants(first:10){pageInfo{hasNextPage} nodes{id legacyResourceId title inventoryPolicy inventoryQuantity inventoryItem{tracked inventoryLevels(first:5){pageInfo{hasNextPage} nodes{quantities(names:["available"]){name quantity}}}}}}}
     pageInfo{hasNextPage endCursor}
   }
 }`;
 const SHIPPING_PRODUCT_QUERY=`#graphql
 query PalShippingWeightProducts($cursor:String){
-  products(first:50,after:$cursor,sortKey:ID){
-    nodes{id title variants(first:100){nodes{id title inventoryItem{requiresShipping measurement{weight{value unit}}}}}}
+  products(first:10,after:$cursor,sortKey:ID){
+    nodes{id title variants(first:20){pageInfo{hasNextPage} nodes{id title inventoryItem{requiresShipping measurement{weight{value unit}}}}}}
     pageInfo{hasNextPage endCursor}
   }
 }`;
@@ -124,11 +124,22 @@ export async function loader({request}:LoaderFunctionArgs){
     const response=await admin.graphql(query,{variables:{cursor}});
     const json=await response.json() as any;
     const connection=isCollection?json.data?.collections:json.data?.products;
-    if(!response.ok||json.errors?.length||!connection)throw new Error("API error");
+    if(!response.ok||json.errors?.length||!connection){
+      // Log only safe diagnostic metadata. Never log a session token or the GraphQL response.
+      console.error("PAL_AUDIT_GRAPHQL_REJECTED",slug,{
+        httpStatus:response.status,
+        errorCodes:(json.errors||[]).map((e:any)=>String(e.extensions?.code||"unknown")).slice(0,5),
+        requestedCost:json.extensions?.cost?.requestedQueryCost??null,
+      });
+      throw new Error("API error");
+    }
     if(connection.pageInfo.hasNextPage&&(!connection.pageInfo.endCursor||connection.pageInfo.endCursor===cursor))throw new Error("Invalid pagination");
     const definitions=slug==="pal-category-attribute-coverage-guard"?await loadPausedCategoryDefinitions(admin):undefined;
     return data({slug,pricingUrl,audit:definition.auditCatalog(connection.nodes,definitions),nextCursor:connection.pageInfo.hasNextPage?connection.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
-  }catch{throw new Response("The catalog audit could not be loaded. Retry shortly.",{status:502});}
+  }catch(error){
+    console.error("PAL_AUDIT_LOAD_FAILED",slug,error instanceof Error?error.name:"unknown");
+    throw new Response("The catalog audit could not be loaded. Retry shortly.",{status:502});
+  }
 }
 export default function Index(){
   const result=useLoaderData<typeof loader>();const definition=ruleModules[result.slug as keyof typeof ruleModules] as any;

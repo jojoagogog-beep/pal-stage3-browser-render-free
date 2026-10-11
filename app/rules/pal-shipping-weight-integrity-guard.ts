@@ -43,7 +43,7 @@ export function auditCatalog(rows:any[]){
    if(m>=3&&median>0&&Math.max(grams/median,median/grams)>=5)findings.push({productId:p.id,productTitle:p.title,rule:"weight_outlier",evidence,detail:"Variant "+x.title+" weighs at least 5× the sibling median."});
   }
   if(valid>0&&missing>0)findings.push({productId:p.id,productTitle:p.title,rule:"mixed_weight_completeness",evidence:valid+" valid, "+missing+" missing/zero shipping weights",detail:"Review all shipping variants for this product."});
-  if((p.variants?.nodes||[]).length===100)skipped.push(String(p.title)+" (more than 100 variants)");
+  if(p.variants?.pageInfo?.hasNextPage)skipped.push(String(p.title)+" (more than 20 variants)");
  }
  return {products:rows.length,findings,skipped};
 }

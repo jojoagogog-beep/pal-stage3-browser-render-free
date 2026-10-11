@@ -42,8 +42,8 @@ export function auditCatalog(rows:any[]){
   }
  }
  const skipped=x.products.flatMap(p=>[
-  ...(p.variantsLimited?[p.title+" (more than 100 variants)"]:[]),
-  ...p.variants.filter(v=>v.inventoryLevelsLimited).map(v=>p.title+" / "+v.title+" (more than 100 inventory levels)")
+  ...(p.variantsLimited?[p.title+" (more than 10 variants)"]:[]),
+  ...p.variants.filter(v=>v.inventoryLevelsLimited).map(v=>p.title+" / "+v.title+" (more than 5 inventory levels)")
  ]);
  return {products:rows.length,findings,skipped};
 }
