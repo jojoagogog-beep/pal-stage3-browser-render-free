@@ -68,8 +68,10 @@ import * as reviewMedia from './pal-product-media-count-guard';
 import * as reviewDraft from './pal-stale-draft-product-guard';
 import * as reviewDescription from './pal-product-description-guard';
 import * as reviewCollectionContent from './pal-collection-content-guard';
+import * as reviewVendorName from './pal-vendor-name-consistency-guard';
 
 export const ruleModules = {
+  'pal-vendor-name-consistency-guard': reviewVendorName,
   'pal-seo-fallback-readiness-guard': seoFallback,
   'pal-inventory-availability-guard': r58,
   'pal-shipping-weight-integrity-guard': r57,

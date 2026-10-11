@@ -1,4 +1,5 @@
 export const appEnvNames = {
+  'pal-vendor-name-consistency-guard': { key: 'PAL_REVIEW_VENDOR_NAME_KEY', secret: 'PAL_REVIEW_VENDOR_NAME_SECRET' },
   'pal-inventory-availability-guard': { key: 'PAL_59_KEY', secret: 'PAL_59_SECRET' },
   'pal-shipping-weight-integrity-guard': { key: 'PAL_58_KEY', secret: 'PAL_58_SECRET' },
   'pal-seo-fallback-readiness-guard': { key: 'PAL_REVIEW_SEO_KEY', secret: 'PAL_REVIEW_SEO_SECRET' },
