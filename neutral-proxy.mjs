@@ -17,7 +17,7 @@ const appPrefixes = [
  "/pal-product-media-count-guard/", "/pal-stale-draft-product-guard/",
  "/pal-product-description-guard/", "/pal-collection-content-guard/",
  "/pal-shipping-weight-integrity-guard/", "/pal-inventory-availability-guard/", "/pal-seo-fallback-readiness-guard/",
- "/pal-vendor-name-consistency-guard/"
+ "/pal-vendor-name-consistency-guard/", "/pal-variant-sale-guard/"
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
@@ -74,6 +74,7 @@ function forward(request,response) {
           "13d6c4df2adb508062fafa3161aff790":"/pal-inventory-availability-guard/app",
           "e2a4144f9b935d5b903f864b2ebb3e0c":"/pal-seo-fallback-readiness-guard/app",
           "ef2063aa4863f43ef1c33be84c1c68c0":"/pal-vendor-name-consistency-guard/app",
+          "24992bb244fe201225321dc9c2f9e02c":"/pal-variant-sale-guard/app",
         };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
