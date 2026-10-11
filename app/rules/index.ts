@@ -1,3 +1,4 @@
+import * as seoFallback from './pal-seo-fallback-readiness-guard';
 import * as reviewVariant from './pal-variant-price-range-guard';
 import * as reviewZero from './pal-zero-price-variant-guard';
 import * as r00 from './pal-title-length-guard';
@@ -69,6 +70,7 @@ import * as reviewDescription from './pal-product-description-guard';
 import * as reviewCollectionContent from './pal-collection-content-guard';
 
 export const ruleModules = {
+  'pal-seo-fallback-readiness-guard': seoFallback,
   'pal-inventory-availability-guard': r58,
   'pal-shipping-weight-integrity-guard': r57,
   'pal-product-template-guard': reviewTemplate,

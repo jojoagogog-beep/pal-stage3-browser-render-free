@@ -1,6 +1,7 @@
 export const appEnvNames = {
   'pal-inventory-availability-guard': { key: 'PAL_59_KEY', secret: 'PAL_59_SECRET' },
   'pal-shipping-weight-integrity-guard': { key: 'PAL_58_KEY', secret: 'PAL_58_SECRET' },
+  'pal-seo-fallback-readiness-guard': { key: 'PAL_REVIEW_SEO_KEY', secret: 'PAL_REVIEW_SEO_SECRET' },
   'pal-active-product-age-guard': { key: 'PAL_57_KEY', secret: 'PAL_57_SECRET' },
   'pal-product-image-alt-guard': { key: 'PAL_54_KEY', secret: 'PAL_54_SECRET' },
   'pal-collection-image-ratio-guard': { key: 'PAL_55_KEY', secret: 'PAL_55_SECRET' },
