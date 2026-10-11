@@ -54,7 +54,9 @@ export function getShopify(slug: string) {
   // These two live app versions are registered on the permanent neutral
   // hostname. Keep Shopify's OAuth callback and embedded appUrl on exactly the
   // same origin regardless of optional Render environment overrides.
-  const externalOrigin = slug === "pal-inventory-availability-guard"
+  const externalOrigin = slug === "pal-vendor-name-consistency-guard"
+    ? "https://pal-stage3-browser-free-shard1.onrender.com"
+    : slug === "pal-inventory-availability-guard"
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
     : slug === "pal-shipping-weight-integrity-guard"
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
