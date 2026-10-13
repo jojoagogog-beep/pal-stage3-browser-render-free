@@ -64,10 +64,15 @@ export function getShopify(slug: string) {
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
     : slug === "pal-active-product-age-guard"
     ? process.env.PAL_AGE_PUBLIC_ORIGIN
-    : slug === "pal-category-attribute-coverage-guard"
-    // App Store reviews and OAuth callbacks use the stable neutral hostname.
-    // Using the gateway hostname here can create a cross-host auth redirect
-    // loop when the merchant launches the app from Shopify Admin.
+    : [
+      "pal-category-attribute-coverage-guard",
+      "pal-collection-content-guard",
+      "pal-product-description-guard",
+      "pal-product-media-count-guard",
+      "pal-stale-draft-product-guard",
+    ].includes(slug)
+    // Keep OAuth appUrl on the same stable hostname as the reviewed app URL.
+    // A gateway origin here caused cross-host authorization redirects.
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
     : slug === "pal-seo-fallback-readiness-guard"
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
