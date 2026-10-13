@@ -61,6 +61,11 @@ function forward(request,response) {
       if (token.length<12000 && parts.length===3) {
         const payload=JSON.parse(Buffer.from(parts[1],"base64url").toString("utf8"));
         const appPaths={
+          // Shopify Admin can launch paid embedded apps at /app without
+          // their slug. Route by OAuth audience, then verify auth upstream.
+          "7b25b2746b7ca1ee8f6410267d7818c3":"/pal-collection-image-ratio-guard/app",
+          "140fa929190b1abad51afb4b2dca8c5a":"/pal-collection-sort-guard/app",
+          "b037098012b7c5d3daaf3162aab379df":"/pal-product-image-alt-guard/app",
           "f929810ee3a2fd0a979f9e45086635f7":"/pal-active-product-age-guard/app",
           "97deccb701377154727b76db4d7009aa":"/pal-variant-price-range-guard/app",
           "6ef199436a0be965d3d9cc3c5171dcdf":"/pal-zero-price-variant-guard/app",
