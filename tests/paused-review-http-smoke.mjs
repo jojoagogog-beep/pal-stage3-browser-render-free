@@ -56,19 +56,34 @@ async function run(credentialMode){
         assert.equal(res.status,200,slug+"/"+page);
         const html=await res.text();
         assert.match(html,/Practical AI Lab|PAL /,slug+"/"+page);
+        if(page==="review-demo"){
+          const uniqueDemoHint={
+            "pal-variant-image-guard": "Trail Daypack",
+            "pal-variant-order-guard": "Variant",
+            "pal-feed-readiness-guard": "Trail Daypack",
+            "pal-import-row-integrity-guard": "CSV",
+          }[slug];
+          assert.ok(html.includes(uniqueDemoHint),"Demo audit UI not rendered for "+slug);
+        }
         checked++;
       }
       const protectedRes=await fetch(origin+"/"+slug+"/app");
       assert.ok(protectedRes.status>=400,
         "Unauthenticated /app must not return success for "+slug);
+      if(credentialMode==="dummy"){
+        assert.equal(protectedRes.status,410,
+          "No-session embedded app must be rejected before viewing catalog for "+slug);
+      }
       checked++;
       if(credentialMode==="dummy"){
-        const webhook=await fetch(origin+"/"+slug+"/webhooks/customers/redact",{
-          method:"POST",headers:{"content-type":"application/json"},body:"{}"
-        });
-        assert.ok(webhook.status>=400,
-          "Unsigned webhook must not return success for "+slug);
-        checked++;
+        for(const topic of ["customers/data_request","customers/redact","app/uninstalled"]){
+          const webhook=await fetch(origin+"/"+slug+"/webhooks/"+topic,{
+            method:"POST",headers:{"content-type":"application/json"},body:"{}"
+          });
+          assert.equal(webhook.status,400,
+            "Unsigned Shopify compliance webhook must fail HMAC before execution: "+slug+"/"+topic);
+          checked++;
+        }
       }
     }
     console.log("PASS",credentialMode,checked,"HTTP checks");

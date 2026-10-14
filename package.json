@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "build": "react-router build",
+    "test:shopify-review:static": "node --experimental-strip-types --test tests/paused-review-audits.test.mjs && node tests/paused-review-graphql.test.mjs",
+    "test:shopify-review:http": "node tests/paused-review-http-smoke.mjs",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
