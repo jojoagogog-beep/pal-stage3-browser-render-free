@@ -48,6 +48,14 @@ function forward(request,response) {
   try {parsed=new URL(request.url||"/","http://localhost");}catch{
     response.writeHead(400);response.end("Bad request");return;
   }
+  // This public service is the review proxy. Its routing readiness should not
+  // depend on the separate local legacy app/database migration starting first.
+  // Slugged review routes go to the independently hosted gateway.
+  if (parsed.pathname === "/health" && ["GET","HEAD"].includes(request.method||"GET")) {
+    response.writeHead(200,{"content-type":"text/plain; charset=utf-8","cache-control":"no-store"});
+    response.end(request.method==="HEAD" ? undefined : "review proxy ready\n");
+    return;
+  }
   // Shopify Admin can open the root /app path even when this embedded app was
   // released with a slugged app URL. Route *only* a known app audience to its
   // real backend, preserving the shared service and every other app.
