@@ -22,6 +22,7 @@ const appPrefixes = [
  "/pal-feed-readiness-guard/",
  "/pal-variant-order-guard/",
  "/pal-variant-image-guard/",
+ "/pal-title-length-guard/",
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
@@ -96,6 +97,7 @@ function forward(request,response) {
           "f68f26c1cb5d2dd1d5ef10562f79c10f":"/pal-feed-readiness-guard/app",
           "3514c58d2fe75a7258dfe6343488ed62":"/pal-variant-order-guard/app",
           "73a6c1d5827e8d65d14f89a96af00b45":"/pal-variant-image-guard/app",
+          "526f1173e69533a021b0611c8854b196":"/pal-title-length-guard/app",
         };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
