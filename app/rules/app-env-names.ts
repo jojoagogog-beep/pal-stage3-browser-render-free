@@ -69,4 +69,8 @@ export const appEnvNames = {
   'pal-stale-draft-product-guard': { key: 'PAL_REVIEW_DRAFT_KEY', secret: 'PAL_REVIEW_DRAFT_SECRET' },
   'pal-product-description-guard': { key: 'PAL_REVIEW_DESCRIPTION_KEY', secret: 'PAL_REVIEW_DESCRIPTION_SECRET' },
   'pal-collection-content-guard': { key: 'PAL_REVIEW_COLLECTIONCONTENT_KEY', secret: 'PAL_REVIEW_COLLECTIONCONTENT_SECRET' },
+  'pal-variant-image-guard': { key: 'PAL_VARIANT_IMAGE_KEY', secret: 'PAL_VARIANT_IMAGE_SECRET' },
+  'pal-variant-order-guard': { key: 'PAL_VARIANT_ORDER_KEY', secret: 'PAL_VARIANT_ORDER_SECRET' },
+  'pal-feed-readiness-guard': { key: 'PAL_FEED_READINESS_KEY', secret: 'PAL_FEED_READINESS_SECRET' },
+  'pal-import-row-integrity-guard': { key: 'PAL_IMPORT_ROW_INTEGRITY_KEY', secret: 'PAL_IMPORT_ROW_INTEGRITY_SECRET' },
 } as const;

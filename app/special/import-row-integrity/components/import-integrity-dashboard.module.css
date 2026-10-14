@@ -1,0 +1,79 @@
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  display: grid;
+  gap: 8px;
+  min-height: 92px;
+  padding: 16px;
+  border: 1px solid #d7e2db;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f8fbf9, #f2f7f4);
+  color: #526159;
+}
+
+.metric strong {
+  color: #173d2a;
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.productLink {
+  color: #005bd3;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.productLink:hover {
+  text-decoration: underline;
+}
+
+.handle {
+  display: block;
+  margin-top: 4px;
+  color: #718078;
+  font-size: 0.78rem;
+}
+
+.footerLinks {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  padding: 22px 0 10px;
+  font-size: 0.875rem;
+}
+
+.footerLinks a {
+  color: #3c5f4b;
+}
+
+.fieldList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.fieldList span {
+  padding: 7px 11px;
+  border: 1px solid #cbd9cf;
+  border-radius: 999px;
+  background: #f4f8f5;
+  color: #294735;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+@media (max-width: 900px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+}

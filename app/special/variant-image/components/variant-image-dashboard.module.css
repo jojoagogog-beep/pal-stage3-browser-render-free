@@ -1,0 +1,63 @@
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric,
+.metricPrimary {
+  display: grid;
+  gap: 8px;
+  min-height: 104px;
+  padding: 18px;
+  border: 1px solid #dfe5e1;
+  border-radius: 14px;
+  background: #f8faf9;
+  color: #536159;
+}
+
+.metricPrimary {
+  border-color: #b7d7c3;
+  background: #edf8f1;
+}
+
+.metric strong,
+.metricPrimary strong {
+  color: #173d2a;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.productLink {
+  color: #176342;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.productLink:hover {
+  text-decoration: underline;
+}
+
+.footerLinks {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  padding: 20px 0 8px;
+  font-size: 0.875rem;
+}
+
+.footerLinks a {
+  color: #53645a;
+}
+
+@media (max-width: 900px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+}
