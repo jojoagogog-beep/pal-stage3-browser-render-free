@@ -18,9 +18,9 @@ const appPrefixes = [
  "/pal-product-description-guard/", "/pal-collection-content-guard/",
  "/pal-shipping-weight-integrity-guard/", "/pal-inventory-availability-guard/", "/pal-seo-fallback-readiness-guard/",
  "/pal-vendor-name-consistency-guard/", "/pal-variant-sale-guard/",
- "/pal-import-row-integrity-guard/",,
- "/pal-feed-readiness-guard/",,
- "/pal-variant-order-guard/",,
+ "/pal-import-row-integrity-guard/",
+ "/pal-feed-readiness-guard/",
+ "/pal-variant-order-guard/",
  "/pal-variant-image-guard/",
 ];
 const publicPort = Number(process.env.PORT || "10000");
