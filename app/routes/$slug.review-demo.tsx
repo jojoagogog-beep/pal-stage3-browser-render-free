@@ -10,4 +10,18 @@ export default function ReviewDemo(){const {slug=""}=useParams();const [params]=
 if(slug==="pal-variant-order-guard")return <VariantOrderDemo/>;
 if(slug==="pal-feed-readiness-guard")return <FeedReadinessDemo/>;
 if(slug==="pal-import-row-integrity-guard")return <ImportIntegrityDemo/>;
-if(!definition)return <main>Unknown app.</main>;const state=params.get("state")||"all";return <MultiDashboard key={state} definition={definition} audit={definition.auditCatalog(state==="empty"?[]:demoProducts as any)} demo initialFilter={state}/>}
+if(!definition)return <main>Unknown app.</main>;
+const state=params.get("state")||"all";
+// The two product-type rules require the productType field. Unlike live
+// Shopify catalog records, the common demo fixture did not include it,
+// causing the public reviewer demo to throw a 500 before the UI rendered.
+const typeRuleDemo=slug==="pal-type-empty-guard"||slug==="pal-type-length-guard";
+const demoCatalog=state==="empty"?[]:typeRuleDemo
+  ? demoProducts.map((product,index)=>({
+      ...product,
+      productType:index===0?"":index===1
+        ? "Apparel and Accessories with a Description Far Longer Than Fifty Characters"
+        : "Accessories",
+    }))
+  : demoProducts;
+return <MultiDashboard key={state} definition={definition} audit={definition.auditCatalog(demoCatalog as any)} demo initialFilter={state}/>}
