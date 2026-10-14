@@ -56,13 +56,14 @@ export function getShopify(slug: string) {
   // same origin regardless of optional Render environment overrides.
   // Paused review apps use the neutral permanent Shopify-hosted URL in their
   // staged app configuration. Keep OAuth/appUrl on the same origin as Shopify.
-  const fourPausedReviewSlugs = new Set([
+  const neutralReviewSlugs = new Set([
+    "pal-title-length-guard",
     "pal-variant-image-guard",
     "pal-variant-order-guard",
     "pal-feed-readiness-guard",
     "pal-import-row-integrity-guard",
   ]);
-  const externalOrigin = fourPausedReviewSlugs.has(slug)
+  const externalOrigin = neutralReviewSlugs.has(slug)
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
     : slug === "pal-variant-sale-guard"
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
