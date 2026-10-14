@@ -80,8 +80,8 @@ async function run(credentialMode){
           const webhook=await fetch(origin+"/"+slug+"/webhooks/"+topic,{
             method:"POST",headers:{"content-type":"application/json"},body:"{}"
           });
-          assert.equal(webhook.status,400,
-            "Unsigned Shopify compliance webhook must fail HMAC before execution: "+slug+"/"+topic);
+          assert.equal(webhook.status,401,
+            "Unsigned Shopify compliance webhook must return 401: "+slug+"/"+topic);
           checked++;
         }
       }
