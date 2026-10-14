@@ -58,6 +58,10 @@ export function getShopify(slug: string) {
   // staged app configuration. Keep OAuth/appUrl on the same origin as Shopify.
   const neutralReviewSlugs = new Set([
     "pal-title-length-guard",
+    "pal-title-word-count-guard",
+    "pal-title-digit-guard",
+    "pal-title-trailing-mark-guard",
+    "pal-title-leading-space-guard",
     "pal-variant-image-guard",
     "pal-variant-order-guard",
     "pal-feed-readiness-guard",
