@@ -17,7 +17,11 @@ const appPrefixes = [
  "/pal-product-media-count-guard/", "/pal-stale-draft-product-guard/",
  "/pal-product-description-guard/", "/pal-collection-content-guard/",
  "/pal-shipping-weight-integrity-guard/", "/pal-inventory-availability-guard/", "/pal-seo-fallback-readiness-guard/",
- "/pal-vendor-name-consistency-guard/", "/pal-variant-sale-guard/"
+ "/pal-vendor-name-consistency-guard/", "/pal-variant-sale-guard/",
+ "/pal-import-row-integrity-guard/",
+ "/pal-feed-readiness-guard/",
+ "/pal-variant-order-guard/",
+ "/pal-variant-image-guard/",
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
@@ -88,6 +92,10 @@ function forward(request,response) {
           "e2a4144f9b935d5b903f864b2ebb3e0c":"/pal-seo-fallback-readiness-guard/app",
           "ef2063aa4863f43ef1c33be84c1c68c0":"/pal-vendor-name-consistency-guard/app",
           "24992bb244fe201225321dc9c2f9e02c":"/pal-variant-sale-guard/app",
+          "4034c9a54de58adda0cb3138fc442ff1":"/pal-import-row-integrity-guard/app",
+          "f68f26c1cb5d2dd1d5ef10562f79c10f":"/pal-feed-readiness-guard/app",
+          "3514c58d2fe75a7258dfe6343488ed62":"/pal-variant-order-guard/app",
+          "73a6c1d5827e8d65d14f89a96af00b45":"/pal-variant-image-guard/app",
         };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
