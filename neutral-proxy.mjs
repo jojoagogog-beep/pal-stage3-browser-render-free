@@ -23,6 +23,10 @@ const appPrefixes = [
  "/pal-variant-order-guard/",
  "/pal-variant-image-guard/",
  "/pal-title-length-guard/",
+ "/pal-title-word-count-guard/",
+ "/pal-title-digit-guard/",
+ "/pal-title-trailing-mark-guard/",
+ "/pal-title-leading-space-guard/",
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
@@ -98,6 +102,10 @@ function forward(request,response) {
           "3514c58d2fe75a7258dfe6343488ed62":"/pal-variant-order-guard/app",
           "73a6c1d5827e8d65d14f89a96af00b45":"/pal-variant-image-guard/app",
           "526f1173e69533a021b0611c8854b196":"/pal-title-length-guard/app",
+          "d4e746e3165958a062cefd84198fd6c3":"/pal-title-word-count-guard/app",
+          "5455b1bf44686b310cd80fb5538d098c":"/pal-title-digit-guard/app",
+          "ef01f26be3940315d1e04bbea71eb8c5":"/pal-title-trailing-mark-guard/app",
+          "b63024444661f58d6c24ab88749753c7":"/pal-title-leading-space-guard/app",
         };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
