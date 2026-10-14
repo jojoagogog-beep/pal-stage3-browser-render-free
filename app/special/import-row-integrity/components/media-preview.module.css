@@ -1,0 +1,341 @@
+:global(html),
+:global(body) {
+  width: 100%;
+  min-width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #e9f0eb;
+  color: #14271c;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.stage {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(390px, 0.72fr) minmax(0, 1.65fr);
+  gap: 34px;
+  width: 1600px;
+  height: 900px;
+  padding: 42px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 14% 18%, rgb(190 223 201 / 72%), transparent 27%),
+    linear-gradient(135deg, #f5f8f5 0%, #e6eee8 56%, #dce9e1 100%);
+}
+
+.stage::after {
+  position: absolute;
+  right: -180px;
+  bottom: -250px;
+  width: 560px;
+  height: 560px;
+  border: 70px solid rgb(39 113 69 / 8%);
+  border-radius: 50%;
+  content: "";
+}
+
+.message {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 32px 14px 36px 18px;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 42px;
+  border-radius: 18px;
+  background: #145c35;
+  box-shadow: 0 14px 34px rgb(20 92 53 / 24%);
+  color: white;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.eyebrow {
+  margin: 0 0 17px;
+  color: #28754a;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.message h1 {
+  max-width: 510px;
+  margin: 0;
+  color: #123421;
+  font-size: 51px;
+  font-weight: 760;
+  letter-spacing: -0.045em;
+  line-height: 1.03;
+}
+
+.benefit {
+  max-width: 500px;
+  margin: 25px 0 0;
+  color: #42564a;
+  font-size: 21px;
+  line-height: 1.48;
+}
+
+.boundary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 34px;
+}
+
+.boundary span {
+  padding: 8px 11px;
+  border: 1px solid #bad0c1;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 65%);
+  color: #31513e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.productFrame {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  height: 790px;
+  overflow: hidden;
+  border: 1px solid rgb(118 151 130 / 42%);
+  border-radius: 26px;
+  background: #fff;
+  box-shadow: 0 30px 80px rgb(32 69 47 / 20%);
+}
+
+.windowBar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 22px;
+  border-bottom: 1px solid #dde5df;
+  background: #f7f9f7;
+  color: #52635a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.appCrop {
+  box-sizing: border-box;
+  height: 742px;
+  overflow: hidden;
+  background: #f6f6f7;
+}
+
+.appCrop > * {
+  transform-origin: top left;
+}
+
+.appCrop :global(s-page) {
+  box-sizing: border-box;
+  display: block;
+  min-height: 100%;
+  padding: 25px 28px 34px;
+  background: #f6f6f7;
+  color: #202823;
+  font-size: 14px;
+}
+
+.appCrop :global(s-page)::before {
+  display: block;
+  margin-bottom: 18px;
+  color: #1b2d22;
+  content: attr(heading);
+  font-size: 25px;
+  font-weight: 760;
+  letter-spacing: -0.025em;
+}
+
+.appCrop :global(s-button) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  margin: 0 9px 16px 0;
+  padding: 0 14px;
+  border: 1px solid #9caaa1;
+  border-radius: 9px;
+  background: #fff;
+  color: #264332;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.appCrop :global(s-button[variant="primary"]) {
+  border-color: #145c35;
+  background: #145c35;
+  color: #fff;
+}
+
+.appCrop :global(form[slot="secondary-actions"]) {
+  display: inline-block;
+}
+
+.appCrop :global(s-banner) {
+  display: block;
+  margin: 0 0 14px;
+  padding: 13px 16px;
+  border: 1px solid #b9d0c1;
+  border-radius: 11px;
+  background: #edf7f0;
+  color: #33493b;
+  line-height: 1.38;
+}
+
+.appCrop :global(s-banner[tone="warning"]) {
+  border-color: #dccb93;
+  background: #fff8df;
+}
+
+.appCrop :global(s-banner[tone="success"]) {
+  border-color: #9cc9aa;
+  background: #edf9f1;
+}
+
+.appCrop :global(s-banner)::before {
+  display: block;
+  margin-bottom: 4px;
+  color: #183824;
+  content: attr(heading);
+  font-weight: 760;
+}
+
+.appCrop :global(s-section) {
+  display: block;
+  margin-top: 14px;
+  padding: 17px 18px 19px;
+  overflow: hidden;
+  border: 1px solid #d9dfdb;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 1px 1px rgb(20 48 30 / 3%);
+}
+
+.appCrop :global(s-section)::before {
+  display: block;
+  margin-bottom: 12px;
+  color: #1d3024;
+  content: attr(heading);
+  font-size: 16px;
+  font-weight: 760;
+}
+
+.appCrop :global(s-stack),
+.appCrop :global(s-paragraph) {
+  display: block;
+}
+
+.appCrop :global(s-paragraph) {
+  margin: 0 0 7px;
+  color: #4c5b52;
+  line-height: 1.42;
+}
+
+.appCrop :global(s-table) {
+  display: table;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #e1e5e2;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 10px;
+  table-layout: fixed;
+}
+
+.appCrop :global(s-table-header-row),
+.appCrop :global(s-table-row) {
+  display: table-row;
+}
+
+.appCrop :global(s-table-header),
+.appCrop :global(s-table-cell) {
+  display: table-cell;
+  padding: 10px 11px;
+  border-bottom: 1px solid #e8ece9;
+  color: #33443a;
+  line-height: 1.3;
+  text-align: left;
+  vertical-align: top;
+}
+
+.appCrop :global(s-table-header) {
+  background: #f2f5f3;
+  color: #506057;
+  font-size: 11px;
+  font-weight: 780;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.appCrop :global(s-table-row:last-child s-table-cell) {
+  border-bottom: 0;
+}
+
+.appCrop :global(s-table-header:first-child),
+.appCrop :global(s-table-cell:first-child) {
+  width: 21%;
+}
+
+.appCrop :global(s-table-header:last-child),
+.appCrop :global(s-table-cell:last-child) {
+  width: 39%;
+}
+
+.appCrop :global(s-text) {
+  font-weight: 760;
+}
+
+.appCrop :global(s-badge) {
+  display: inline-block;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #e4ece7;
+  color: #294335;
+  font-size: 11px;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.appCrop :global(s-badge[tone="critical"]) {
+  background: #f8dddd;
+  color: #8a2828;
+}
+
+.appCrop :global(s-badge[tone="warning"]) {
+  background: #faedc8;
+  color: #765511;
+}
+
+.appCrop :global(s-badge[tone="success"]) {
+  background: #dff0e4;
+  color: #20613a;
+}
+
+.appCrop :global(input[type="hidden"]) {
+  display: none;
+}
+
+@media (max-width: 1200px) {
+  .stage {
+    transform-origin: top left;
+  }
+}

@@ -1,9 +1,20 @@
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { data, isRouteErrorResponse, useLoaderData, useRouteError, useSearchParams, useRevalidator } from "react-router";
+import type { HeadersFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { data, isRouteErrorResponse, useLoaderData, useRouteError, useSearchParams, useRevalidator, useParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { MultiDashboard } from "../components/multi-dashboard";
 import { getShopify, getSlug } from "../multi-shopify.server";
 import { ruleModules } from "../rules";
+
+import variantImageUI from "../special/variant-image/ui";
+import variantOrderUI from "../special/variant-order/ui";
+import feedReadinessUI from "../special/feed-readiness/ui";
+import importIntegrityUI from "../special/import-row-integrity/ui";
+const specialRoutes:Record<string,any>={
+"pal-variant-image-guard":variantImageUI,
+"pal-variant-order-guard":variantOrderUI,
+"pal-feed-readiness-guard":feedReadinessUI,
+"pal-import-row-integrity-guard":importIntegrityUI,
+};
 
 const PRODUCTS_QUERY=`#graphql
 query PalGuardProducts($cursor:String){
@@ -100,7 +111,11 @@ async function loadPausedCategoryDefinitions(admin:any){
 }
 
 export async function loader({request}:LoaderFunctionArgs){
-  const slug=getSlug(request);const definition=ruleModules[slug as keyof typeof ruleModules] as any;
+  const slug=getSlug(request);
+  if(slug==="pal-variant-image-guard")return (await import("../special/variant-image/route.server")).loader({request} as LoaderFunctionArgs);
+  if(slug==="pal-variant-order-guard")return (await import("../special/variant-order/route.server")).loader({request} as LoaderFunctionArgs);
+  if(slug==="pal-feed-readiness-guard")return (await import("../special/feed-readiness/route.server")).loader({request} as LoaderFunctionArgs);
+  if(slug==="pal-import-row-integrity-guard")return (await import("../special/import-row-integrity/route.server")).loader({request} as LoaderFunctionArgs);const definition=ruleModules[slug as keyof typeof ruleModules] as any;
   const {admin,session}=await getShopify(slug).authenticate.admin(request);
   const paidHandles: Record<string,string>={
     "pal-collection-image-ratio-guard":"pal-collection-ratio-guard",
@@ -149,8 +164,21 @@ export async function loader({request}:LoaderFunctionArgs){
     throw new Response("The catalog audit could not be loaded. Retry shortly.",{status:502});
   }
 }
+export async function action(args:ActionFunctionArgs){
+ const slug=getSlug(args.request);
+ if(slug==="pal-variant-image-guard")return (await import("../special/variant-image/route.server")).action(args);
+ if(slug==="pal-variant-order-guard")return (await import("../special/variant-order/route.server")).action(args);
+ if(slug==="pal-feed-readiness-guard")return (await import("../special/feed-readiness/route.server")).action(args);
+ if(slug==="pal-import-row-integrity-guard")return (await import("../special/import-row-integrity/route.server")).action(args);
+ throw new Response("Unsupported action",{status:405});
+}
 export default function Index(){
-  const result=useLoaderData<typeof loader>();const definition=ruleModules[result.slug as keyof typeof ruleModules] as any;
+  const {slug}=useParams();
+  const SpecialPage=specialRoutes[slug||""];
+  return SpecialPage?<SpecialPage/>:<StandardPage/>;
+}
+function StandardPage(){
+  const result=useLoaderData<any>();const definition=ruleModules[result.slug as keyof typeof ruleModules] as any;
   const[params,setParams]=useSearchParams();const revalidator=useRevalidator();
   return <MultiDashboard definition={definition} {...result} busy={revalidator.state==="loading"} onRefresh={()=>revalidator.revalidate()}
     onNext={result.nextCursor?()=>{const n=new URLSearchParams(params);n.set("cursor",result.nextCursor!);setParams(n)}:undefined}

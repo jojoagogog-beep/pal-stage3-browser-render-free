@@ -14,8 +14,21 @@ export default async function handleRequest(
   responseHeaders: Headers,
   reactRouterContext: EntryContext
 ) {
-  const slug = new URL(request.url).pathname.split("/").filter(Boolean)[0] || "";
-  if (isKnownSlug(slug)) getShopify(slug).addDocumentResponseHeaders(request, responseHeaders);
+  const pathname = new URL(request.url).pathname;
+  const slug = pathname.split("/").filter(Boolean)[0] || "";
+  if (isKnownSlug(slug)) {
+    // Legal/support/demo pages remain reachable even when per-app OAuth
+    // credentials have not yet been provisioned. Protected /app and /auth
+    // endpoints still fail closed rather than serving an unauthenticated UI.
+    try {
+      getShopify(slug).addDocumentResponseHeaders(request, responseHeaders);
+    } catch (error) {
+      const publicPage = /^\/pal-[a-z0-9-]+(?:\/(?:privacy|terms|support|review-demo))?\/?$/.test(pathname);
+      const missingConfig = error instanceof Error &&
+        error.message === "Missing runtime app configuration for " + slug;
+      if (!publicPage || !missingConfig) throw error;
+    }
+  }
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"

@@ -54,7 +54,17 @@ export function getShopify(slug: string) {
   // These two live app versions are registered on the permanent neutral
   // hostname. Keep Shopify's OAuth callback and embedded appUrl on exactly the
   // same origin regardless of optional Render environment overrides.
-  const externalOrigin = slug === "pal-variant-sale-guard"
+  // Paused review apps use the neutral permanent Shopify-hosted URL in their
+  // staged app configuration. Keep OAuth/appUrl on the same origin as Shopify.
+  const fourPausedReviewSlugs = new Set([
+    "pal-variant-image-guard",
+    "pal-variant-order-guard",
+    "pal-feed-readiness-guard",
+    "pal-import-row-integrity-guard",
+  ]);
+  const externalOrigin = fourPausedReviewSlugs.has(slug)
+    ? "https://pal-stage3-browser-free-shard1.onrender.com"
+    : slug === "pal-variant-sale-guard"
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
     : slug === "pal-vendor-name-consistency-guard"
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
