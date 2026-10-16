@@ -73,6 +73,7 @@ const appPrefixes = [
  "/pal-vendor-empty-guard/",
  "/pal-vendor-length-guard/",
  "/pal-vendor-symbol-guard/",
+ "/pal-barcode-integrity-guard/",
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
@@ -198,6 +199,7 @@ function forward(request,response) {
           "d9140427de55f8f7c324760905d4fc7e":"/pal-vendor-empty-guard/app",
           "eedc841a4527157a210142270df82fbf":"/pal-vendor-length-guard/app",
           "819fd4c15500700c42d593971c914cab":"/pal-vendor-symbol-guard/app",
+          "d605dbbe6d5d267e841b69d7a0bad95a":"/pal-barcode-integrity-guard/app",
 };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
