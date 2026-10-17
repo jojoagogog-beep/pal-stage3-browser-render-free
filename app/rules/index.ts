@@ -1,5 +1,8 @@
 import * as barcodeIntegrity from './pal-barcode-integrity-guard';
 import * as reviewTagConsistency from './pal-tag-consistency-guard';
+import * as reviewProductType from './pal-product-type-consistency-guard';
+import * as reviewOptionName from './pal-option-name-consistency-guard';
+import * as reviewOptionValue from './pal-option-value-consistency-guard';
 import * as reviewSale from './pal-variant-sale-guard';
 import * as seoFallback from './pal-seo-fallback-readiness-guard';
 import * as reviewVariant from './pal-variant-price-range-guard';
@@ -76,6 +79,9 @@ import * as reviewVendorName from './pal-vendor-name-consistency-guard';
 export const ruleModules = {
   'pal-barcode-integrity-guard': barcodeIntegrity,
   'pal-tag-consistency-guard': reviewTagConsistency,
+  'pal-product-type-consistency-guard': reviewProductType,
+  'pal-option-name-consistency-guard': reviewOptionName,
+  'pal-option-value-consistency-guard': reviewOptionValue,
   'pal-variant-sale-guard': reviewSale,
   'pal-vendor-name-consistency-guard': reviewVendorName,
   'pal-seo-fallback-readiness-guard': seoFallback,

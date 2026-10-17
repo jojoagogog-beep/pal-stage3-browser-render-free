@@ -25,6 +25,13 @@ query PalGuardProducts($cursor:String){
     pageInfo{hasNextPage endCursor}
   }
 }`;
+const OPTION_NAME_QUERY=`#graphql
+query PalOptionNameProducts($cursor:String){
+  products(first:100,after:$cursor,sortKey:ID){
+    nodes{id title options{name position}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
 const SEO_FALLBACK_QUERY=`#graphql
 query PalSeoFallbackProducts($cursor:String){
   products(first:50,after:$cursor,sortKey:ID){
@@ -140,6 +147,7 @@ export async function loader({request}:LoaderFunctionArgs){
       slug==="pal-collection-content-guard"?PAUSED_COLLECTION_CONTENT_QUERY:
       slug==="pal-product-image-alt-guard"?IMAGE_ALT_QUERY:
       slug==="pal-active-product-age-guard"?AGE_PRODUCT_QUERY:
+      slug==="pal-option-name-consistency-guard"?OPTION_NAME_QUERY:
       slug==="pal-seo-fallback-readiness-guard"?SEO_FALLBACK_QUERY:
       slug==="pal-inventory-availability-guard"?INVENTORY_PRODUCT_QUERY:
       slug==="pal-shipping-weight-integrity-guard"?SHIPPING_PRODUCT_QUERY:
