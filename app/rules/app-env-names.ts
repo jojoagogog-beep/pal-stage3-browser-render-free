@@ -62,6 +62,7 @@ export const appEnvNames = {
   'pal-option-value-length-guard': { key: 'PAL_52_KEY', secret: 'PAL_52_SECRET' },
   'pal-option-delimiter-guard': { key: 'PAL_53_KEY', secret: 'PAL_53_SECRET' },
   'pal-barcode-integrity-guard': { key: 'PAL_REVIEW_BARCODE_INTEGRITY_KEY', secret: 'PAL_REVIEW_BARCODE_INTEGRITY_SECRET' },
+  'pal-tag-consistency-guard': { key: 'PAL_REVIEW_TAG_CONSISTENCY_KEY', secret: 'PAL_REVIEW_TAG_CONSISTENCY_SECRET' },
   'pal-variant-price-range-guard': { key: 'PAL_REVIEW_VARIANT_PRICE_KEY', secret: 'PAL_REVIEW_VARIANT_PRICE_SECRET' },
   'pal-zero-price-variant-guard': { key: 'PAL_REVIEW_ZERO_PRICE_KEY', secret: 'PAL_REVIEW_ZERO_PRICE_SECRET' },
   'pal-product-template-guard': { key: 'PAL_REVIEW_TEMPLATE_KEY', secret: 'PAL_REVIEW_TEMPLATE_SECRET' },
