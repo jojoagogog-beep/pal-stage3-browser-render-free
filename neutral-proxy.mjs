@@ -75,6 +75,9 @@ const appPrefixes = [
  "/pal-vendor-symbol-guard/",
  "/pal-barcode-integrity-guard/",
  "/pal-tag-consistency-guard/",
+ "/pal-product-type-consistency-guard/",
+ "/pal-option-name-consistency-guard/",
+ "/pal-option-value-consistency-guard/",
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
@@ -202,6 +205,9 @@ function forward(request,response) {
           "819fd4c15500700c42d593971c914cab":"/pal-vendor-symbol-guard/app",
           "d605dbbe6d5d267e841b69d7a0bad95a":"/pal-barcode-integrity-guard/app",
           "ff61224be0209366181a0d3503c9dc78":"/pal-tag-consistency-guard/app",
+          "97db88e20fb8bdbb18220650ce695dc7":"/pal-product-type-consistency-guard/app",
+          "806bd56efa9629ad779ea941ca1b8288":"/pal-option-name-consistency-guard/app",
+          "2f0fca750aef32ce0d8b12fb25617f4e":"/pal-option-value-consistency-guard/app",
 };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
