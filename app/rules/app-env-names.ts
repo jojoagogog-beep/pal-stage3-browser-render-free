@@ -71,6 +71,8 @@ export const appEnvNames = {
   'pal-empty-collection-guard': { key: 'PAL_REVIEW_EMPTY_COLLECTION_KEY', secret: 'PAL_REVIEW_EMPTY_COLLECTION_SECRET' },
   'pal-sku-format-consistency-guard': { key: 'PAL_REVIEW_SKU_FORMAT_KEY', secret: 'PAL_REVIEW_SKU_FORMAT_SECRET' },
   'pal-collection-coverage-guard': { key: 'PAL_REVIEW_COLLECTION_COVERAGE_KEY', secret: 'PAL_REVIEW_COLLECTION_COVERAGE_SECRET' },
+  'pal-variant-shipping-policy-guard': { key: 'PAL_REVIEW_VARIANT_SHIPPING_KEY', secret: 'PAL_REVIEW_VARIANT_SHIPPING_SECRET' },
+  'pal-inventory-location-consistency-guard': { key: 'PAL_REVIEW_INVENTORY_LOCATION_KEY', secret: 'PAL_REVIEW_INVENTORY_LOCATION_SECRET' },
   'pal-variant-price-range-guard': { key: 'PAL_REVIEW_VARIANT_PRICE_KEY', secret: 'PAL_REVIEW_VARIANT_PRICE_SECRET' },
   'pal-zero-price-variant-guard': { key: 'PAL_REVIEW_ZERO_PRICE_KEY', secret: 'PAL_REVIEW_ZERO_PRICE_SECRET' },
   'pal-product-template-guard': { key: 'PAL_REVIEW_TEMPLATE_KEY', secret: 'PAL_REVIEW_TEMPLATE_SECRET' },

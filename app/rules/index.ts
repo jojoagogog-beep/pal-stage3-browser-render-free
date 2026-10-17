@@ -8,6 +8,8 @@ import * as reviewTaxFlag from './pal-variant-tax-flag-guard';
 import * as reviewEmptyCollection from './pal-empty-collection-guard';
 import * as reviewSkuFormat from './pal-sku-format-consistency-guard';
 import * as reviewCollectionCoverage from './pal-collection-coverage-guard';
+import * as reviewShippingPolicy from './pal-variant-shipping-policy-guard';
+import * as reviewInventoryLocation from './pal-inventory-location-consistency-guard';
 import * as reviewSale from './pal-variant-sale-guard';
 import * as seoFallback from './pal-seo-fallback-readiness-guard';
 import * as reviewVariant from './pal-variant-price-range-guard';
@@ -92,6 +94,8 @@ export const ruleModules = {
   'pal-empty-collection-guard': reviewEmptyCollection,
   'pal-sku-format-consistency-guard': reviewSkuFormat,
   'pal-collection-coverage-guard': reviewCollectionCoverage,
+  'pal-variant-shipping-policy-guard': reviewShippingPolicy,
+  'pal-inventory-location-consistency-guard': reviewInventoryLocation,
   'pal-variant-sale-guard': reviewSale,
   'pal-vendor-name-consistency-guard': reviewVendorName,
   'pal-seo-fallback-readiness-guard': seoFallback,

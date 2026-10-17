@@ -25,6 +25,20 @@ query PalGuardProducts($cursor:String){
     pageInfo{hasNextPage endCursor}
   }
 }`;
+const PAUSED_INVENTORY_LOCATION_QUERY=`#graphql
+query PalInventoryLocationProducts($cursor:String){
+  products(first:10,after:$cursor,sortKey:ID){
+    nodes{id title variants(first:10){pageInfo{hasNextPage} nodes{id title inventoryItem{tracked inventoryLevels(first:10){pageInfo{hasNextPage} nodes{location{id name}}}}}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
+const PAUSED_VARIANT_SHIPPING_QUERY=`#graphql
+query PalVariantShippingProducts($cursor:String){
+  products(first:50,after:$cursor,sortKey:ID){
+    nodes{id title variants(first:50){pageInfo{hasNextPage} nodes{id title inventoryItem{requiresShipping tracked measurement{weight{value unit}}}}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
 const PAUSED_SKU_FORMAT_QUERY=`#graphql
 query PalSkuFormatProducts($cursor:String){
   products(first:75,after:$cursor,sortKey:ID){
@@ -182,6 +196,8 @@ export async function loader({request}:LoaderFunctionArgs){
       slug==="pal-collection-content-guard"?PAUSED_COLLECTION_CONTENT_QUERY:
       slug==="pal-product-image-alt-guard"?IMAGE_ALT_QUERY:
       slug==="pal-active-product-age-guard"?AGE_PRODUCT_QUERY:
+      slug==="pal-inventory-location-consistency-guard"?PAUSED_INVENTORY_LOCATION_QUERY:
+      slug==="pal-variant-shipping-policy-guard"?PAUSED_VARIANT_SHIPPING_QUERY:
       slug==="pal-sku-format-consistency-guard"?PAUSED_SKU_FORMAT_QUERY:
       slug==="pal-collection-coverage-guard"?PAUSED_COLLECTION_COVERAGE_QUERY:
       slug==="pal-inventory-policy-consistency-guard"?PAUSED_INVENTORY_POLICY_QUERY:
