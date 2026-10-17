@@ -69,6 +69,8 @@ export const appEnvNames = {
   'pal-inventory-policy-consistency-guard': { key: 'PAL_REVIEW_INVENTORY_POLICY_KEY', secret: 'PAL_REVIEW_INVENTORY_POLICY_SECRET' },
   'pal-variant-tax-flag-guard': { key: 'PAL_REVIEW_TAX_FLAG_KEY', secret: 'PAL_REVIEW_TAX_FLAG_SECRET' },
   'pal-empty-collection-guard': { key: 'PAL_REVIEW_EMPTY_COLLECTION_KEY', secret: 'PAL_REVIEW_EMPTY_COLLECTION_SECRET' },
+  'pal-sku-format-consistency-guard': { key: 'PAL_REVIEW_SKU_FORMAT_KEY', secret: 'PAL_REVIEW_SKU_FORMAT_SECRET' },
+  'pal-collection-coverage-guard': { key: 'PAL_REVIEW_COLLECTION_COVERAGE_KEY', secret: 'PAL_REVIEW_COLLECTION_COVERAGE_SECRET' },
   'pal-variant-price-range-guard': { key: 'PAL_REVIEW_VARIANT_PRICE_KEY', secret: 'PAL_REVIEW_VARIANT_PRICE_SECRET' },
   'pal-zero-price-variant-guard': { key: 'PAL_REVIEW_ZERO_PRICE_KEY', secret: 'PAL_REVIEW_ZERO_PRICE_SECRET' },
   'pal-product-template-guard': { key: 'PAL_REVIEW_TEMPLATE_KEY', secret: 'PAL_REVIEW_TEMPLATE_SECRET' },
