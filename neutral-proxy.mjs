@@ -81,6 +81,8 @@ const appPrefixes = [
  "/pal-inventory-policy-consistency-guard/",
  "/pal-variant-tax-flag-guard/",
  "/pal-empty-collection-guard/",
+ "/pal-sku-format-consistency-guard/",
+ "/pal-collection-coverage-guard/",
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
@@ -214,6 +216,8 @@ function forward(request,response) {
           "b8fd518d96c479c0fe8fc47ede9d85df":"/pal-inventory-policy-consistency-guard/app",
           "397f931af1844a7fcbb6be57c4924fc7":"/pal-variant-tax-flag-guard/app",
           "54ef28681e7dfb6bcc74826ca559ee67":"/pal-empty-collection-guard/app",
+          "abf4d3dac9f1b19f33318704a3e76735":"/pal-sku-format-consistency-guard/app",
+          "042cf3bdea0340686971688221d468fa":"/pal-collection-coverage-guard/app",
 };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
