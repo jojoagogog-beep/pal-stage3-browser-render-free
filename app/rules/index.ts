@@ -10,6 +10,9 @@ import * as reviewSkuFormat from './pal-sku-format-consistency-guard';
 import * as reviewCollectionCoverage from './pal-collection-coverage-guard';
 import * as reviewShippingPolicy from './pal-variant-shipping-policy-guard';
 import * as reviewInventoryLocation from './pal-inventory-location-consistency-guard';
+import * as reviewUnitCost from './pal-unit-cost-coverage-guard';
+import * as reviewCustomsData from './pal-customs-data-readiness-guard';
+import * as reviewSellingPlan from './pal-selling-plan-coverage-guard';
 import * as reviewSale from './pal-variant-sale-guard';
 import * as seoFallback from './pal-seo-fallback-readiness-guard';
 import * as reviewVariant from './pal-variant-price-range-guard';
@@ -96,6 +99,9 @@ export const ruleModules = {
   'pal-collection-coverage-guard': reviewCollectionCoverage,
   'pal-variant-shipping-policy-guard': reviewShippingPolicy,
   'pal-inventory-location-consistency-guard': reviewInventoryLocation,
+  'pal-unit-cost-coverage-guard': reviewUnitCost,
+  'pal-customs-data-readiness-guard': reviewCustomsData,
+  'pal-selling-plan-coverage-guard': reviewSellingPlan,
   'pal-variant-sale-guard': reviewSale,
   'pal-vendor-name-consistency-guard': reviewVendorName,
   'pal-seo-fallback-readiness-guard': seoFallback,

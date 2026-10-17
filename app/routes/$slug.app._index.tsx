@@ -25,6 +25,27 @@ query PalGuardProducts($cursor:String){
     pageInfo{hasNextPage endCursor}
   }
 }`;
+const PAUSED_UNIT_COST_QUERY=`#graphql
+query PalUnitCostProducts($cursor:String){
+  products(first:50,after:$cursor,sortKey:ID){
+    nodes{id title variants(first:50){pageInfo{hasNextPage} nodes{id title sku inventoryItem{unitCost{amount currencyCode}}}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
+const PAUSED_CUSTOMS_QUERY=`#graphql
+query PalCustomsProducts($cursor:String){
+  products(first:50,after:$cursor,sortKey:ID){
+    nodes{id title variants(first:50){pageInfo{hasNextPage} nodes{id title inventoryItem{requiresShipping harmonizedSystemCode countryCodeOfOrigin}}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
+const PAUSED_SELLING_PLAN_QUERY=`#graphql
+query PalSellingPlanProducts($cursor:String){
+  products(first:30,after:$cursor,sortKey:ID){
+    nodes{id title variants(first:30){pageInfo{hasNextPage} nodes{id title sellingPlanGroups(first:10){pageInfo{hasNextPage} nodes{id name}}}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
 const PAUSED_INVENTORY_LOCATION_QUERY=`#graphql
 query PalInventoryLocationProducts($cursor:String){
   products(first:10,after:$cursor,sortKey:ID){
@@ -196,6 +217,9 @@ export async function loader({request}:LoaderFunctionArgs){
       slug==="pal-collection-content-guard"?PAUSED_COLLECTION_CONTENT_QUERY:
       slug==="pal-product-image-alt-guard"?IMAGE_ALT_QUERY:
       slug==="pal-active-product-age-guard"?AGE_PRODUCT_QUERY:
+      slug==="pal-unit-cost-coverage-guard"?PAUSED_UNIT_COST_QUERY:
+      slug==="pal-customs-data-readiness-guard"?PAUSED_CUSTOMS_QUERY:
+      slug==="pal-selling-plan-coverage-guard"?PAUSED_SELLING_PLAN_QUERY:
       slug==="pal-inventory-location-consistency-guard"?PAUSED_INVENTORY_LOCATION_QUERY:
       slug==="pal-variant-shipping-policy-guard"?PAUSED_VARIANT_SHIPPING_QUERY:
       slug==="pal-sku-format-consistency-guard"?PAUSED_SKU_FORMAT_QUERY:
