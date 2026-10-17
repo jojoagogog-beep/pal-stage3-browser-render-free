@@ -83,6 +83,11 @@ const appPrefixes = [
  "/pal-empty-collection-guard/",
  "/pal-sku-format-consistency-guard/",
  "/pal-collection-coverage-guard/",
+ "/pal-variant-shipping-policy-guard/",
+ "/pal-inventory-location-consistency-guard/",
+ "/pal-unit-cost-coverage-guard/",
+ "/pal-customs-data-readiness-guard/",
+ "/pal-selling-plan-coverage-guard/",
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
@@ -218,6 +223,11 @@ function forward(request,response) {
           "54ef28681e7dfb6bcc74826ca559ee67":"/pal-empty-collection-guard/app",
           "abf4d3dac9f1b19f33318704a3e76735":"/pal-sku-format-consistency-guard/app",
           "042cf3bdea0340686971688221d468fa":"/pal-collection-coverage-guard/app",
+          "e831e40715bda8c781756b7303aeda45":"/pal-variant-shipping-policy-guard/app",
+          "36c47b156c89dceca1787af24f64db6a":"/pal-inventory-location-consistency-guard/app",
+          "adca0c82527583faf2c61e1ccf663b5d":"/pal-unit-cost-coverage-guard/app",
+          "2ab13f79277dd4c361c9338166065bf3":"/pal-customs-data-readiness-guard/app",
+          "4a3cfd77297a6b01ee63728974c817d6":"/pal-selling-plan-coverage-guard/app",
 };
         if (typeof payload.aud==="string" && Object.prototype.hasOwnProperty.call(appPaths,payload.aud)) {
           routedPath=appPaths[payload.aud];
