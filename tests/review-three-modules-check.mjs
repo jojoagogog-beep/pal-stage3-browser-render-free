@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import * as inventory from "../app/rules/pal-inventory-policy-consistency-guard.ts";
+import * as taxable from "../app/rules/pal-variant-tax-flag-guard.ts";
+import * as empty from "../app/rules/pal-empty-collection-guard.ts";
+const rows=[{id:"p1",title:"Item",variants:{pageInfo:{hasNextPage:false},nodes:[{title:"Small",inventoryPolicy:"CONTINUE",taxable:true},{title:"Large",inventoryPolicy:"DENY",taxable:false}]}}];
+assert.equal(inventory.auditCatalog(rows).findings.length,2);
+assert.equal(taxable.auditCatalog(rows).findings.length,2);
+const partial=[{...rows[0],variants:{pageInfo:{hasNextPage:true},nodes:rows[0].variants.nodes}}];
+assert.equal(inventory.auditCatalog(partial).findings.length,0);
+assert.equal(inventory.auditCatalog(partial).skipped.length,1);
+assert.equal(empty.auditCatalog([{id:"c1",title:"Empty",handle:"empty",products:{nodes:[]}}, {id:"c2",title:"Full",handle:"full",products:{nodes:[{id:"p1"}]}}]).findings.length,1);
+console.log("FOUR_AUDIT_ASSERTIONS_PASSED");

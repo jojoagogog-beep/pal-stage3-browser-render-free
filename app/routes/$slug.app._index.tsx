@@ -25,6 +25,27 @@ query PalGuardProducts($cursor:String){
     pageInfo{hasNextPage endCursor}
   }
 }`;
+const PAUSED_INVENTORY_POLICY_QUERY=`#graphql
+query PalInventoryPolicyProducts($cursor:String){
+  products(first:75,after:$cursor,sortKey:ID){
+    nodes{id title variants(first:100){pageInfo{hasNextPage} nodes{id title inventoryPolicy}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
+const PAUSED_TAX_FLAG_QUERY=`#graphql
+query PalTaxFlagProducts($cursor:String){
+  products(first:75,after:$cursor,sortKey:ID){
+    nodes{id title variants(first:100){pageInfo{hasNextPage} nodes{id title taxable}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
+const PAUSED_EMPTY_COLLECTION_QUERY=`#graphql
+query PalEmptyCollections($cursor:String){
+  collections(first:75,after:$cursor,sortKey:ID){
+    nodes{id title handle products(first:1){nodes{id}}}
+    pageInfo{hasNextPage endCursor}
+  }
+}`;
 const OPTION_NAME_QUERY=`#graphql
 query PalOptionNameProducts($cursor:String){
   products(first:100,after:$cursor,sortKey:ID){
@@ -147,6 +168,9 @@ export async function loader({request}:LoaderFunctionArgs){
       slug==="pal-collection-content-guard"?PAUSED_COLLECTION_CONTENT_QUERY:
       slug==="pal-product-image-alt-guard"?IMAGE_ALT_QUERY:
       slug==="pal-active-product-age-guard"?AGE_PRODUCT_QUERY:
+      slug==="pal-inventory-policy-consistency-guard"?PAUSED_INVENTORY_POLICY_QUERY:
+      slug==="pal-variant-tax-flag-guard"?PAUSED_TAX_FLAG_QUERY:
+      slug==="pal-empty-collection-guard"?PAUSED_EMPTY_COLLECTION_QUERY:
       slug==="pal-option-name-consistency-guard"?OPTION_NAME_QUERY:
       slug==="pal-seo-fallback-readiness-guard"?SEO_FALLBACK_QUERY:
       slug==="pal-inventory-availability-guard"?INVENTORY_PRODUCT_QUERY:
