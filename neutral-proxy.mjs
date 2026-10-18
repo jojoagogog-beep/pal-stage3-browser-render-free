@@ -243,6 +243,33 @@ function forward(request,response) {
     else fs.createReadStream(proof).pipe(response);
     return;
   }
+  // Public, read-only app-specific reviewer proof pages, not a replacement
+  // for actual OAuth/embedded behavior or the existing proxy routes.
+  const nextProofPages = new Map([
+    ['/pal-inventory-policy-consistency-guard/review-evidence', 'review-proof/pal-inventory-policy-consistency-guard-app-ui-20261018.html'],
+    ['/pal-sku-format-consistency-guard/review-evidence', 'review-proof/pal-sku-format-consistency-guard-app-ui-20261018.html'],
+    ['/pal-variant-tax-flag-guard/review-evidence', 'review-proof/pal-variant-tax-flag-guard-app-ui-20261018.html'],
+  ]);
+  if (["GET","HEAD"].includes(request.method || "GET") &&
+      nextProofPages.has(parsed.pathname)) {
+    const proof=path.resolve(nextProofPages.get(parsed.pathname));
+    if (!fs.existsSync(proof)) {
+      response.writeHead(503,{"content-type":"text/plain; charset=utf-8"});
+      response.end("Review evidence temporarily unavailable");
+      return;
+    }
+    const meta=fs.statSync(proof);
+    response.writeHead(200,{
+      "content-type":"text/html; charset=utf-8",
+      "content-length":meta.size,
+      "cache-control":"public, max-age=300",
+      "x-content-type-options":"nosniff",
+      "content-security-policy":"default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'"
+    });
+    if (request.method === "HEAD") response.end();
+    else fs.createReadStream(proof).pipe(response);
+    return;
+  }
   // Pricing welcome links must remain inside the exact reviewed app's path.
   // The destination still enforces Shopify authentication and session checks.
   if (["GET", "HEAD"].includes(request.method || "GET")) {
