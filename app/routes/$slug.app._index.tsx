@@ -200,8 +200,9 @@ export async function loader({request}:LoaderFunctionArgs){
     "pal-product-image-alt-guard":"pal-product-image-alt-guard",
     "pal-active-product-age-guard":"pal-active-product-age-guard",
   };
+  const billingAction=slug==="pal-collection-image-ratio-guard"||slug==="pal-collection-sort-guard";
   const storeHandle=String(session.shop||"").replace(/\.myshopify\.com$/i,"");
-  const pricingUrl=paidHandles[slug] && /^[a-z0-9-]+$/.test(storeHandle)
+  const pricingUrl=!billingAction && paidHandles[slug] && /^[a-z0-9-]+$/.test(storeHandle)
     ? `https://admin.shopify.com/store/${encodeURIComponent(storeHandle)}/charges/${paidHandles[slug]}/pricing_plans`
     : null;
   const cursor=new URL(request.url).searchParams.get("cursor");
@@ -246,7 +247,7 @@ export async function loader({request}:LoaderFunctionArgs){
     }
     if(connection.pageInfo.hasNextPage&&(!connection.pageInfo.endCursor||connection.pageInfo.endCursor===cursor))throw new Error("Invalid pagination");
     const definitions=slug==="pal-category-attribute-coverage-guard"?await loadPausedCategoryDefinitions(admin):undefined;
-    return data({slug,pricingUrl,audit:definition.auditCatalog(connection.nodes,definitions),nextCursor:connection.pageInfo.hasNextPage?connection.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
+    return data({slug,pricingUrl,billingAction,audit:definition.auditCatalog(connection.nodes,definitions),nextCursor:connection.pageInfo.hasNextPage?connection.pageInfo.endCursor:null,scannedAt:new Date().toISOString(),laterBatch:Boolean(cursor)},{headers:{"Cache-Control":"no-store"}});
   }catch(error){
     console.error("PAL_AUDIT_LOAD_FAILED",slug,error instanceof Error?error.name:"unknown");
     throw new Response("The catalog audit could not be loaded. Retry shortly.",{status:502});
@@ -254,6 +255,55 @@ export async function loader({request}:LoaderFunctionArgs){
 }
 export async function action(args:ActionFunctionArgs){
  const slug=getSlug(args.request);
+ if(["pal-collection-image-ratio-guard","pal-collection-sort-guard"].includes(slug)){
+   // These two applications are still on Manual Pricing (legacy); Shopify
+   // App Pricing is NOT enabled. Use the Shopify Billing API, not a dead
+   // hosted plan-selection link. All real merchant charges go via Shopify.
+   if(args.request.method!=="POST")throw new Response("Method not allowed",{status:405});
+   const submitted=await args.request.formData();
+   if(submitted.get("_intent")!=="start_standard_trial")
+     throw new Response("Unsupported billing action",{status:400});
+   const {admin,redirect,session}=await getShopify(slug).authenticate.admin(args.request);
+   const shop=String(session.shop||"");
+   if(!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop))
+     throw new Response("Invalid shop session",{status:400});
+   // The review/test store gets a Shopify TEST charge. All ordinary
+   // merchant subscriptions are real Shopify-admin charges.
+   let testCharge=shop==="pal-safari-monitor-test-store.myshopify.com";
+   try{
+     const planResponse=await admin.graphql("#graphql query PalShopBillingPlan { shop { plan { partnerDevelopment } } }");
+     const planJson=await planResponse.json() as any;
+     if(planResponse.ok&&!planJson.errors?.length)
+       testCharge=Boolean(planJson.data?.shop?.plan?.partnerDevelopment);
+   }catch{
+     // A production shop must never silently receive a test/free charge.
+     testCharge=shop==="pal-safari-monitor-test-store.myshopify.com";
+   }
+   const returnUrl=new URL("/"+slug+"/app","https://pal-stage3-browser-free-shard1.onrender.com");
+   returnUrl.searchParams.set("shop",shop);
+   const response=await admin.graphql(`#graphql
+     mutation PalCreateSubscription($name:String!,$returnUrl:URL!,$test:Boolean,$trialDays:Int,$lineItems:[AppSubscriptionLineItemInput!]!){
+       appSubscriptionCreate(name:$name,returnUrl:$returnUrl,test:$test,trialDays:$trialDays,lineItems:$lineItems){
+         confirmationUrl
+         userErrors{field message}
+       }
+     }`,{variables:{
+       name:"Standard",returnUrl:returnUrl.toString(),test:testCharge,trialDays:7,
+       lineItems:[{plan:{appRecurringPricingDetails:{price:{amount:4.99,currencyCode:"USD"},interval:"EVERY_30_DAYS"}}}],
+     }});
+   const result=await response.json() as any;
+   const details=result.data?.appSubscriptionCreate;
+   const url=details?.confirmationUrl;
+   if(!response.ok||result.errors?.length||details?.userErrors?.length||typeof url!=="string"){
+     console.error("PAL_SHOPIFY_BILLING_API_REJECTED",slug,{http:response.status,
+       errors:details?.userErrors?.map((x:any)=>String(x.message).slice(0,120)).slice(0,3)||[]});
+     throw new Response("Shopify could not initiate the subscription. Retry or contact support.",{status:502});
+   }
+   const target=new URL(url);
+   if(target.protocol!=="https:"||!([target.hostname==="admin.shopify.com",target.hostname.endsWith(".myshopify.com")].some(Boolean)))
+     throw new Response("Unexpected billing host",{status:502});
+   return redirect(url,{target:"_top"});
+ }
  if(slug==="pal-variant-image-guard")return (await import("../special/variant-image/route.server")).action(args);
  if(slug==="pal-variant-order-guard")return (await import("../special/variant-order/route.server")).action(args);
  if(slug==="pal-feed-readiness-guard")return (await import("../special/feed-readiness/route.server")).action(args);
