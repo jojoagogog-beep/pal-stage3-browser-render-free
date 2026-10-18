@@ -1,6 +1,7 @@
 // A neutral, review-compliant host for two Shopify apps. Existing stage3
 // routes continue to run through the original React Router service unchanged.
 import http from "node:http";
+import { pricingWelcomeLocation } from "./pricing-welcome.mjs";
 import https from "node:https";
 import net from "node:net";
 import fs from "node:fs";
@@ -125,6 +126,16 @@ function forward(request,response) {
     response.writeHead(200,{"content-type":"text/plain; charset=utf-8","cache-control":"no-store"});
     response.end(request.method==="HEAD" ? undefined : "review proxy ready\n");
     return;
+  }
+  // Pricing welcome links must remain inside the exact reviewed app's path.
+  // The destination still enforces Shopify authentication and session checks.
+  if (["GET", "HEAD"].includes(request.method || "GET")) {
+    const welcomeLocation = pricingWelcomeLocation(parsed.pathname, parsed.search, appPrefixes);
+    if (welcomeLocation) {
+      response.writeHead(302, { location: welcomeLocation, "cache-control": "no-store" });
+      response.end();
+      return;
+    }
   }
   // Shopify Admin can open the root /app path even when this embedded app was
   // released with a slugged app URL. Route *only* a known app audience to its
