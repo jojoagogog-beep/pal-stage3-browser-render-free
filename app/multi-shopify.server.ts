@@ -73,6 +73,20 @@ export function getShopify(slug: string) {
     "pal-tag-consistency-guard",
     "pal-unit-cost-coverage-guard",
     "pal-inventory-location-consistency-guard",
+    "pal-collection-rule-guard",
+    "pal-rule-drift-guard",
+    "pal-product-image-size-guard",
+    "pal-product-tag-count-guard",
+    "pal-product-handle-guard",
+    "pal-product-image-aspect-guard",
+    "pal-archived-stock-guard",
+    "pal-negative-inventory-guard",
+    "pal-variant-count-guard",
+    "pal-draft-stock-guard",
+    "pal-option-complexity-guard",
+    "pal-seo-duplicate-guard",
+    "pal-description-html-guard",
+    "pal-duplicate-description-guard",
     "pal-title-length-guard",
     "pal-title-word-count-guard",
     "pal-title-digit-guard",
@@ -129,6 +143,8 @@ export function getShopify(slug: string) {
     scopes: slug === "pal-inventory-location-consistency-guard"
       ? ["read_products", "read_inventory", "read_locations"]
       : slug === "pal-variant-shipping-policy-guard"
+      ? ["read_products", "read_inventory"]
+      : ["pal-archived-stock-guard","pal-negative-inventory-guard","pal-draft-stock-guard"].includes(slug)
       ? ["read_products", "read_inventory"]
       : ["read_products"],
     appUrl: appOrigin,

@@ -25,6 +25,58 @@ query PalGuardProducts($cursor:String){
     pageInfo{hasNextPage endCursor}
   }
 }`;
+// Additional paused-review apps use cost-bounded, product-specific Shopify
+// GraphQL queries. They never write merchant catalog data.
+const EXTRA_IMAGES_QUERY=`#graphql
+query PalImageReview($cursor:String){
+ products(first:35,after:$cursor,sortKey:ID){
+  nodes{id title images(first:10){nodes{width height}}}
+  pageInfo{hasNextPage endCursor}
+ }
+}`;
+const EXTRA_STOCK_QUERY=`#graphql
+query PalStockReview($cursor:String){
+ products(first:10,after:$cursor,sortKey:ID){
+  nodes{id title status variants(first:50){pageInfo{hasNextPage} nodes{id title inventoryQuantity inventoryItem{tracked}}}}
+  pageInfo{hasNextPage endCursor}
+ }
+}`;
+const EXTRA_VARIANT_QUERY=`#graphql
+query PalVariantsReview($cursor:String){
+ products(first:10,after:$cursor,sortKey:ID){
+  nodes{id title options{name values} variants(first:75){pageInfo{hasNextPage} nodes{id title}}}
+  pageInfo{hasNextPage endCursor}
+ }
+}`;
+const EXTRA_SEO_QUERY=`#graphql
+query PalSeoDuplicates($cursor:String){
+ products(first:75,after:$cursor,sortKey:ID){
+  nodes{id title seo{title description}}
+  pageInfo{hasNextPage endCursor}
+ }
+}`;
+const EXTRA_DESC_QUERY=`#graphql
+query PalDescriptionReview($cursor:String){
+ products(first:75,after:$cursor,sortKey:ID){
+  nodes{id title descriptionHtml}
+  pageInfo{hasNextPage endCursor}
+ }
+}`;
+const EXTRA_TAG_HANDLE_QUERY=`#graphql
+query PalTagsAndHandlesReview($cursor:String){
+ products(first:100,after:$cursor,sortKey:ID){
+  nodes{id title tags handle}
+  pageInfo{hasNextPage endCursor}
+ }
+}`;
+const EXTRA_COLLECTION_RULE_QUERY=`#graphql
+query PalCollectionRulesReview($cursor:String){
+ collections(first:30,after:$cursor,sortKey:ID){
+  nodes{id title handle ruleSet{appliedDisjunctively rules{column relation condition}}}
+  pageInfo{hasNextPage endCursor}
+ }
+}`;
+
 const PAUSED_UNIT_COST_QUERY=`#graphql
 query PalUnitCostProducts($cursor:String){
   products(first:50,after:$cursor,sortKey:ID){
@@ -210,6 +262,13 @@ export async function loader({request}:LoaderFunctionArgs){
   const isCollection=definition.appMeta.entityKind==="collection";
   try{
     const query=
+      ["pal-product-image-size-guard","pal-product-image-aspect-guard"].includes(slug)?EXTRA_IMAGES_QUERY:
+      ["pal-archived-stock-guard","pal-negative-inventory-guard","pal-draft-stock-guard"].includes(slug)?EXTRA_STOCK_QUERY:
+      ["pal-variant-count-guard","pal-option-complexity-guard"].includes(slug)?EXTRA_VARIANT_QUERY:
+      slug==="pal-seo-duplicate-guard"?EXTRA_SEO_QUERY:
+      ["pal-description-html-guard","pal-duplicate-description-guard"].includes(slug)?EXTRA_DESC_QUERY:
+      ["pal-product-tag-count-guard","pal-product-handle-guard"].includes(slug)?EXTRA_TAG_HANDLE_QUERY:
+      ["pal-collection-rule-guard","pal-rule-drift-guard"].includes(slug)?EXTRA_COLLECTION_RULE_QUERY:
       slug==="pal-product-template-guard"?PAUSED_TEMPLATE_QUERY:
       slug==="pal-category-attribute-coverage-guard"?PAUSED_CATEGORY_QUERY:
       slug==="pal-product-media-count-guard"?PAUSED_MEDIA_QUERY:

@@ -86,7 +86,10 @@ import * as reviewDescription from './pal-product-description-guard';
 import * as reviewCollectionContent from './pal-collection-content-guard';
 import * as reviewVendorName from './pal-vendor-name-consistency-guard';
 
+import {extraReviewRules} from "./pal-paused-extension-audits";
+
 export const ruleModules = {
+  ...extraReviewRules,
   'pal-barcode-integrity-guard': barcodeIntegrity,
   'pal-tag-consistency-guard': reviewTagConsistency,
   'pal-product-type-consistency-guard': reviewProductType,
