@@ -14,6 +14,7 @@ import * as reviewUnitCost from './pal-unit-cost-coverage-guard';
 import * as reviewCustomsData from './pal-customs-data-readiness-guard';
 import * as reviewSellingPlan from './pal-selling-plan-coverage-guard';
 import * as reviewPriceEnding from './pal-price-ending-guard';
+import * as reviewDescriptionA11y from './pal-description-accessibility-guard';
 import * as reviewSale from './pal-variant-sale-guard';
 import * as seoFallback from './pal-seo-fallback-readiness-guard';
 import * as reviewVariant from './pal-variant-price-range-guard';
@@ -107,6 +108,7 @@ export const ruleModules = {
   'pal-customs-data-readiness-guard': reviewCustomsData,
   'pal-selling-plan-coverage-guard': reviewSellingPlan,
   'pal-price-ending-guard': reviewPriceEnding,
+  'pal-description-accessibility-guard': reviewDescriptionA11y,
   'pal-variant-sale-guard': reviewSale,
   'pal-vendor-name-consistency-guard': reviewVendorName,
   'pal-seo-fallback-readiness-guard': seoFallback,
