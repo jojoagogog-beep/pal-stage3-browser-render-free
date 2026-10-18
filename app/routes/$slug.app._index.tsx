@@ -302,7 +302,7 @@ export async function action(args:ActionFunctionArgs){
    const target=new URL(url);
    if(target.protocol!=="https:"||!([target.hostname==="admin.shopify.com",target.hostname.endsWith(".myshopify.com")].some(Boolean)))
      throw new Response("Unexpected billing host",{status:502});
-   return redirect(url,{target:"_top"});
+   return data({confirmationUrl:url},{headers:{"Cache-Control":"no-store"}});
  }
  if(slug==="pal-variant-image-guard")return (await import("../special/variant-image/route.server")).action(args);
  if(slug==="pal-variant-order-guard")return (await import("../special/variant-order/route.server")).action(args);

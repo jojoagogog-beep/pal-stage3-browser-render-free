@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Form } from "react-router";
+import { useEffect, useState } from "react";
+import { useFetcher } from "react-router";
 import styles from "./description-dashboard.module.css";
 
 type Definition = {
@@ -26,6 +26,16 @@ type Props = {
 export function MultiDashboard({
   definition,audit,pricingUrl=null,billingAction=false,demo=false,initialFilter="all",nextCursor,laterBatch,busy,onRefresh,onNext,onRestart
 }:Props){
+  const billingFetcher=useFetcher<{confirmationUrl?:string}>();
+  const confirmationUrl=billingFetcher.data?.confirmationUrl;
+  useEffect(()=>{
+    if(!confirmationUrl)return;
+    try{
+      const u=new URL(confirmationUrl);
+      if(u.protocol==="https:"&&(u.hostname==="admin.shopify.com"||u.hostname.endsWith(".myshopify.com")))
+        window.open(u.href,"_top");
+    }catch{/* A fallback link is presented below. */}
+  },[confirmationUrl]);
   const { appMeta, rules, buildCsv } = definition;
   const isCollection=appMeta.entityKind==="collection";
   const [filter,setFilter]=useState(initialFilter==="worklist"?"all":initialFilter);
@@ -52,9 +62,11 @@ export function MultiDashboard({
       <section aria-label="Shopify subscription" style={{background:"#f0f7ff",border:"1px solid #a8caec",borderRadius:12,padding:"18px 22px",marginBottom:22,color:"#143456"}}>
         <h2 style={{fontSize:19,margin:"0 0 8px"}}>Subscription plan</h2>
         <p style={{margin:"0 0 12px"}}><strong>$4.99/month after a 7-day free trial.</strong> Secure subscription and billing are handled by Shopify.</p>
-        {billingAction?<Form method="post"><input type="hidden" name="_intent" value="start_standard_trial"/><button type="submit" style={{display:"inline-block",background:"#172f56",color:"white",padding:"12px 18px",borderRadius:8,fontWeight:700,border:0,cursor:"pointer"}}>Start 7-day trial through Shopify →</button></Form>
+        {billingAction?<billingFetcher.Form method="post"><input type="hidden" name="_intent" value="start_standard_trial"/><button type="submit" style={{display:"inline-block",background:"#172f56",color:"white",padding:"12px 18px",borderRadius:8,fontWeight:700,border:0,cursor:"pointer"}}>{billingFetcher.state==="idle"?"Start 7-day trial through Shopify →":"Connecting to Shopify…"}
+            </button></billingFetcher.Form>
           : pricingUrl?<a href={pricingUrl} target="_top" rel="noopener noreferrer" style={{display:"inline-block",background:"#172f56",color:"white",padding:"12px 18px",borderRadius:8,fontWeight:700,textDecoration:"none"}}>View plans and subscribe →</a>
           : <p style={{margin:0}}>After installing the app in your store, select <b>View plans and subscribe</b> to open the Shopify-hosted plan selection page.</p>}
+        {billingAction&&confirmationUrl&&<p><a href={confirmationUrl} target="_top" rel="noopener noreferrer">Continue to Shopify billing approval →</a></p>}
       </section>}
       <div className={styles.heading}><div>
         <p className={styles.eyebrow}>{appMeta.eyebrow}</p><h1>{appMeta.headline}</h1><p className={styles.lead}>{appMeta.lead}</p>
