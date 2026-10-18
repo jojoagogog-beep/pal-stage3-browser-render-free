@@ -2,6 +2,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from 'react-router';
 import { data, isRouteErrorResponse, useLoaderData, useRouteError, useSearchParams, useRevalidator } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
 import { DescriptionDashboard } from '../components/description-dashboard';
+import { DiscountBillingWidget } from '../components/discount-billing-widget';
 import { auditCatalog, type Product } from '../lib/description-audit';
 import { authenticate } from '../shopify.server';
 
@@ -35,9 +36,9 @@ export async function loader({request}:LoaderFunctionArgs){
 }
 export default function Index(){
   const result=useLoaderData<typeof loader>(); const [params,setParams]=useSearchParams(); const revalidator=useRevalidator();
-  return <DescriptionDashboard {...result} busy={revalidator.state==='loading'} onRefresh={()=>revalidator.revalidate()}
+  return <><DiscountBillingWidget/><DescriptionDashboard {...result} busy={revalidator.state==='loading'} onRefresh={()=>revalidator.revalidate()}
     onNext={result.nextCursor?()=>{const next=new URLSearchParams(params);next.set('cursor',result.nextCursor!);setParams(next);}:undefined}
-    onRestart={()=>{const next=new URLSearchParams(params);next.delete('cursor');setParams(next);}}/>;
+    onRestart={()=>{const next=new URLSearchParams(params);next.delete('cursor');setParams(next);}}/></>;
 }
 export function ErrorBoundary(){
   const error=useRouteError(); const retry=useRevalidator();
