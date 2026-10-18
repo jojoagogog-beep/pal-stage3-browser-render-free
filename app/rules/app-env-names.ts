@@ -61,6 +61,7 @@ export const appEnvNames = {
   'pal-barcode-checksum-guard': { key: 'PAL_51_KEY', secret: 'PAL_51_SECRET' },
   'pal-option-value-length-guard': { key: 'PAL_52_KEY', secret: 'PAL_52_SECRET' },
   'pal-option-delimiter-guard': { key: 'PAL_53_KEY', secret: 'PAL_53_SECRET' },
+  'pal-price-ending-guard': { key: 'PAL_REVIEW_PRICE_ENDING_KEY', secret: 'PAL_REVIEW_PRICE_ENDING_SECRET' },
   'pal-barcode-integrity-guard': { key: 'PAL_REVIEW_BARCODE_INTEGRITY_KEY', secret: 'PAL_REVIEW_BARCODE_INTEGRITY_SECRET' },
   'pal-tag-consistency-guard': { key: 'PAL_REVIEW_TAG_CONSISTENCY_KEY', secret: 'PAL_REVIEW_TAG_CONSISTENCY_SECRET' },
   'pal-product-type-consistency-guard': { key: 'PAL_REVIEW_PRODUCT_TYPE_KEY', secret: 'PAL_REVIEW_PRODUCT_TYPE_SECRET' },
