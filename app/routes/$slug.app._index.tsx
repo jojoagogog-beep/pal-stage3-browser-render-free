@@ -195,8 +195,8 @@ export async function loader({request}:LoaderFunctionArgs){
   if(slug==="pal-import-row-integrity-guard")return (await import("../special/import-row-integrity/route.server")).loader({request} as LoaderFunctionArgs);const definition=ruleModules[slug as keyof typeof ruleModules] as any;
   const {admin,session}=await getShopify(slug).authenticate.admin(request);
   const paidHandles: Record<string,string>={
-    "pal-collection-image-ratio-guard":"pal-collection-ratio-guard",
-    "pal-collection-sort-guard":"pal-collection-sort-guard",
+    "pal-collection-image-ratio-guard":"430707900417",
+    "pal-collection-sort-guard":"430672871425",
     "pal-product-image-alt-guard":"pal-product-image-alt-guard",
     "pal-active-product-age-guard":"pal-active-product-age-guard",
   };
