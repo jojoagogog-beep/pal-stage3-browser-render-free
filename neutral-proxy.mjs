@@ -149,6 +149,27 @@ function forward(request,response) {
     else fs.createReadStream(proof).pipe(response);
     return;
   }
+  // Reviewer evidence for verified Barcode Integrity Guard app launch.
+  if (parsed.pathname === "/pal-barcode-integrity-guard/review-evidence" &&
+      ["GET","HEAD"].includes(request.method || "GET")) {
+    const proof=path.resolve("review-proof/barcode-integrity-20261018.html");
+    if (!fs.existsSync(proof)) {
+      response.writeHead(503,{"content-type":"text/plain; charset=utf-8","cache-control":"no-store"});
+      response.end("Review evidence unavailable");
+      return;
+    }
+    const info=fs.statSync(proof);
+    response.writeHead(200,{
+      "content-type":"text/html; charset=utf-8",
+      "content-length":info.size,
+      "cache-control":"public, max-age=300",
+      "x-content-type-options":"nosniff",
+      "content-security-policy":"default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'"
+    });
+    if (request.method === "HEAD")response.end();
+    else fs.createReadStream(proof).pipe(response);
+    return;
+  }
   // Pricing welcome links must remain inside the exact reviewed app's path.
   // The destination still enforces Shopify authentication and session checks.
   if (["GET", "HEAD"].includes(request.method || "GET")) {
