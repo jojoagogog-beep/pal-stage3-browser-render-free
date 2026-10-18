@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useFetcher } from "react-router";
 import styles from "./description-dashboard.module.css";
 
 type Definition = {
@@ -26,16 +25,39 @@ type Props = {
 export function MultiDashboard({
   definition,audit,pricingUrl=null,billingAction=false,demo=false,initialFilter="all",nextCursor,laterBatch,busy,onRefresh,onNext,onRestart
 }:Props){
-  const billingFetcher=useFetcher<{confirmationUrl?:string}>();
-  const confirmationUrl=billingFetcher.data?.confirmationUrl;
-  useEffect(()=>{
-    if(!confirmationUrl)return;
+  const [confirmationUrl,setConfirmationUrl]=useState<string|null>(null);
+  const [billingBusy,setBillingBusy]=useState(false);
+  const [billingError,setBillingError]=useState("");
+  async function startBilling(){
+    if(billingBusy)return;
+    setBillingBusy(true);setBillingError("");
     try{
-      const u=new URL(confirmationUrl);
-      if(u.protocol==="https:"&&(u.hostname==="admin.shopify.com"||u.hostname.endsWith(".myshopify.com")))
-        window.open(u.href,"_top");
-    }catch{/* A fallback link is presented below. */}
-  },[confirmationUrl]);
+      const bridge=(window as Window & {shopify?:{idToken?:()=>Promise<string>}}).shopify;
+      if(typeof bridge?.idToken!=="function")throw new Error("Shopify session is unavailable");
+      const token=await bridge.idToken();
+      if(!token||token.length<40)throw new Error("Shopify session has expired");
+      const slug=window.location.pathname.split("/").filter(Boolean)[0];
+      if(!["pal-collection-image-ratio-guard","pal-collection-sort-guard"].includes(slug))
+        throw new Error("Unexpected app context");
+      const response=await fetch("/"+slug+"/app/billing-api",{
+        method:"POST",
+        headers:{"Authorization":"Bearer "+token,"Content-Type":"application/x-www-form-urlencoded"},
+        body:new URLSearchParams({"_intent":"start_standard_trial"}).toString(),
+        credentials:"same-origin",
+        cache:"no-store",
+      });
+      if(!response.ok)throw new Error("Shopify could not start the subscription ("+response.status+")");
+      const result=await response.json() as {confirmationUrl?:string};
+      const u=new URL(result.confirmationUrl||"");
+      if(u.protocol!=="https:"||
+        !(u.hostname==="admin.shopify.com"||u.hostname.endsWith(".myshopify.com")))
+        throw new Error("Invalid Shopify approval destination");
+      setConfirmationUrl(u.toString());
+      window.open(u.toString(),"_top");
+    }catch(error){
+      setBillingError(error instanceof Error?error.message:"Shopify billing is unavailable");
+    }finally{setBillingBusy(false)}
+  }
   const { appMeta, rules, buildCsv } = definition;
   const isCollection=appMeta.entityKind==="collection";
   const [filter,setFilter]=useState(initialFilter==="worklist"?"all":initialFilter);
@@ -62,10 +84,13 @@ export function MultiDashboard({
       <section aria-label="Shopify subscription" style={{background:"#f0f7ff",border:"1px solid #a8caec",borderRadius:12,padding:"18px 22px",marginBottom:22,color:"#143456"}}>
         <h2 style={{fontSize:19,margin:"0 0 8px"}}>Subscription plan</h2>
         <p style={{margin:"0 0 12px"}}><strong>$4.99/month after a 7-day free trial.</strong> Secure subscription and billing are handled by Shopify.</p>
-        {billingAction?<billingFetcher.Form method="post"><input type="hidden" name="_intent" value="start_standard_trial"/><button type="submit" style={{display:"inline-block",background:"#172f56",color:"white",padding:"12px 18px",borderRadius:8,fontWeight:700,border:0,cursor:"pointer"}}>{billingFetcher.state==="idle"?"Start 7-day trial through Shopify →":"Connecting to Shopify…"}
-            </button></billingFetcher.Form>
+        {billingAction?<button type="button" onClick={()=>void startBilling()} disabled={billingBusy}
+            style={{display:"inline-block",background:"#172f56",color:"white",padding:"12px 18px",borderRadius:8,fontWeight:700,border:0,cursor:"pointer"}}>
+            {billingBusy?"Connecting to Shopify…":"Start 7-day trial through Shopify →"}
+            </button>
           : pricingUrl?<a href={pricingUrl} target="_top" rel="noopener noreferrer" style={{display:"inline-block",background:"#172f56",color:"white",padding:"12px 18px",borderRadius:8,fontWeight:700,textDecoration:"none"}}>View plans and subscribe →</a>
           : <p style={{margin:0}}>After installing the app in your store, select <b>View plans and subscribe</b> to open the Shopify-hosted plan selection page.</p>}
+        {billingAction&&billingError&&<p role="alert">{billingError}</p>}
         {billingAction&&confirmationUrl&&<p><a href={confirmationUrl} target="_top" rel="noopener noreferrer">Continue to Shopify billing approval →</a></p>}
       </section>}
       <div className={styles.heading}><div>
