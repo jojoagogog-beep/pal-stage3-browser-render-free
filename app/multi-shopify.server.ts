@@ -57,6 +57,11 @@ export function getShopify(slug: string) {
   // Paused review apps use the neutral permanent Shopify-hosted URL in their
   // staged app configuration. Keep OAuth/appUrl on the same origin as Shopify.
   const neutralReviewSlugs = new Set([
+    // These three paused-review apps must use the exact same stable
+    // origin as their released embedded app and OAuth callback URLs.
+    "pal-variant-shipping-policy-guard",
+    "pal-option-value-consistency-guard",
+    "pal-product-type-consistency-guard",
     "pal-title-length-guard",
     "pal-title-word-count-guard",
     "pal-title-digit-guard",
@@ -110,7 +115,7 @@ export function getShopify(slug: string) {
     apiKey,
     apiSecretKey,
     apiVersion: ApiVersion.July26,
-    scopes: ["read_products"],
+    scopes: slug === "pal-variant-shipping-policy-guard" ? ["read_products", "read_inventory"] : ["read_products"],
     appUrl: appOrigin,
     authPathPrefix: "/" + slug + "/auth",
     sessionStorage: new ScopedSessionStorage(slug) as any,
