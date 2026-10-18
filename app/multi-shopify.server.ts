@@ -71,6 +71,8 @@ export function getShopify(slug: string) {
     "pal-selling-plan-coverage-guard",
     "pal-customs-data-readiness-guard",
     "pal-tag-consistency-guard",
+    "pal-unit-cost-coverage-guard",
+    "pal-inventory-location-consistency-guard",
     "pal-title-length-guard",
     "pal-title-word-count-guard",
     "pal-title-digit-guard",
@@ -124,7 +126,11 @@ export function getShopify(slug: string) {
     apiKey,
     apiSecretKey,
     apiVersion: ApiVersion.July26,
-    scopes: slug === "pal-variant-shipping-policy-guard" ? ["read_products", "read_inventory"] : ["read_products"],
+    scopes: slug === "pal-inventory-location-consistency-guard"
+      ? ["read_products", "read_inventory", "read_locations"]
+      : slug === "pal-variant-shipping-policy-guard"
+      ? ["read_products", "read_inventory"]
+      : ["read_products"],
     appUrl: appOrigin,
     authPathPrefix: "/" + slug + "/auth",
     sessionStorage: new ScopedSessionStorage(slug) as any,
