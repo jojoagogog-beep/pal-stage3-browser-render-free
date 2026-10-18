@@ -1,5 +1,13 @@
 import type { LoaderFunctionArgs } from "react-router";
 export async function loader({params}:LoaderFunctionArgs){
+  if(params.slug==="pal-collection-image-ratio-guard" && params.page==="review-evidence"){
+    const {html}=await import("../review-proof/collection-ratio.server");
+    return new Response(html,{headers:{
+      "Content-Type":"text/html; charset=utf-8",
+      "Cache-Control":"public, max-age=300",
+      "X-Content-Type-Options":"nosniff"
+    }});
+  }
   if(params.slug==="pal-collection-sort-guard" && params.page==="review-evidence"){
     const {html}=await import("../review-proof/collection-sort.server");
     return new Response(html,{headers:{
