@@ -89,6 +89,20 @@ const appPrefixes = [
  "/pal-unit-cost-coverage-guard/",
  "/pal-customs-data-readiness-guard/",
  "/pal-selling-plan-coverage-guard/",
+ "/pal-collection-rule-guard/",
+ "/pal-rule-drift-guard/",
+ "/pal-product-image-size-guard/",
+ "/pal-product-tag-count-guard/",
+ "/pal-product-handle-guard/",
+ "/pal-product-image-aspect-guard/",
+ "/pal-archived-stock-guard/",
+ "/pal-negative-inventory-guard/",
+ "/pal-variant-count-guard/",
+ "/pal-draft-stock-guard/",
+ "/pal-option-complexity-guard/",
+ "/pal-seo-duplicate-guard/",
+ "/pal-description-html-guard/",
+ "/pal-duplicate-description-guard/",
 ];
 const publicPort = Number(process.env.PORT || "10000");
 const internalPort = 19731;
