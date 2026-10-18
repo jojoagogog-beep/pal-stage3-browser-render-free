@@ -11,6 +11,7 @@ import {spawn} from "node:child_process";
 const appRoot = path.resolve("build/client");
 const gateway = "pal-shopify-batch50-gateway.onrender.com";
 const appPrefixes = [
+ "/pal-price-ending-guard/",
  "/pal-collection-image-ratio-guard/", "/pal-collection-sort-guard/",
  "/pal-product-image-alt-guard/", "/pal-active-product-age-guard/",
  "/pal-variant-price-range-guard/", "/pal-zero-price-variant-guard/",
