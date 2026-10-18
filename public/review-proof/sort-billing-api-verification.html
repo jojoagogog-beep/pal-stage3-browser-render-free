@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PAL Collection Sort Guard — Shopify Billing API verification</title>
+<style>body{font-family:system-ui,-apple-system,sans-serif;background:#f5f7fa;color:#182840;margin:0;padding:32px 18px}main{max-width:870px;margin:auto;background:white;padding:26px;border-radius:18px;box-shadow:0 8px 38px #2233}h1{font-size:1.7em}img{max-width:100%;height:auto;border:1px solid #ddd;border-radius:12px}li{margin-bottom:12px;line-height:1.55}small{color:#546178}</style></head><body><main>
+<h1>PAL Collection Sort Guard — Shopify Billing API</h1>
+<p>Reviewer evidence for requirement <strong>1.2.1</strong>. Verified October 18, 2026.</p>
+<ul>
+<li>The embedded app's <b>Start 7-day trial through Shopify</b> button invoked Shopify Billing API on the production host. The endpoint returned HTTP 200.</li>
+<li>Shopify redirected to its <b>official recurring application charge confirmation page</b>, rather than an error page.</li>
+<li>Shopify displayed <b>Standard, USD 4.99 every 30 days, with a 7-day trial</b>.</li>
+<li>Shopify identifies the test development-store charge as not billed to the merchant. The subscription was not confirmed during this verification.</li>
+</ul>
+<figure><img src="/review-proof/sort-shopify-billing-confirmation-20261018.png" alt="Official Shopify Billing API confirmation screen showing PAL Collection Sort Guard, Standard USD 4.99 per 30 days and a test charge warning"><figcaption><small>Official Shopify administration confirmation screen. Screenshot from a development test store; no customer payment information is displayed.</small></figcaption></figure>
+<p><strong>Reproduction:</strong> Install PAL Collection Sort Guard on a Shopify test store, open the app, and click <b>Start 7-day trial through Shopify</b>. Shopify's own confirmation screen appears.</p>
+<p><small>Evidence supplied by Practical AI Lab, the app developer. This is not a Shopify endorsement.</small></p>
+</main></body></html>
