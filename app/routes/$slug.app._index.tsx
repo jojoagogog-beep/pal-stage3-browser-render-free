@@ -112,6 +112,13 @@ query PalVariantShippingProducts($cursor:String){
     pageInfo{hasNextPage endCursor}
   }
 }`;
+const PAUSED_DUPLICATE_SKU_QUERY=`#graphql
+query PalDuplicateSkuProducts($cursor:String){
+ products(first:15,after:$cursor,sortKey:ID){
+  nodes{id title variants(first:40){pageInfo{hasNextPage} nodes{id title sku}}}
+  pageInfo{hasNextPage endCursor}
+ }
+}`;
 const PAUSED_SKU_FORMAT_QUERY=`#graphql
 query PalSkuFormatProducts($cursor:String){
   products(first:75,after:$cursor,sortKey:ID){
@@ -282,6 +289,7 @@ export async function loader({request}:LoaderFunctionArgs){
       slug==="pal-selling-plan-coverage-guard"?PAUSED_SELLING_PLAN_QUERY:
       slug==="pal-inventory-location-consistency-guard"?PAUSED_INVENTORY_LOCATION_QUERY:
       slug==="pal-variant-shipping-policy-guard"?PAUSED_VARIANT_SHIPPING_QUERY:
+      slug==="pal-duplicate-sku-guard"?PAUSED_DUPLICATE_SKU_QUERY:
       slug==="pal-sku-format-consistency-guard"?PAUSED_SKU_FORMAT_QUERY:
       slug==="pal-collection-coverage-guard"?PAUSED_COLLECTION_COVERAGE_QUERY:
       slug==="pal-inventory-policy-consistency-guard"?PAUSED_INVENTORY_POLICY_QUERY:

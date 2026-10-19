@@ -62,6 +62,7 @@ export const appEnvNames = {
   'pal-option-value-length-guard': { key: 'PAL_52_KEY', secret: 'PAL_52_SECRET' },
   'pal-option-delimiter-guard': { key: 'PAL_53_KEY', secret: 'PAL_53_SECRET' },
   'pal-seo-length-guard': { key: 'PAL_REVIEW_SEO_LENGTH_KEY', secret: 'PAL_REVIEW_SEO_LENGTH_SECRET' },
+  'pal-duplicate-sku-guard': { key: 'PAL_REVIEW_DUPLICATE_SKU_KEY', secret: 'PAL_REVIEW_DUPLICATE_SKU_SECRET' },
   'pal-product-title-pattern-guard': { key: 'PAL_REVIEW_PRODUCT_TITLE_KEY', secret: 'PAL_REVIEW_PRODUCT_TITLE_SECRET' },
   'pal-description-accessibility-guard': { key: 'PAL_REVIEW_DESCRIPTION_A11Y_KEY', secret: 'PAL_REVIEW_DESCRIPTION_A11Y_SECRET' },
   'pal-price-ending-guard': { key: 'PAL_REVIEW_PRICE_ENDING_KEY', secret: 'PAL_REVIEW_PRICE_ENDING_SECRET' },

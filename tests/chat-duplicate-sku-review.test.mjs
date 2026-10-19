@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import {auditCatalog,buildCsv} from "../app/rules/pal-duplicate-sku-guard.ts";
+const p=(id,title,sku)=>({id:"gid://shopify/Product/"+id,title,variants:{pageInfo:{hasNextPage:false},nodes:[{id:"gid://shopify/ProductVariant/"+id,title:"Default",sku}]}});
+const r=auditCatalog([p(1,"First","ABC-1"),p(2,"Second","abc-1"),p(3,"Third","A B"),p(4,"Fourth","A  B"),p(5,"Fifth",null)]);
+assert.equal(r.products,5);
+assert.equal(r.findings.length,4);
+assert.equal(r.findings.filter(f=>f.rule==="normalized_collision").length,4);
+assert(r.findings.every(f=>f.detail.includes("within this catalog batch")));
+const exact=auditCatalog([p(6,"Sixth","X-2"),p(7,"Seventh","X-2")]);
+assert.equal(exact.findings.length,2);
+assert(exact.findings.every(f=>f.rule==="exact_duplicate"));
+const limited=auditCatalog([{id:"8",title:"Limited",variants:{pageInfo:{hasNextPage:true},nodes:[{id:"v",title:"A",sku:"X-2"}]}}]);
+assert.equal(limited.findings.length,0);
+assert.equal(limited.skipped.length,1);
+const csv=buildCsv(r.findings);
+assert(csv.includes("Case or spacing SKU collision"));
+console.log("PASS duplicate SKU case/spacing/exact/incomplete pagination and CSV");

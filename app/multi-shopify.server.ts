@@ -60,6 +60,7 @@ export function getShopify(slug: string) {
     // These three paused-review apps must use the exact same stable
     // origin as their released embedded app and OAuth callback URLs.
     "pal-seo-length-guard",
+    "pal-duplicate-sku-guard",
     "pal-product-title-pattern-guard",
     "pal-description-accessibility-guard",
     "pal-price-ending-guard",
