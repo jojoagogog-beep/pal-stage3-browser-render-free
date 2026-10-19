@@ -3,6 +3,7 @@ import db from "../db.server";
 import { appEnvNames } from "../rules/app-env-names";
 import { getShopify, getSlug } from "../multi-shopify.server";
 import { verifyShopifyWebhookHmac } from "../lib/shopify-webhook-hmac.server";
+import { deleteFilterConfig } from "../special/filter-integrity/filter-config.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const slug = getSlug(request);
@@ -36,6 +37,11 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const { shop, topic, payload } = await getShopify(slug).authenticate.webhook(request);
   if (topic === "APP_UNINSTALLED" || topic === "SHOP_REDACT") {
+    // Remove persisted merchant preferences as well as Shopify sessions.
+    // The filter configuration table is scoped by shop and used only by this app.
+    if (slug === "pal-filter-integrity-guard") {
+      await deleteFilterConfig(shop);
+    }
     await db.session.deleteMany({
       where: { shop, id: { startsWith: slug + ":" } },
     });
