@@ -96,6 +96,7 @@ const appPrefixes = [
  "/pal-customs-data-readiness-guard/",
  "/pal-selling-plan-coverage-guard/",
  "/pal-collection-rule-guard/",
+ "/pal-filter-integrity-guard/",
  "/pal-rule-drift-guard/",
  "/pal-product-image-size-guard/",
  "/pal-product-tag-count-guard/",
