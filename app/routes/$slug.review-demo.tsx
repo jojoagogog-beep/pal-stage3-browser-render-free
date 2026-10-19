@@ -16,12 +16,20 @@ const state=params.get("state")||"all";
 // Shopify catalog records, the common demo fixture did not include it,
 // causing the public reviewer demo to throw a 500 before the UI rendered.
 const typeRuleDemo=slug==="pal-type-empty-guard"||slug==="pal-type-length-guard";
+const titleLengthDemo=slug==="pal-title-length-guard";
 const demoCatalog=state==="empty"?[]:typeRuleDemo
   ? demoProducts.map((product,index)=>({
       ...product,
       productType:index===0?"":index===1
         ? "Apparel and Accessories with a Description Far Longer Than Fifty Characters"
         : "Accessories",
+    }))
+  : titleLengthDemo
+  ? demoProducts.map((product,index)=>({
+      ...product,
+      title:index===0?"Cap":index===1
+        ? "Women's Relaxed Fit Premium Organic Cotton Long Sleeve Outdoor Adventure Travel Layering Essential Top with Contrast Stitching"
+        : product.title,
     }))
   : demoProducts;
 return <MultiDashboard key={state} definition={definition} audit={definition.auditCatalog(demoCatalog as any)} demo initialFilter={state}/>}
