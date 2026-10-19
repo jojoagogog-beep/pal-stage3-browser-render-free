@@ -59,6 +59,7 @@ export function getShopify(slug: string) {
   const neutralReviewSlugs = new Set([
     // These three paused-review apps must use the exact same stable
     // origin as their released embedded app and OAuth callback URLs.
+    "pal-product-title-pattern-guard",
     "pal-description-accessibility-guard",
     "pal-price-ending-guard",
     "pal-variant-shipping-policy-guard",
