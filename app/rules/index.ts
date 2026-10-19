@@ -1,4 +1,5 @@
 import * as barcodeIntegrity from './pal-barcode-integrity-guard';
+import * as filterIntegrity from './pal-filter-integrity-guard';
 import * as reviewTagConsistency from './pal-tag-consistency-guard';
 import * as reviewProductType from './pal-product-type-consistency-guard';
 import * as reviewOptionName from './pal-option-name-consistency-guard';
@@ -95,6 +96,7 @@ import * as reviewVendorName from './pal-vendor-name-consistency-guard';
 import {extraReviewRules} from "./pal-paused-extension-audits";
 
 export const ruleModules = {
+  'pal-filter-integrity-guard': filterIntegrity,
   ...extraReviewRules,
   'pal-barcode-integrity-guard': barcodeIntegrity,
   'pal-tag-consistency-guard': reviewTagConsistency,

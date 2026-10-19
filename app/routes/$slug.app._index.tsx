@@ -9,7 +9,9 @@ import variantImageUI from "../special/variant-image/ui";
 import variantOrderUI from "../special/variant-order/ui";
 import feedReadinessUI from "../special/feed-readiness/ui";
 import importIntegrityUI from "../special/import-row-integrity/ui";
+import FilterIntegrityUI from "../special/filter-integrity/ui";
 const specialRoutes:Record<string,any>={
+"pal-filter-integrity-guard":FilterIntegrityUI,
 "pal-variant-image-guard":variantImageUI,
 "pal-variant-order-guard":variantOrderUI,
 "pal-feed-readiness-guard":feedReadinessUI,
@@ -248,6 +250,7 @@ async function loadPausedCategoryDefinitions(admin:any){
 
 export async function loader({request}:LoaderFunctionArgs){
   const slug=getSlug(request);
+  if(slug==="pal-filter-integrity-guard")return (await import("../special/filter-integrity/route.server")).loader({request} as LoaderFunctionArgs);
   if(slug==="pal-variant-image-guard")return (await import("../special/variant-image/route.server")).loader({request} as LoaderFunctionArgs);
   if(slug==="pal-variant-order-guard")return (await import("../special/variant-order/route.server")).loader({request} as LoaderFunctionArgs);
   if(slug==="pal-feed-readiness-guard")return (await import("../special/feed-readiness/route.server")).loader({request} as LoaderFunctionArgs);
@@ -352,6 +355,7 @@ export async function loader({request}:LoaderFunctionArgs){
 }
 export async function action(args:ActionFunctionArgs){
  const slug=getSlug(args.request);
+ if(slug==="pal-filter-integrity-guard")return (await import("../special/filter-integrity/route.server")).action(args);
  if(["pal-collection-image-ratio-guard","pal-collection-sort-guard"].includes(slug)){
    // These two applications are still on Manual Pricing (legacy); Shopify
    // App Pricing is NOT enabled. Use the Shopify Billing API, not a dead

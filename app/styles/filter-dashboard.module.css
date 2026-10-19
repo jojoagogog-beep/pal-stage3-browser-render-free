@@ -1,0 +1,53 @@
+.shell{display:grid;gap:20px;max-width:1280px;margin:0 auto;padding:4px 0 32px;color:#202223}
+.introRow{display:flex;justify-content:space-between;align-items:flex-end;gap:28px;padding:8px 2px}
+.eyebrow,.cardLabel{margin:0 0 7px;color:#65747d;font-size:11px;font-weight:750;letter-spacing:.12em}
+.title{margin:0;font-size:28px;line-height:1.18;letter-spacing:-.025em}
+.lead{max-width:760px;margin:10px 0 0;color:#59636a;line-height:1.55}
+.actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;min-width:310px}
+.primaryButton,.secondaryButton{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 14px;border-radius:9px;font:inherit;font-size:14px;font-weight:650;text-decoration:none;cursor:pointer}
+.primaryButton{border:1px solid #222;background:#222;color:#fff}
+.primaryButton:hover{background:#0f0f0f;color:#fff}
+.secondaryButton{border:1px solid #bdc4c8;background:#fff;color:#202223}
+.primaryButton:disabled,.secondaryButton:disabled{cursor:not-allowed;opacity:.58}
+.successNotice,.errorNotice{padding:12px 14px;border-radius:10px;font-size:14px}
+.successNotice{border:1px solid #8acb9b;background:#eefaf1;color:#1d5c2d}
+.errorNotice{border:1px solid #e2a4a4;background:#fff3f3;color:#8e2626}
+.summaryCard,.card{border:1px solid #dfe3e5;border-radius:14px;background:#fff;box-shadow:0 1px 2px rgba(26,31,35,.04)}
+.summaryCard{display:grid;grid-template-columns:minmax(260px,1fr) minmax(560px,2fr);gap:24px;align-items:center;padding:24px}
+.summaryCard h3,.card h3{margin:0;font-size:18px;letter-spacing:-.01em}
+.muted{margin:8px 0 0;color:#697279;font-size:14px;line-height:1.5}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;overflow:hidden;border:1px solid #e3e6e8;border-radius:11px;background:#e3e6e8}
+.metric{display:grid;gap:5px;padding:14px;background:#f9faf9}
+.metric span{color:#667078;font-size:12px}
+.metric strong{font-size:25px;line-height:1.1}
+.warningText{color:#9a5600}
+.twoColumn{display:grid;grid-template-columns:1.25fr .75fr;gap:20px}
+.card{padding:22px}
+.cardHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.countBadge{display:inline-flex;min-width:28px;height:28px;align-items:center;justify-content:center;border-radius:999px;background:#eef1f2;color:#485157;font-size:13px;font-weight:700}
+.groupList{display:grid;gap:0;margin-top:14px}
+.groupItem{padding:14px 0;border-top:1px solid #eceeef}
+.groupTopline{display:flex;justify-content:space-between;gap:14px}
+.groupTopline span{color:#6b747a;font-size:12px}
+.groupItem p{margin:6px 0;color:#7b3f00;font-weight:650}
+.groupItem small{color:#59636a}
+.settingsForm{display:grid;gap:9px;margin-top:16px}
+.settingsForm label{font-size:13px;font-weight:650}
+.settingsForm textarea{box-sizing:border-box;width:100%;resize:vertical;border:1px solid #aeb5b9;border-radius:9px;padding:10px 12px;background:#fff;color:#202223;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.settingsForm textarea:focus{outline:2px solid #2c6ecb;outline-offset:1px}
+.settingsForm .primaryButton{justify-self:start;margin-top:3px}
+.helperText{margin:14px 0 0;color:#6b747a;font-size:12px;line-height:1.5}
+.tableWrap{overflow-x:auto;margin-top:14px}
+.table{width:100%;border-collapse:collapse;font-size:13px}
+.table th{padding:10px 9px;border-bottom:1px solid #dfe3e5;color:#667078;font-size:11px;letter-spacing:.04em;text-align:left;text-transform:uppercase;white-space:nowrap}
+.table td{max-width:245px;padding:12px 9px;border-bottom:1px solid #edf0f1;vertical-align:top;line-height:1.35}
+.table td a{color:#1958a6;font-weight:650;text-decoration:none}.table td a:hover{text-decoration:underline}
+.table td small{display:block;margin-top:4px;color:#707980}
+.missingPill,.inconsistentPill{display:inline-flex;border-radius:999px;padding:3px 7px;font-size:11px;font-weight:700}
+.missingPill{background:#fff0df;color:#8a4b00}.inconsistentPill{background:#e9f1ff;color:#164e96}
+.tableNote{margin:12px 0 0;color:#697279;font-size:12px}
+.emptyState{margin-top:15px;border:1px dashed #c9ced1;border-radius:10px;padding:24px;color:#697279;text-align:center}
+.footer{display:flex;justify-content:space-between;gap:20px;padding:2px;color:#707980;font-size:12px}
+.footer nav{display:flex;gap:16px}.footer a{color:#4f5c64}
+@media(max-width:950px){.summaryCard,.twoColumn{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:680px){.introRow{align-items:stretch;flex-direction:column}.actions{justify-content:flex-start;min-width:0}.metrics{grid-template-columns:1fr 1fr}.footer{flex-direction:column}.table td{min-width:140px}}
