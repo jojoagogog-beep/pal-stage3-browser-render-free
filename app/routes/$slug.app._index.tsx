@@ -113,9 +113,9 @@ query PalVariantShippingProducts($cursor:String){
   }
 }`;
 const PAUSED_DUPLICATE_SKU_QUERY=`#graphql
-query PalDuplicateSkuProducts($cursor:String){
- products(first:15,after:$cursor,sortKey:ID){
-  nodes{id title variants(first:40){pageInfo{hasNextPage} nodes{id title sku}}}
+query PalDuplicateSkuVariants($cursor:String){
+ productVariants(first:100,after:$cursor,sortKey:ID){
+  nodes{id title sku product{id title}}
   pageInfo{hasNextPage endCursor}
  }
 }`;
@@ -253,6 +253,37 @@ export async function loader({request}:LoaderFunctionArgs){
   if(slug==="pal-feed-readiness-guard")return (await import("../special/feed-readiness/route.server")).loader({request} as LoaderFunctionArgs);
   if(slug==="pal-import-row-integrity-guard")return (await import("../special/import-row-integrity/route.server")).loader({request} as LoaderFunctionArgs);const definition=ruleModules[slug as keyof typeof ruleModules] as any;
   const {admin,session}=await getShopify(slug).authenticate.admin(request);
+  if(slug==="pal-duplicate-sku-guard"){
+    try{
+      const variants:Array<{id:string;title:string;sku:string|null;product:{id:string;title:string}}>=[];
+      let variantCursor:string|null=null;
+      let truncated=false;
+      for(let page=0;page<10;page++){
+        const response=await admin.graphql(PAUSED_DUPLICATE_SKU_QUERY,{variables:{cursor:variantCursor}});
+        const json=await response.json() as any;
+        const list=json.data?.productVariants;
+        if(!response.ok||json.errors?.length||!list)throw new Error("Shopify variant query failed");
+        variants.push(...(list.nodes||[]));
+        if(!list.pageInfo?.hasNextPage){truncated=false;break}
+        if(!list.pageInfo.endCursor||list.pageInfo.endCursor===variantCursor)throw new Error("Invalid variant pagination");
+        variantCursor=list.pageInfo.endCursor;
+        truncated=true;
+      }
+      const products=new Map<string,{id:string;title:string;variants:{pageInfo:{hasNextPage:boolean};nodes:Array<{id:string;title:string;sku:string|null}>}}>();
+      for(const v of variants){
+        if(!v.product?.id)continue;
+        const id=String(v.product.id);
+        if(!products.has(id))products.set(id,{id,title:String(v.product.title||""),variants:{pageInfo:{hasNextPage:false},nodes:[]}});
+        products.get(id)!.variants.nodes.push({id:String(v.id),title:String(v.title||""),sku:v.sku??null});
+      }
+      const audit=definition.auditCatalog([...products.values()]);
+      if(truncated)audit.skipped.push("Catalog scan capped at 1,000 variants; remaining variants were not examined.");
+      return data({slug,pricingUrl:null,billingAction:false,audit,nextCursor:null,scannedAt:new Date().toISOString(),laterBatch:false},{headers:{"Cache-Control":"no-store"}});
+    }catch(error){
+      console.error("PAL_DUPLICATE_SKU_LOAD_FAILED",error instanceof Error?error.name:"unknown");
+      throw new Response("The duplicate SKU audit could not be completed. Retry shortly.",{status:502});
+    }
+  }
   const paidHandles: Record<string,string>={
     "pal-collection-image-ratio-guard":"430707900417",
     "pal-collection-sort-guard":"430672871425",
@@ -289,7 +320,6 @@ export async function loader({request}:LoaderFunctionArgs){
       slug==="pal-selling-plan-coverage-guard"?PAUSED_SELLING_PLAN_QUERY:
       slug==="pal-inventory-location-consistency-guard"?PAUSED_INVENTORY_LOCATION_QUERY:
       slug==="pal-variant-shipping-policy-guard"?PAUSED_VARIANT_SHIPPING_QUERY:
-      slug==="pal-duplicate-sku-guard"?PAUSED_DUPLICATE_SKU_QUERY:
       slug==="pal-sku-format-consistency-guard"?PAUSED_SKU_FORMAT_QUERY:
       slug==="pal-collection-coverage-guard"?PAUSED_COLLECTION_COVERAGE_QUERY:
       slug==="pal-inventory-policy-consistency-guard"?PAUSED_INVENTORY_POLICY_QUERY:

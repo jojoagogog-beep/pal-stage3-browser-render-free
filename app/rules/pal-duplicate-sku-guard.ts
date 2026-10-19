@@ -1,6 +1,6 @@
 import {makeMeta,finish,csvFor,type Finding} from "./pal-paused-audit-core";
 export const appMeta=makeMeta("Duplicate SKU Guard","duplicate-sku",
-  "Find exact duplicates and case/spacing SKU collisions within the displayed catalog batch; review catalog variants without modifying them.");
+  "Find exact duplicates and case/spacing collisions across up to 1,000 store variants; review product variants without modifying them.");
 export const rules={
   exact_duplicate:{label:"Exact duplicate SKU",priority:"Review",advice:"Confirm whether these variants should share this SKU before updating any catalog record."},
   normalized_collision:{label:"Case or spacing SKU collision",priority:"Review",advice:"Confirm the intended SKU naming before standardizing capitalization or spacing."}
