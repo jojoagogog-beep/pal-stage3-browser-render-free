@@ -265,7 +265,7 @@ export async function loader({request}:LoaderFunctionArgs){
       ["pal-product-image-size-guard","pal-product-image-aspect-guard"].includes(slug)?EXTRA_IMAGES_QUERY:
       ["pal-archived-stock-guard","pal-negative-inventory-guard","pal-draft-stock-guard"].includes(slug)?EXTRA_STOCK_QUERY:
       ["pal-variant-count-guard","pal-option-complexity-guard"].includes(slug)?EXTRA_VARIANT_QUERY:
-      slug==="pal-seo-duplicate-guard"?EXTRA_SEO_QUERY:
+      ["pal-seo-duplicate-guard","pal-seo-length-guard"].includes(slug)?EXTRA_SEO_QUERY:
       ["pal-description-html-guard","pal-duplicate-description-guard"].includes(slug)?EXTRA_DESC_QUERY:
       ["pal-product-tag-count-guard","pal-product-handle-guard"].includes(slug)?EXTRA_TAG_HANDLE_QUERY:
       ["pal-collection-rule-guard","pal-rule-drift-guard"].includes(slug)?EXTRA_COLLECTION_RULE_QUERY:
