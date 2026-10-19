@@ -20,7 +20,7 @@ const PRODUCTS_QUERY=`#graphql
 query PalGuardProducts($cursor:String){
   products(first:100,after:$cursor,sortKey:ID){
     nodes{id title vendor productType tags handle descriptionHtml
-      variants(first:100){nodes{id title sku barcode price compareAtPrice selectedOptions{name value}}}
+      variants(first:100){pageInfo{hasNextPage} nodes{id title sku barcode price compareAtPrice selectedOptions{name value}}}
     }
     pageInfo{hasNextPage endCursor}
   }

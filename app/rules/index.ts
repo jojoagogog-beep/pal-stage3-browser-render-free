@@ -18,6 +18,7 @@ import * as reviewDescriptionA11y from './pal-description-accessibility-guard';
 import * as reviewProductTitle from './pal-product-title-pattern-guard';
 import * as reviewSeoLength from './pal-seo-length-guard';
 import * as reviewDuplicateSku from './pal-duplicate-sku-guard';
+import * as reviewCompareAt from './pal-compare-at-price-guard';
 import * as reviewSale from './pal-variant-sale-guard';
 import * as seoFallback from './pal-seo-fallback-readiness-guard';
 import * as reviewVariant from './pal-variant-price-range-guard';
@@ -115,6 +116,7 @@ export const ruleModules = {
   'pal-product-title-pattern-guard': reviewProductTitle,
   'pal-seo-length-guard': reviewSeoLength,
   'pal-duplicate-sku-guard': reviewDuplicateSku,
+  'pal-compare-at-price-guard': reviewCompareAt,
   'pal-variant-sale-guard': reviewSale,
   'pal-vendor-name-consistency-guard': reviewVendorName,
   'pal-seo-fallback-readiness-guard': seoFallback,

@@ -61,6 +61,7 @@ export function getShopify(slug: string) {
     // origin as their released embedded app and OAuth callback URLs.
     "pal-seo-length-guard",
     "pal-duplicate-sku-guard",
+    "pal-compare-at-price-guard",
     "pal-product-title-pattern-guard",
     "pal-description-accessibility-guard",
     "pal-price-ending-guard",
