@@ -10,7 +10,9 @@ import variantOrderUI from "../special/variant-order/ui";
 import feedReadinessUI from "../special/feed-readiness/ui";
 import importIntegrityUI from "../special/import-row-integrity/ui";
 import FilterIntegrityUI from "../special/filter-integrity/ui";
+import SeoBulkFixerUI from "../special/seo-bulk-fixer/ui";
 const specialRoutes:Record<string,any>={
+"pal-seo-bulk-fixer":SeoBulkFixerUI,
 "pal-filter-integrity-guard":FilterIntegrityUI,
 "pal-variant-image-guard":variantImageUI,
 "pal-variant-order-guard":variantOrderUI,
@@ -250,6 +252,7 @@ async function loadPausedCategoryDefinitions(admin:any){
 
 export async function loader({request}:LoaderFunctionArgs){
   const slug=getSlug(request);
+  if(slug==="pal-seo-bulk-fixer")return (await import("../special/seo-bulk-fixer/route.server")).loader({request} as LoaderFunctionArgs);
   if(slug==="pal-filter-integrity-guard")return (await import("../special/filter-integrity/route.server")).loader({request} as LoaderFunctionArgs);
   if(slug==="pal-variant-image-guard")return (await import("../special/variant-image/route.server")).loader({request} as LoaderFunctionArgs);
   if(slug==="pal-variant-order-guard")return (await import("../special/variant-order/route.server")).loader({request} as LoaderFunctionArgs);
@@ -355,6 +358,7 @@ export async function loader({request}:LoaderFunctionArgs){
 }
 export async function action(args:ActionFunctionArgs){
  const slug=getSlug(args.request);
+ if(slug==="pal-seo-bulk-fixer")return (await import("../special/seo-bulk-fixer/route.server")).action(args);
  if(slug==="pal-filter-integrity-guard")return (await import("../special/filter-integrity/route.server")).action(args);
  if(["pal-collection-image-ratio-guard","pal-collection-sort-guard"].includes(slug)){
    // These two applications are still on Manual Pricing (legacy); Shopify

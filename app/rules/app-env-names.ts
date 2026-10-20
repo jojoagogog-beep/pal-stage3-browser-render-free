@@ -1,4 +1,5 @@
 export const appEnvNames = {
+  'pal-seo-bulk-fixer': { key: 'PAL_REVIEW_SEO_BULK_KEY', secret: 'PAL_REVIEW_SEO_BULK_SECRET' },
   'pal-filter-integrity-guard': { key: 'PAL_REVIEW_FILTER_INTEGRITY_KEY', secret: 'PAL_REVIEW_FILTER_INTEGRITY_SECRET' },
   'pal-variant-sale-guard': { key: 'PAL_REVIEW_VARIANT_SALE_KEY', secret: 'PAL_REVIEW_VARIANT_SALE_SECRET' },
   'pal-vendor-name-consistency-guard': { key: 'PAL_REVIEW_VENDOR_NAME_KEY', secret: 'PAL_REVIEW_VENDOR_NAME_SECRET' },
