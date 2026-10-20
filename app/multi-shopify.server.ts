@@ -105,7 +105,7 @@ export function getShopify(slug: string) {
     "pal-import-row-integrity-guard",
   ]);
   const externalOrigin = slug === "pal-seo-bulk-fixer"
-    ? "https://pal-shopify-batch50-gateway.onrender.com"
+    ? "https://pal-stage3-browser-free-shard1.onrender.com"
     : neutralReviewSlugs.has(slug)
     ? "https://pal-stage3-browser-free-shard1.onrender.com"
     : slug === "pal-variant-sale-guard"
