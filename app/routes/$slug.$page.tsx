@@ -18,6 +18,7 @@ export async function loader({params}:LoaderFunctionArgs){
   }
   return null;
 }
+import {SeoBulkPrivacy, SeoBulkTerms, SeoBulkSupport} from "../special/seo-bulk-fixer/public-pages";
 import VariantImagePrivacy from "../special/variant-image/privacy";
 import VariantImageTerms from "../special/variant-image/terms";
 import VariantImageSupport from "../special/variant-image/support";
@@ -34,6 +35,9 @@ import { useParams } from "react-router";
 import { ruleModules } from "../rules";
 export default function PublicInfo(){
   const {slug="",page=""}=useParams();
+  if(slug==="pal-seo-bulk-fixer"&&page==="privacy")return <SeoBulkPrivacy/>;
+  if(slug==="pal-seo-bulk-fixer"&&page==="terms")return <SeoBulkTerms/>;
+  if(slug==="pal-seo-bulk-fixer"&&page==="support")return <SeoBulkSupport/>;
   if(slug==="pal-variant-image-guard"&&page==="privacy")return <VariantImagePrivacy/>;
   if(slug==="pal-variant-image-guard"&&page==="terms")return <VariantImageTerms/>;
   if(slug==="pal-variant-image-guard"&&page==="support")return <VariantImageSupport/>;

@@ -2,6 +2,7 @@ import { useParams } from "react-router";
 import { ruleModules } from "../../rules";
 
 const restoredApps: Record<string, { title: string; lead: string }> = {
+  "pal-seo-bulk-fixer": {title:"PAL SEO Bulk Fixer",lead:"Audit missing product SEO titles, meta descriptions and image alt text. Apply safe bulk repairs to blank fields only when requested."},
   "pal-variant-image-guard": {
     title: "PAL Variant Image Guard",
     lead: "Review variant image coverage and shared image assignments. Export a read-only remediation report.",
@@ -32,8 +33,8 @@ export default function Landing() {
       <p>Practical AI Lab</p>
       <h1>{title}</h1>
       <p>{lead}</p>
-      <h2>Read-only catalog QA</h2>
-      <p>{restored ? "The app analyzes your catalog and exports review findings. It does not automatically edit product data." : definition.appMeta.readOnlyNote}</p>
+      <h2>{slug==="pal-seo-bulk-fixer"?"Merchant-controlled SEO repair":"Read-only catalog QA"}</h2>
+      <p>{slug==="pal-seo-bulk-fixer"?"The app previews missing SEO fields, and updates only blank entries when the merchant explicitly requests a bulk fix. Existing values are preserved.":restored ? "The app analyzes your catalog and exports review findings. It does not automatically edit product data." : definition.appMeta.readOnlyNote}</p>
       <p><a href={'/' + slug + '/review-demo'}>Explore the illustrative demo</a></p>
       <nav>
         <a href={'/' + slug + '/privacy'}>Privacy</a>{" · "}
