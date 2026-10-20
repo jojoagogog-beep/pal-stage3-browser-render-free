@@ -11,6 +11,7 @@ import {spawn} from "node:child_process";
 const appRoot = path.resolve("build/client");
 const gateway = "pal-shopify-batch50-gateway.onrender.com";
 const appPrefixes = [
+ "/pal-inventory-location-secondary-guard/",
  "/pal-seo-bulk-fixer/",
  "/pal-compare-at-price-guard/",
  "/pal-duplicate-sku-guard/",
@@ -396,6 +397,7 @@ function forward(request,response) {
         const appPaths={
           // Shopify Admin can launch paid embedded apps at /app without
           // their slug. Route by OAuth audience, then verify auth upstream.
+          "79305847998b3bddfed28d06d0e9044e":"/pal-inventory-location-secondary-guard/app",
           "de8bc5b812ebed36f7652b90bde114a9":"/pal-seo-bulk-fixer/app",
           "7b25b2746b7ca1ee8f6410267d7818c3":"/pal-collection-image-ratio-guard/app",
           "140fa929190b1abad51afb4b2dca8c5a":"/pal-collection-sort-guard/app",
