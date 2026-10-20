@@ -81,6 +81,7 @@ export const appEnvNames = {
   'pal-collection-coverage-guard': { key: 'PAL_REVIEW_COLLECTION_COVERAGE_KEY', secret: 'PAL_REVIEW_COLLECTION_COVERAGE_SECRET' },
   'pal-variant-shipping-policy-guard': { key: 'PAL_REVIEW_VARIANT_SHIPPING_KEY', secret: 'PAL_REVIEW_VARIANT_SHIPPING_SECRET' },
   'pal-inventory-location-consistency-guard': { key: 'PAL_REVIEW_INVENTORY_LOCATION_KEY', secret: 'PAL_REVIEW_INVENTORY_LOCATION_SECRET' },
+  'pal-inventory-location-secondary-guard': { key: 'PAL_REVIEW_INVENTORY_LOCATION_SECONDARY_KEY', secret: 'PAL_REVIEW_INVENTORY_LOCATION_SECONDARY_SECRET' },
   'pal-unit-cost-coverage-guard': { key: 'PAL_REVIEW_UNIT_COST_KEY', secret: 'PAL_REVIEW_UNIT_COST_SECRET' },
   'pal-customs-data-readiness-guard': { key: 'PAL_REVIEW_CUSTOMS_DATA_KEY', secret: 'PAL_REVIEW_CUSTOMS_DATA_SECRET' },
   'pal-selling-plan-coverage-guard': { key: 'PAL_REVIEW_SELLING_PLAN_KEY', secret: 'PAL_REVIEW_SELLING_PLAN_SECRET' },

@@ -110,6 +110,7 @@ export const ruleModules = {
   'pal-collection-coverage-guard': reviewCollectionCoverage,
   'pal-variant-shipping-policy-guard': reviewShippingPolicy,
   'pal-inventory-location-consistency-guard': reviewInventoryLocation,
+  'pal-inventory-location-secondary-guard': reviewInventoryLocation,
   'pal-unit-cost-coverage-guard': reviewUnitCost,
   'pal-customs-data-readiness-guard': reviewCustomsData,
   'pal-selling-plan-coverage-guard': reviewSellingPlan,

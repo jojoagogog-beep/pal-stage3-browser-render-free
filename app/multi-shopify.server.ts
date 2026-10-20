@@ -80,6 +80,7 @@ export function getShopify(slug: string) {
     "pal-tag-consistency-guard",
     "pal-unit-cost-coverage-guard",
     "pal-inventory-location-consistency-guard",
+    "pal-inventory-location-secondary-guard",
     "pal-collection-rule-guard",
     "pal-rule-drift-guard",
     "pal-product-image-size-guard",
@@ -150,7 +151,7 @@ export function getShopify(slug: string) {
     apiSecretKey,
     apiVersion: ApiVersion.July26,
     scopes: slug === "pal-seo-bulk-fixer" ? ["read_products", "write_products", "write_files"]
-      : slug === "pal-inventory-location-consistency-guard"
+      : (slug === "pal-inventory-location-consistency-guard" || slug === "pal-inventory-location-secondary-guard")
       ? ["read_products", "read_inventory", "read_locations"]
       : slug === "pal-variant-shipping-policy-guard"
       ? ["read_products", "read_inventory"]
