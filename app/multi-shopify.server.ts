@@ -140,7 +140,7 @@ export function getShopify(slug: string) {
   const appOrigin = externalOrigin || origin;
   if (externalOrigin) {
     const url = new URL(externalOrigin);
-    if (url.protocol !== "https:" || /shopify|example|trycloudflare/i.test(url.hostname) || url.pathname !== "/") {
+    if (url.protocol !== "https:" || /(^|\.)shopify\.com$|(^|\.)myshopify\.com$|example|trycloudflare/i.test(url.hostname) || url.pathname !== "/") {
       throw new Error("Collection app origin must be a permanent compliant HTTPS hostname");
     }
   }
